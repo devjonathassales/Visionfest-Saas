@@ -11,6 +11,7 @@ const menuStructure = [
     label: 'Cadastros', icon: <FiUser />, children: [
       { label: 'Clientes', path: '/cadastros/clientes' },
       { label: 'Fornecedores', path: '/cadastros/fornecedores' },
+      { label: 'Funcionários', path: '/cadastros/funcionarios' },
       { label: 'Produtos', path: '/cadastros/produtos' },
     ]
   },

@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 // Cadastros
 import Clientes from './pages/Cadastros/Clientes';
 import Fornecedores from './pages/Cadastros/Fornecedores';
+import Funcionarios from './pages/Cadastros/Funcionarios';
 import Produtos from './pages/Cadastros/Produtos';
 
 // Outros
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/cadastros/clientes" element={<Clientes />} />
           <Route path="/cadastros/fornecedores" element={<Fornecedores />} />
+          <Route path="/cadastros/funcionarios" element={<Funcionarios />} />
           <Route path="/cadastros/produtos" element={<Produtos />} />
           <Route path="/estoque" element={<Estoque />} />
           <Route path="/contratos" element={<Contratos />} />

@@ -1,0 +1,1 @@
+export default function EstoqueRelatorio() { return <h1>Estoque</h1>; }

@@ -1,0 +1,1 @@
+export default function ClientesRelatorio() { return <h1>Clientes</h1>; }

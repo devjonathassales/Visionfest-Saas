@@ -1,0 +1,1 @@
+export default function ContasBancarias() { return <h1>ContasBancarias</h1>; }

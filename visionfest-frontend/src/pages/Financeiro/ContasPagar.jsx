@@ -1,0 +1,1 @@
+export default function ContasPagar() { return <h1>ContasPagar</h1>; }

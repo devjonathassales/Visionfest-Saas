@@ -1,0 +1,1 @@
+export default function AgendaRelatorio() { return <h1>Agenda</h1>; }

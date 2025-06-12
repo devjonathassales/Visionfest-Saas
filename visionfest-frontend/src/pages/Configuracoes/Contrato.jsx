@@ -1,0 +1,1 @@
+export default function Contrato() { return <h1>Contrato</h1>; }

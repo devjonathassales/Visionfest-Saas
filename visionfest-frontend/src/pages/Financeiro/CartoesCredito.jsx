@@ -1,0 +1,1 @@
+export default function CartoesCredito() { return <h1>CartoesCredito</h1>; }

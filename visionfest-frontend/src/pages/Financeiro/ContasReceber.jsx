@@ -1,0 +1,1 @@
+export default function ContasReceber() { return <h1>ContasReceber</h1>; }

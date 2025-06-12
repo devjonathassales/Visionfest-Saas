@@ -1,0 +1,1 @@
+export default function FluxoCaixa() { return <h1>FluxoCaixa</h1>; }

@@ -1,0 +1,1 @@
+export default function Crm() { return <h1>Crm</h1>; }

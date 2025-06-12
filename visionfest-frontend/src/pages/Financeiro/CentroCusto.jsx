@@ -1,0 +1,1 @@
+export default function CentroCusto() { return <h1>CentroCusto</h1>; }

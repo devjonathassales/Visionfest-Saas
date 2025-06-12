@@ -1,0 +1,1 @@
+export default function Permissoes() { return <h1>Permissoes</h1>; }

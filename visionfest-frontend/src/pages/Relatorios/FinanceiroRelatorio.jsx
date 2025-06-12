@@ -1,0 +1,1 @@
+export default function FinanceiroRelatorio() { return <h1>Financeiro</h1>; }

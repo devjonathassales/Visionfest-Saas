@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import IMask from 'imask';
 
 export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
-  const [formData, setFormData] = useState({
+  // Estados do formulário
+  const [form, setForm] = useState({
     nome: '',
     cpf: '',
     whatsapp: '',
@@ -17,97 +19,343 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     estado: '',
   });
 
+  const [errors, setErrors] = useState({});
+
+  // Refs para aplicar IMask
+  const cpfRef = useRef(null);
+  const whatsappRef = useRef(null);
+  const celularRef = useRef(null);
+  const cepRef = useRef(null);
+  const dataNascimentoRef = useRef(null);
+
+  // Aplicar máscaras
+  useEffect(() => {
+    if (cpfRef.current) {
+      IMask(cpfRef.current, { mask: '000.000.000-00' });
+    }
+    if (whatsappRef.current) {
+      IMask(whatsappRef.current, {
+        mask: [
+          {
+            mask: '(00) 00000-0000',
+            startsWith: '9',
+            lazy: false
+          },
+          {
+            mask: '(00) 0000-0000',
+            lazy: false
+          }
+        ],
+        dispatch: function (appended, dynamicMasked) {
+          var number = (dynamicMasked.value + appended).replace(/\D/g, '');
+          return number.length > 10 ? dynamicMasked.compiledMasks[0] : dynamicMasked.compiledMasks[1];
+        }
+      });
+    }
+    if (celularRef.current) {
+      IMask(celularRef.current, {
+        mask: [
+          {
+            mask: '(00) 00000-0000',
+            startsWith: '9',
+            lazy: false
+          },
+          {
+            mask: '(00) 0000-0000',
+            lazy: false
+          }
+        ],
+        dispatch: function (appended, dynamicMasked) {
+          var number = (dynamicMasked.value + appended).replace(/\D/g, '');
+          return number.length > 10 ? dynamicMasked.compiledMasks[0] : dynamicMasked.compiledMasks[1];
+        }
+      });
+    }
+    if (cepRef.current) {
+      IMask(cepRef.current, { mask: '00000-000' });
+    }
+    if (dataNascimentoRef.current) {
+      IMask(dataNascimentoRef.current, { mask: Date, pattern: 'd{/}`m{/}`Y', lazy: false, blocks: {
+        d: { mask: IMask.MaskedRange, from: 1, to: 31, maxLength: 2 },
+        m: { mask: IMask.MaskedRange, from: 1, to: 12, maxLength: 2 },
+        Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 }
+      }});
+    }
+  }, []);
+
+  // Preencher formulário se clienteSelecionado mudar
   useEffect(() => {
     if (clienteSelecionado) {
-      setFormData(clienteSelecionado);
+      setForm({ ...clienteSelecionado });
     }
   }, [clienteSelecionado]);
 
+  // Validação CPF
+  function validarCPF(strCPF) {
+    // Limpa tudo que não for número
+    const cpf = strCPF.replace(/[^\d]+/g, '');
+    if (cpf.length !== 11) return false;
+    // Elimina CPF inválidos conhecidos
+    if (/^(\d)\1+$/.test(cpf)) return false;
+    let soma = 0;
+    let resto;
+
+    for (let i=1; i<=9; i++)
+      soma = soma + parseInt(cpf.substring(i-1, i)) * (11 - i);
+    resto = (soma * 10) % 11;
+    if ((resto === 10) || (resto === 11)) resto = 0;
+    if (resto !== parseInt(cpf.substring(9, 10))) return false;
+
+    soma = 0;
+    for (let i=1; i<=10; i++)
+      soma = soma + parseInt(cpf.substring(i-1, i)) * (12 - i);
+    resto = (soma * 10) % 11;
+    if ((resto === 10) || (resto === 11)) resto = 0;
+    if (resto !== parseInt(cpf.substring(10, 11))) return false;
+
+    return true;
+  }
+
+  // Buscar endereço via CEP
+  async function buscarEndereco(cep) {
+    try {
+      const cepLimpo = cep.replace(/\D/g, '');
+      if (cepLimpo.length !== 8) return;
+      const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const data = await response.json();
+      if (!data.erro) {
+        setForm(prev => ({
+          ...prev,
+          logradouro: data.logradouro || '',
+          bairro: data.bairro || '',
+          cidade: data.localidade || '',
+          estado: data.uf || ''
+        }));
+      }
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error);
+    }
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setForm(prev => ({ ...prev, [name]: value }));
+
+    if (name === 'cep') {
+      // Quando preencher cep e tiver 9 caracteres (com máscara)
+      if (value.replace(/\D/g, '').length === 8) {
+        buscarEndereco(value);
+      }
+    }
+  };
+
+  const validarForm = () => {
+    const newErrors = {};
+    if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
+    if (!form.whatsapp.trim()) newErrors.whatsapp = 'WhatsApp é obrigatório';
+    if (!form.cpf.trim()) {
+      newErrors.cpf = 'CPF é obrigatório';
+    } else if (!validarCPF(form.cpf)) {
+      newErrors.cpf = 'CPF inválido';
+    }
+    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
+    // Pode adicionar mais validações se quiser
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const { nome, cpf, whatsapp, email } = formData;
-    if (!nome || !cpf || !whatsapp || !email) {
-      alert('Preencha todos os campos obrigatórios.');
-      return;
-    }
-    onSave(formData);
+    if (!validarForm()) return;
+
+    onSave(form);
   };
 
-  const InputField = ({ label, name, type = 'text', required = false }) => (
-    <div className="w-full">
-      <label className="block mb-1 text-sm font-semibold">{label}</label>
-      <input
-        type={type}
-        name={name}
-        value={formData[name] || ''}
-        onChange={handleChange}
-        required={required}
-        className="input"
-      />
-    </div>
-  );
-
   return (
-    <div className="bg-white p-6 rounded shadow-md max-w-5xl mx-auto">
-      <h2 className="text-2xl font-montserrat text-primary mb-6">
-        {clienteSelecionado ? 'Editar Cliente' : 'Novo Cliente'}
-      </h2>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        {/* Nome */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <InputField label="Nome*" name="nome" required />
-        </div>
+    <form onSubmit={handleSubmit} className="max-w-4xl mx-auto bg-white p-6 rounded shadow-md space-y-6">
+      <div>
+        <label className="block font-semibold mb-1" htmlFor="nome">Nome *</label>
+        <input
+          id="nome"
+          name="nome"
+          type="text"
+          value={form.nome}
+          onChange={handleChange}
+          className={`input w-full ${errors.nome ? 'border-red-500' : 'border-gray-300'}`}
+        />
+        {errors.nome && <p className="text-red-600 text-sm mt-1">{errors.nome}</p>}
+      </div>
 
-        {/* WhatsApp, Celular, Email */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <InputField label="WhatsApp*" name="whatsapp" required />
-          <InputField label="Celular" name="celular" />
-          <InputField label="Email*" name="email" required />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="whatsapp">WhatsApp *</label>
+          <input
+            id="whatsapp"
+            name="whatsapp"
+            type="text"
+            ref={whatsappRef}
+            value={form.whatsapp}
+            onChange={handleChange}
+            className={`input w-full ${errors.whatsapp ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.whatsapp && <p className="text-red-600 text-sm mt-1">{errors.whatsapp}</p>}
         </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="celular">Celular</label>
+          <input
+            id="celular"
+            name="celular"
+            type="text"
+            ref={celularRef}
+            value={form.celular}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="email">Email *</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            className={`input w-full ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email}</p>}
+        </div>
+      </div>
 
-        {/* CPF, Data de Nascimento */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <InputField label="CPF*" name="cpf" required />
-          <InputField label="Data de Nascimento" name="dataNascimento" type="date" />
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="cpf">CPF *</label>
+          <input
+            id="cpf"
+            name="cpf"
+            type="text"
+            ref={cpfRef}
+            value={form.cpf}
+            onChange={handleChange}
+            className={`input w-full ${errors.cpf ? 'border-red-500' : 'border-gray-300'}`}
+          />
+          {errors.cpf && <p className="text-red-600 text-sm mt-1">{errors.cpf}</p>}
         </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="dataNascimento">Data de Nascimento</label>
+          <input
+            id="dataNascimento"
+            name="dataNascimento"
+            type="text"
+            ref={dataNascimentoRef}
+            value={form.dataNascimento}
+            onChange={handleChange}
+            placeholder="dd/mm/aaaa"
+            className="input w-full border border-gray-300"
+          />
+        </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="cep">CEP</label>
+          <input
+            id="cep"
+            name="cep"
+            type="text"
+            ref={cepRef}
+            value={form.cep}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+      </div>
 
-        {/* CEP, Logradouro, Número */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <InputField label="CEP" name="cep" />
-          <InputField label="Logradouro" name="logradouro" />
-          <InputField label="Número" name="numero" />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="logradouro">Logradouro</label>
+          <input
+            id="logradouro"
+            name="logradouro"
+            type="text"
+            value={form.logradouro}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
         </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="numero">Número</label>
+          <input
+            id="numero"
+            name="numero"
+            type="text"
+            value={form.numero}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="complemento">Complemento</label>
+          <input
+            id="complemento"
+            name="complemento"
+            type="text"
+            value={form.complemento}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="bairro">Bairro</label>
+          <input
+            id="bairro"
+            name="bairro"
+            type="text"
+            value={form.bairro}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+      </div>
 
-        {/* Complemento, Bairro, Cidade, Estado - mesma linha */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <InputField label="Complemento" name="complemento" />
-          <InputField label="Bairro" name="bairro" />
-          <InputField label="Cidade" name="cidade" />
-          <InputField label="Estado" name="estado" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="cidade">Cidade</label>
+          <input
+            id="cidade"
+            name="cidade"
+            type="text"
+            value={form.cidade}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
         </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="estado">Estado</label>
+          <input
+            id="estado"
+            name="estado"
+            type="text"
+            value={form.estado}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
+        </div>
+      </div>
 
-        {/* Ações */}
-        <div className="flex justify-end gap-2 mt-4">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 bg-gray-300 text-black rounded"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            className="px-4 py-2 bg-primary text-white rounded"
-          >
-            {clienteSelecionado ? 'Atualizar' : 'Salvar'}
-          </button>
-        </div>
-      </form>
-    </div>
+      <div className="flex justify-end space-x-4">
+  <button
+    type="button"
+    onClick={onCancel}
+    className="px-4 py-2 bg-[#c0c0c0] text-gray-700 rounded hover:bg-gray-400 transition"
+  >
+    Cancelar
+  </button>
+  <button
+    type="submit"
+    className="px-4 py-2 bg-[#7ed957] text-white rounded hover:bg-green-700 transition"
+  >
+    Salvar
+  </button>
+</div>
+
+    </form>
   );
 }

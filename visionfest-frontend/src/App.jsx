@@ -1,6 +1,8 @@
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ToastContainer } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 import MainLayout from './layout/MainLayout';
 import Dashboard from './pages/Dashboard';
 
@@ -76,6 +78,19 @@ export default function App() {
           <Route path="/configuracoes/plano" element={<Plano />} />
         </Routes>
       </MainLayout>
+
+      {/* Toast container global */}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
     </Router>
   );
 }

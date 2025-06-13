@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import IMask from 'imask';
 
 export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
-  // Estados do formulário
   const [form, setForm] = useState({
     nome: '',
     cpf: '',
@@ -10,6 +9,7 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     celular: '',
     dataNascimento: '',
     email: '',
+    instagram: '',
     cep: '',
     logradouro: '',
     numero: '',
@@ -21,14 +21,12 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
 
   const [errors, setErrors] = useState({});
 
-  // Refs para aplicar IMask
   const cpfRef = useRef(null);
   const whatsappRef = useRef(null);
   const celularRef = useRef(null);
   const cepRef = useRef(null);
   const dataNascimentoRef = useRef(null);
 
-  // Aplicar máscaras
   useEffect(() => {
     if (cpfRef.current) {
       IMask(cpfRef.current, { mask: '000.000.000-00' });
@@ -36,15 +34,8 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     if (whatsappRef.current) {
       IMask(whatsappRef.current, {
         mask: [
-          {
-            mask: '(00) 00000-0000',
-            startsWith: '9',
-            lazy: false
-          },
-          {
-            mask: '(00) 0000-0000',
-            lazy: false
-          }
+          { mask: '(00) 00000-0000', startsWith: '9', lazy: false },
+          { mask: '(00) 0000-0000', lazy: false }
         ],
         dispatch: function (appended, dynamicMasked) {
           var number = (dynamicMasked.value + appended).replace(/\D/g, '');
@@ -55,15 +46,8 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     if (celularRef.current) {
       IMask(celularRef.current, {
         mask: [
-          {
-            mask: '(00) 00000-0000',
-            startsWith: '9',
-            lazy: false
-          },
-          {
-            mask: '(00) 0000-0000',
-            lazy: false
-          }
+          { mask: '(00) 00000-0000', startsWith: '9', lazy: false },
+          { mask: '(00) 0000-0000', lazy: false }
         ],
         dispatch: function (appended, dynamicMasked) {
           var number = (dynamicMasked.value + appended).replace(/\D/g, '');
@@ -75,48 +59,54 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
       IMask(cepRef.current, { mask: '00000-000' });
     }
     if (dataNascimentoRef.current) {
-      IMask(dataNascimentoRef.current, { mask: Date, pattern: 'd{/}`m{/}`Y', lazy: false, blocks: {
-        d: { mask: IMask.MaskedRange, from: 1, to: 31, maxLength: 2 },
-        m: { mask: IMask.MaskedRange, from: 1, to: 12, maxLength: 2 },
-        Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 }
-      }});
+      IMask(dataNascimentoRef.current, {
+        mask: Date,
+        pattern: 'd{/}`m{/}`Y',
+        lazy: false,
+        blocks: {
+          d: { mask: IMask.MaskedRange, from: 1, to: 31, maxLength: 2 },
+          m: { mask: IMask.MaskedRange, from: 1, to: 12, maxLength: 2 },
+          Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 }
+        }
+      });
     }
   }, []);
 
-  // Preencher formulário se clienteSelecionado mudar
   useEffect(() => {
     if (clienteSelecionado) {
       setForm({ ...clienteSelecionado });
     }
   }, [clienteSelecionado]);
 
-  // Validação CPF
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
+
   function validarCPF(strCPF) {
-    // Limpa tudo que não for número
     const cpf = strCPF.replace(/[^\d]+/g, '');
-    if (cpf.length !== 11) return false;
-    // Elimina CPF inválidos conhecidos
-    if (/^(\d)\1+$/.test(cpf)) return false;
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
     let soma = 0;
     let resto;
 
-    for (let i=1; i<=9; i++)
-      soma = soma + parseInt(cpf.substring(i-1, i)) * (11 - i);
+    for (let i = 1; i <= 9; i++) soma += parseInt(cpf.substring(i - 1, i)) * (11 - i);
     resto = (soma * 10) % 11;
-    if ((resto === 10) || (resto === 11)) resto = 0;
+    if (resto === 10 || resto === 11) resto = 0;
     if (resto !== parseInt(cpf.substring(9, 10))) return false;
 
     soma = 0;
-    for (let i=1; i<=10; i++)
-      soma = soma + parseInt(cpf.substring(i-1, i)) * (12 - i);
+    for (let i = 1; i <= 10; i++) soma += parseInt(cpf.substring(i - 1, i)) * (12 - i);
     resto = (soma * 10) % 11;
-    if ((resto === 10) || (resto === 11)) resto = 0;
-    if (resto !== parseInt(cpf.substring(10, 11))) return false;
-
-    return true;
+    if (resto === 10 || resto === 11) resto = 0;
+    return resto === parseInt(cpf.substring(10, 11));
   }
 
-  // Buscar endereço via CEP
   async function buscarEndereco(cep) {
     try {
       const cepLimpo = cep.replace(/\D/g, '');
@@ -141,11 +131,8 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
 
-    if (name === 'cep') {
-      // Quando preencher cep e tiver 9 caracteres (com máscara)
-      if (value.replace(/\D/g, '').length === 8) {
-        buscarEndereco(value);
-      }
+    if (name === 'cep' && value.replace(/\D/g, '').length === 8) {
+      buscarEndereco(value);
     }
   };
 
@@ -159,7 +146,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
       newErrors.cpf = 'CPF inválido';
     }
     if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
-    // Pode adicionar mais validações se quiser
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -168,7 +154,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validarForm()) return;
-
     onSave(form);
   };
 
@@ -187,7 +172,7 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
         {errors.nome && <p className="text-red-600 text-sm mt-1">{errors.nome}</p>}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div>
           <label className="block font-semibold mb-1" htmlFor="whatsapp">WhatsApp *</label>
           <input
@@ -224,6 +209,17 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
             className={`input w-full ${errors.email ? 'border-red-500' : 'border-gray-300'}`}
           />
           {errors.email && <p className="text-red-600 text-sm mt-1">{errors.email}</p>}
+        </div>
+        <div>
+          <label className="block font-semibold mb-1" htmlFor="instagram">Instagram</label>
+          <input
+            id="instagram"
+            name="instagram"
+            type="text"
+            value={form.instagram}
+            onChange={handleChange}
+            className="input w-full border border-gray-300"
+          />
         </div>
       </div>
 
@@ -341,21 +337,20 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
       </div>
 
       <div className="flex justify-end space-x-4">
-  <button
-    type="button"
-    onClick={onCancel}
-    className="px-4 py-2 bg-[#c0c0c0] text-gray-700 rounded hover:bg-gray-400 transition"
-  >
-    Cancelar
-  </button>
-  <button
-    type="submit"
-    className="px-4 py-2 bg-[#7ed957] text-white rounded hover:bg-green-700 transition"
-  >
-    Salvar
-  </button>
-</div>
-
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 bg-[#c0c0c0] text-gray-700 rounded hover:bg-gray-400 transition"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          className="px-4 py-2 bg-[#7ed957] text-white rounded hover:bg-green-700 transition"
+        >
+          Salvar
+        </button>
+      </div>
     </form>
   );
 }

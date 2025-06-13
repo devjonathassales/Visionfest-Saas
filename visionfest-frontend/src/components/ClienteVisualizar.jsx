@@ -9,7 +9,7 @@ export default function ClienteVisualizar({ cliente, onClose }) {
       <span className="font-semibold">{value || '—'}</span>
     </div>
   );
-
+  
   return (
     <div className="bg-white p-6 rounded shadow-md max-w-5xl mx-auto">
       <div className="flex justify-between items-center mb-4">

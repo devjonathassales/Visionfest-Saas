@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 function formatarValor(valor) {
-  // Remove tudo que não for número
   const numeros = valor.replace(/\D/g, '');
-  // Formata para moeda BR
   const numeroFloat = Number(numeros) / 100;
   return numeroFloat.toLocaleString('pt-BR', {
     style: 'currency',
@@ -12,12 +10,9 @@ function formatarValor(valor) {
 }
 
 function limparFormatacao(valor) {
-  // Remove máscara para salvar como número (ex: "R$ 10,00" -> "10.00")
   if (!valor) return 0;
   return Number(
-    valor
-      .replace(/[R$\s.]/g, '')
-      .replace(',', '.') || 0
+    valor.replace(/[R$\s.]/g, '').replace(',', '.') || 0
   );
 }
 
@@ -26,6 +21,7 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
   const [valor, setValor] = useState('R$ 0,00');
   const [movimentaEstoque, setMovimentaEstoque] = useState(true);
   const [estoqueMinimo, setEstoqueMinimo] = useState('');
+  const [tipoProduto, setTipoProduto] = useState('venda'); // 'venda' ou 'locacao'
 
   useEffect(() => {
     if (produtoSelecionado) {
@@ -37,13 +33,25 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
       );
       setMovimentaEstoque(produtoSelecionado.movimentaEstoque ?? true);
       setEstoqueMinimo(produtoSelecionado.estoqueMinimo ?? '');
+      setTipoProduto(produtoSelecionado.tipoProduto || 'venda');
     } else {
       setNome('');
       setValor('R$ 0,00');
       setMovimentaEstoque(true);
       setEstoqueMinimo('');
+      setTipoProduto('venda');
     }
   }, [produtoSelecionado]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onCancel();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
 
   const handleValorChange = (e) => {
     const raw = e.target.value;
@@ -59,6 +67,7 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
       valor: limparFormatacao(valor),
       movimentaEstoque,
       estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 0,
+      tipoProduto, // <-- campo novo enviado ao salvar
     });
   };
 
@@ -84,6 +93,18 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
           value={valor}
           onChange={handleValorChange}
         />
+      </div>
+
+      <div className="mb-4">
+        <label className="block mb-1 font-semibold">Tipo de Produto</label>
+        <select
+          value={tipoProduto}
+          onChange={(e) => setTipoProduto(e.target.value)}
+          className="input border border-gray-300 px-3 py-2 rounded w-full"
+        >
+          <option value="venda">Venda</option>
+          <option value="locacao">Locação</option>
+        </select>
       </div>
 
       <div className="mb-4 flex items-center gap-2">

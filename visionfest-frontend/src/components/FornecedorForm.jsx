@@ -69,6 +69,16 @@ export default function FornecedorForm({ onSave, fornecedorSelecionado, onCancel
     }
   }, [fornecedorSelecionado]);
 
+  useEffect(() => {
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          onCancel();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onCancel]);
+    
   // Validação CPF (mesma do seu código)
   function validarCPF(strCPF) {
     const cpf = strCPF.replace(/[^\d]+/g, '');

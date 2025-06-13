@@ -39,6 +39,16 @@ export default function FuncionarioForm({
   }, [funcionarioSelecionado]);
 
   useEffect(() => {
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          onCancel();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [onCancel]);
+
+  useEffect(() => {
     const handleEsc = (e) => e.key === "Escape" && onCancel();
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);

@@ -24,7 +24,6 @@ const menuStructure = [
       { label: 'Caixa', path: '/financeiro/caixa' },
       { label: 'Contas a Pagar', path: '/financeiro/pagar' },
       { label: 'Contas a Receber', path: '/financeiro/receber' },
-      { label: 'Formas de Pagamento', path: '/financeiro/formas-pagamento' },
       { label: 'Contas Bancárias', path: '/financeiro/contas-bancarias' },
       { label: 'Cartões de Crédito', path: '/financeiro/cartoes' },
       { label: 'Centro de Custo/Receita', path: '/financeiro/centro-custo' },

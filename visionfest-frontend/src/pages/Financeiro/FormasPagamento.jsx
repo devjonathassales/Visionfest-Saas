@@ -1,1 +1,0 @@
-export default function FormasPagamento() { return <h1>FormasPagamento</h1>; }

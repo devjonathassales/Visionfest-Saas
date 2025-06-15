@@ -10,7 +10,6 @@ export default function ContasBancarias() {
   const [contaEditando, setContaEditando] = useState(null);
 
   useEffect(() => {
-    // Simulação de carregamento inicial
     setContas([
       {
         id: 1,
@@ -28,6 +27,21 @@ export default function ContasBancarias() {
       }
     ]);
   }, []);
+
+  // 👇 Fechar modal com ESC
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape') {
+        setFormAberto(false);
+      }
+    };
+    if (formAberto) {
+      window.addEventListener('keydown', handleEsc);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [formAberto]);
 
   const contasFiltradas = contas.filter((c) =>
     `${c.banco} ${c.agencia} ${c.conta}`
@@ -62,8 +76,7 @@ export default function ContasBancarias() {
   };
 
   const excluirConta = (id) => {
-    // Aqui você faz verificação de títulos vinculados
-    const temTituloVinculado = false; // Exemplo fixo
+    const temTituloVinculado = false;
     if (temTituloVinculado) {
       toast.error('Conta não pode ser excluída pois possui títulos vinculados.');
       return;

@@ -22,7 +22,6 @@ import Crm from './pages/Crm';
 import Caixa from './pages/Financeiro/Caixa';
 import ContasPagar from './pages/Financeiro/ContasPagar';
 import ContasReceber from './pages/Financeiro/ContasReceber';
-import FormasPagamento from './pages/Financeiro/FormasPagamento';
 import ContasBancarias from './pages/Financeiro/ContasBancarias';
 import CartoesCredito from './pages/Financeiro/CartoesCredito';
 import CentroCusto from './pages/Financeiro/CentroCusto';
@@ -60,7 +59,6 @@ export default function App() {
           <Route path="/financeiro/caixa" element={<Caixa />} />
           <Route path="/financeiro/pagar" element={<ContasPagar />} />
           <Route path="/financeiro/receber" element={<ContasReceber />} />
-          <Route path="/financeiro/formas-pagamento" element={<FormasPagamento />} />
           <Route path="/financeiro/contas-bancarias" element={<ContasBancarias />} />
           <Route path="/financeiro/cartoes" element={<CartoesCredito />} />
           <Route path="/financeiro/centro-custo" element={<CentroCusto />} />

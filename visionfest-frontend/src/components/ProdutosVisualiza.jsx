@@ -14,7 +14,7 @@ export default function ProdutosVisualiza({ produto, onClose }) {
           ×
         </button>
 
-        <h2 className="text-2xl font-semibold mb-4">Detalhes do Produto</h2>
+        <h2 className="text-2xl font-semibold mb-4">Detalhes do Produto/Serviço</h2>
 
         <p><strong>Nome:</strong> {produto.nome}</p>
         <p><strong>Valor:</strong> R$ {produto.valor.toFixed(2)}</p>

@@ -12,7 +12,7 @@ const menuStructure = [
       { label: 'Clientes', path: '/cadastros/clientes' },
       { label: 'Fornecedores', path: '/cadastros/fornecedores' },
       { label: 'Funcionários', path: '/cadastros/funcionarios' },
-      { label: 'Produtos', path: '/cadastros/produtos' },
+      { label: 'Produtos/Serviços', path: '/cadastros/produtos' },
     ]
   },
   { label: 'Estoque', icon: <FiBox />, path: '/estoque' },

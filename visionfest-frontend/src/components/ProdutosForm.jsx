@@ -96,7 +96,7 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
       </div>
 
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Tipo de Produto</label>
+        <label className="block mb-1 font-semibold">Tipo de Produto/Serviço</label>
         <select
           value={tipoProduto}
           onChange={(e) => setTipoProduto(e.target.value)}

@@ -1,0 +1,18 @@
+[
+  {
+    "id": 1,
+    "cliente": "João da Silva",
+    "dataEvento": "2025-06-20",
+    "horaInicio": "18:00",
+    "buffet": "Buffet Alegria",
+    "statusPagamento": "Parcialmente Pago"
+  },
+  {
+    "id": 2,
+    "cliente": "Maria Oliveira",
+    "dataEvento": "2025-06-22",
+    "horaInicio": "20:00",
+    "buffet": "Buffet Encanto",
+    "statusPagamento": "Totalmente Pago"
+  }
+]

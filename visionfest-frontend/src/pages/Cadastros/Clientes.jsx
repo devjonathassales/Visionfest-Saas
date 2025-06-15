@@ -1,48 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ClienteForm from '../../components/ClienteForm';
 import ClienteVisualizar from '../../components/ClienteVisualizar';
 import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
 
-// Adicionamos 'dataCadastro' ao mock
-const clientesMock = [
-  {
-    id: 1,
-    nome: 'Amanda Rocha',
-    cpf: '000.000.000-00',
-    whatsapp: '85999999999',
-    celular: '',
-    dataNascimento: '',
-    email: 'amanda@email.com',
-    cep: '',
-    logradouro: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    cidade: '',
-    estado: '',
-    dataCadastro: '2024-12-10'
-  },
-  {
-    id: 2,
-    nome: 'Carlos Silva',
-    cpf: '000.000.000-01',
-    whatsapp: '85988888888',
-    celular: '',
-    dataNascimento: '',
-    email: 'carlos@email.com',
-    cep: '',
-    logradouro: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    cidade: '',
-    estado: '',
-    dataCadastro: '2025-01-15'
-  },
-];
-
 export default function Clientes() {
-  const [clientes, setClientes] = useState(clientesMock);
+  const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState('');
   const [ordenarPor, setOrdenarPor] = useState('alfabetica');
   const [dataInicio, setDataInicio] = useState('');
@@ -50,18 +12,36 @@ export default function Clientes() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState(null);
   const [clienteVisualizar, setClienteVisualizar] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Buscar clientes do backend
+  const fetchClientes = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/clientes');
+      if (!res.ok) throw new Error('Erro ao buscar clientes');
+      const data = await res.json();
+      setClientes(data);
+    } catch (error) {
+      alert('Erro ao carregar clientes: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClientes();
+  }, []);
 
   const filtrarClientes = () => {
     let lista = [...clientes];
 
-    // Filtro por nome
     if (busca.length >= 3) {
       lista = lista.filter(c =>
         c.nome.toLowerCase().includes(busca.toLowerCase())
       );
     }
 
-    // Ordenar
     if (ordenarPor === 'alfabetica') {
       lista.sort((a, b) => a.nome.localeCompare(b.nome));
     } else if (ordenarPor === 'data' && dataInicio && dataFim) {
@@ -76,18 +56,35 @@ export default function Clientes() {
     return lista;
   };
 
-  const handleSalvar = (novoCliente) => {
-    if (novoCliente.id) {
-      setClientes(prev => prev.map(c => c.id === novoCliente.id ? novoCliente : c));
-    } else {
-      setClientes(prev => [...prev, {
-        ...novoCliente,
-        id: Date.now(),
-        dataCadastro: new Date().toISOString().split('T')[0]
-      }]);
+  const handleSalvar = async (novoCliente) => {
+    try {
+      let res;
+      if (novoCliente.id) {
+        // Atualizar cliente
+        res = await fetch(`/api/clientes/${novoCliente.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(novoCliente),
+        });
+      } else {
+        // Criar cliente
+        res = await fetch('/api/clientes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(novoCliente),
+        });
+      }
+
+      if (!res.ok) throw new Error('Erro ao salvar cliente');
+
+      // Recarregar lista do backend para manter tudo sincronizado
+      await fetchClientes();
+
+      setMostrarFormulario(false);
+      setClienteSelecionado(null);
+    } catch (error) {
+      alert('Erro ao salvar cliente: ' + error.message);
     }
-    setMostrarFormulario(false);
-    setClienteSelecionado(null);
   };
 
   const handleEditar = (cliente) => {
@@ -95,9 +92,15 @@ export default function Clientes() {
     setMostrarFormulario(true);
   };
 
-  const handleExcluir = (id) => {
-    if (window.confirm("Deseja excluir este cliente?")) {
+  const handleExcluir = async (id) => {
+    if (!window.confirm("Deseja excluir este cliente?")) return;
+
+    try {
+      const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Erro ao excluir cliente');
       setClientes(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+      alert('Erro ao excluir cliente: ' + error.message);
     }
   };
 
@@ -170,36 +173,40 @@ export default function Clientes() {
             </button>
           </div>
 
-          <table className="w-full border text-sm">
-            <thead className="bg-silver text-black">
-              <tr>
-                <th className="p-2 text-left">Nome</th>
-                <th className="p-2 text-left hidden md:table-cell">Email</th>
-                <th className="p-2 text-left hidden md:table-cell">WhatsApp</th>
-                <th className="p-2 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrarClientes().map(cliente => (
-                <tr key={cliente.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2">{cliente.nome}</td>
-                  <td className="p-2 hidden md:table-cell">{cliente.email}</td>
-                  <td className="p-2 hidden md:table-cell">{cliente.whatsapp}</td>
-                  <td className="p-2 flex justify-center gap-2 text-primary">
-                    <button onClick={() => setClienteVisualizar(cliente)} title="Visualizar">
-                      <FiEye />
-                    </button>
-                    <button onClick={() => handleEditar(cliente)} title="Editar">
-                      <FiEdit />
-                    </button>
-                    <button onClick={() => handleExcluir(cliente.id)} title="Excluir">
-                      <FiTrash2 />
-                    </button>
-                  </td>
+          {loading ? (
+            <div>Carregando clientes...</div>
+          ) : (
+            <table className="w-full border text-sm">
+              <thead className="bg-silver text-black">
+                <tr>
+                  <th className="p-2 text-left">Nome</th>
+                  <th className="p-2 text-left hidden md:table-cell">Email</th>
+                  <th className="p-2 text-left hidden md:table-cell">WhatsApp</th>
+                  <th className="p-2 text-center">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtrarClientes().map(cliente => (
+                  <tr key={cliente.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{cliente.nome}</td>
+                    <td className="p-2 hidden md:table-cell">{cliente.email}</td>
+                    <td className="p-2 hidden md:table-cell">{cliente.whatsapp}</td>
+                    <td className="p-2 flex justify-center gap-2 text-primary">
+                      <button onClick={() => setClienteVisualizar(cliente)} title="Visualizar">
+                        <FiEye />
+                      </button>
+                      <button onClick={() => handleEditar(cliente)} title="Editar">
+                        <FiEdit />
+                      </button>
+                      <button onClick={() => handleExcluir(cliente.id)} title="Excluir">
+                        <FiTrash2 />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </div>

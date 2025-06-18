@@ -28,6 +28,7 @@ export default function FuncionarioForm({
     pixTipo: "",
     pixChave: "",
     salario: "",
+    funcao: "",
     dataAdmissao: "",
     dataDemissao: "",
   };
@@ -39,14 +40,14 @@ export default function FuncionarioForm({
   }, [funcionarioSelecionado]);
 
   useEffect(() => {
-      const handleKeyDown = (e) => {
-        if (e.key === 'Escape') {
-          onCancel();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onCancel]);
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onCancel]);
 
   useEffect(() => {
     const handleEsc = (e) => e.key === "Escape" && onCancel();
@@ -308,9 +309,8 @@ export default function FuncionarioForm({
           />
         </div>
       </div>
-
-      {/* Salário com máscara */}
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
+      {/* Salário e Função */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label>Salário</label>
           <IMaskInput
@@ -330,8 +330,16 @@ export default function FuncionarioForm({
             className="input w-full"
           />
         </div>
+        <div>
+          <label>Função</label>
+          <input
+            name="funcao"
+            value={form.funcao || ""}
+            onChange={handleChange}
+            className="input w-full"
+          />
+        </div>
       </div>
-
       {/* Datas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>

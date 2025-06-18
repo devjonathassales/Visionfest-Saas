@@ -1,32 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FornecedorForm from '../../components/FornecedorForm';
 import FornecedorVisualizar from '../../components/FornecedorVisualizar';
 import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
 
-// Mock de fornecedores
-const fornecedoresMock = [
-  {
-    id: 1,
-    nome: 'Fornecedor A',
-    cpfCnpj: '00.000.000/0001-00',
-    endereco: 'Rua das Flores, 123',
-    whatsapp: '85999999999',
-    email: 'fornecedora@email.com',
-    dataCadastro: '2024-12-10'
-  },
-  {
-    id: 2,
-    nome: 'Fornecedor B',
-    cpfCnpj: '111.111.111-11',
-    endereco: 'Av. Central, 456',
-    whatsapp: '85988888888',
-    email: 'fornecedorb@email.com',
-    dataCadastro: '2025-01-15'
-  },
-];
+const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Fornecedores() {
-  const [fornecedores, setFornecedores] = useState(fornecedoresMock);
+  const [fornecedores, setFornecedores] = useState([]);
   const [busca, setBusca] = useState('');
   const [ordenarPor, setOrdenarPor] = useState('alfabetica');
   const [dataInicio, setDataInicio] = useState('');
@@ -34,18 +14,36 @@ export default function Fornecedores() {
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [fornecedorSelecionado, setFornecedorSelecionado] = useState(null);
   const [fornecedorVisualizar, setFornecedorVisualizar] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Buscar fornecedores do backend
+  const fetchFornecedores = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/fornecedores`);
+      if (!res.ok) throw new Error('Erro ao buscar fornecedores');
+      const data = await res.json();
+      setFornecedores(data);
+    } catch (error) {
+      alert('Erro ao carregar fornecedores: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFornecedores();
+  }, []);
 
   const filtrarFornecedores = () => {
     let lista = [...fornecedores];
 
-    // Filtro por nome
     if (busca.length >= 3) {
       lista = lista.filter(f =>
         f.nome.toLowerCase().includes(busca.toLowerCase())
       );
     }
 
-    // Ordenar
     if (ordenarPor === 'alfabetica') {
       lista.sort((a, b) => a.nome.localeCompare(b.nome));
     } else if (ordenarPor === 'data' && dataInicio && dataFim) {
@@ -60,18 +58,34 @@ export default function Fornecedores() {
     return lista;
   };
 
-  const handleSalvar = (novoFornecedor) => {
-    if (novoFornecedor.id) {
-      setFornecedores(prev => prev.map(f => f.id === novoFornecedor.id ? novoFornecedor : f));
-    } else {
-      setFornecedores(prev => [...prev, {
-        ...novoFornecedor,
-        id: Date.now(),
-        dataCadastro: new Date().toISOString().split('T')[0]
-      }]);
+  const handleSalvar = async (novoFornecedor) => {
+    try {
+      let res;
+      if (novoFornecedor.id) {
+        // Atualizar fornecedor
+        res = await fetch(`${API_BASE_URL}/fornecedores/${novoFornecedor.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(novoFornecedor),
+        });
+      } else {
+        // Criar fornecedor
+        res = await fetch(`${API_BASE_URL}/fornecedores`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(novoFornecedor),
+        });
+      }
+
+      if (!res.ok) throw new Error('Erro ao salvar fornecedor');
+
+      await fetchFornecedores();
+
+      setMostrarFormulario(false);
+      setFornecedorSelecionado(null);
+    } catch (error) {
+      alert('Erro ao salvar fornecedor: ' + error.message);
     }
-    setMostrarFormulario(false);
-    setFornecedorSelecionado(null);
   };
 
   const handleEditar = (fornecedor) => {
@@ -79,9 +93,15 @@ export default function Fornecedores() {
     setMostrarFormulario(true);
   };
 
-  const handleExcluir = (id) => {
-    if (window.confirm("Deseja excluir este fornecedor?")) {
+  const handleExcluir = async (id) => {
+    if (!window.confirm("Deseja excluir este fornecedor?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/fornecedores/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Erro ao excluir fornecedor');
       setFornecedores(prev => prev.filter(f => f.id !== id));
+    } catch (error) {
+      alert('Erro ao excluir fornecedor: ' + error.message);
     }
   };
 
@@ -154,40 +174,44 @@ export default function Fornecedores() {
             </button>
           </div>
 
-          <table className="w-full border text-sm">
-            <thead className="bg-silver text-black">
-              <tr>
-                <th className="p-2 text-left">Nome</th>
-                <th className="p-2 text-left hidden md:table-cell">CPF/CNPJ</th>
-                <th className="p-2 text-left hidden md:table-cell">Endereço</th>
-                <th className="p-2 text-left hidden md:table-cell">Email</th>
-                <th className="p-2 text-left hidden md:table-cell">WhatsApp</th>
-                <th className="p-2 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrarFornecedores().map(fornecedor => (
-                <tr key={fornecedor.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2">{fornecedor.nome}</td>
-                  <td className="p-2 hidden md:table-cell">{fornecedor.cpfCnpj}</td>
-                  <td className="p-2 hidden md:table-cell">{fornecedor.endereco}</td>
-                  <td className="p-2 hidden md:table-cell">{fornecedor.email}</td>
-                  <td className="p-2 hidden md:table-cell">{fornecedor.whatsapp}</td>
-                  <td className="p-2 flex justify-center gap-2 text-primary">
-                    <button onClick={() => setFornecedorVisualizar(fornecedor)} title="Visualizar">
-                      <FiEye />
-                    </button>
-                    <button onClick={() => handleEditar(fornecedor)} title="Editar">
-                      <FiEdit />
-                    </button>
-                    <button onClick={() => handleExcluir(fornecedor.id)} title="Excluir">
-                      <FiTrash2 />
-                    </button>
-                  </td>
+          {loading ? (
+            <p>Carregando fornecedores...</p>
+          ) : (
+            <table className="w-full border text-sm">
+              <thead className="bg-silver text-black">
+                <tr>
+                  <th className="p-2 text-left">Nome</th>
+                  <th className="p-2 text-left hidden md:table-cell">CPF/CNPJ</th>
+                  <th className="p-2 text-left hidden md:table-cell">Endereço</th>
+                  <th className="p-2 text-left hidden md:table-cell">Email</th>
+                  <th className="p-2 text-left hidden md:table-cell">WhatsApp</th>
+                  <th className="p-2 text-center">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtrarFornecedores().map(fornecedor => (
+                  <tr key={fornecedor.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{fornecedor.nome}</td>
+                    <td className="p-2 hidden md:table-cell">{fornecedor.cpfCnpj}</td>
+                    <td className="p-2 hidden md:table-cell">{fornecedor.endereco}</td>
+                    <td className="p-2 hidden md:table-cell">{fornecedor.email}</td>
+                    <td className="p-2 hidden md:table-cell">{fornecedor.whatsapp}</td>
+                    <td className="p-2 flex justify-center gap-2 text-primary">
+                      <button onClick={() => setFornecedorVisualizar(fornecedor)} title="Visualizar">
+                        <FiEye />
+                      </button>
+                      <button onClick={() => handleEditar(fornecedor)} title="Editar">
+                        <FiEdit />
+                      </button>
+                      <button onClick={() => handleExcluir(fornecedor.id)} title="Excluir">
+                        <FiTrash2 />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </div>

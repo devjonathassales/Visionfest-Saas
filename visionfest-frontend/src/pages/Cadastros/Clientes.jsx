@@ -3,6 +3,8 @@ import ClienteForm from '../../components/ClienteForm';
 import ClienteVisualizar from '../../components/ClienteVisualizar';
 import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
 
+const API_BASE_URL = 'http://localhost:5000/api';
+
 export default function Clientes() {
   const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState('');
@@ -18,7 +20,7 @@ export default function Clientes() {
   const fetchClientes = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/clientes');
+      const res = await fetch(`${API_BASE_URL}/clientes`);
       if (!res.ok) throw new Error('Erro ao buscar clientes');
       const data = await res.json();
       setClientes(data);
@@ -61,14 +63,14 @@ export default function Clientes() {
       let res;
       if (novoCliente.id) {
         // Atualizar cliente
-        res = await fetch(`/api/clientes/${novoCliente.id}`, {
+        res = await fetch(`${API_BASE_URL}/clientes/${novoCliente.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(novoCliente),
         });
       } else {
         // Criar cliente
-        res = await fetch('/api/clientes', {
+        res = await fetch(`${API_BASE_URL}/clientes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(novoCliente),
@@ -96,7 +98,7 @@ export default function Clientes() {
     if (!window.confirm("Deseja excluir este cliente?")) return;
 
     try {
-      const res = await fetch(`/api/clientes/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_BASE_URL}/clientes/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Erro ao excluir cliente');
       setClientes(prev => prev.filter(c => c.id !== id));
     } catch (error) {

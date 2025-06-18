@@ -21,17 +21,13 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
 
   const [errors, setErrors] = useState({});
 
-  // Referências para inputs
   const cpfRef = useRef(null);
   const whatsappRef = useRef(null);
   const celularRef = useRef(null);
   const cepRef = useRef(null);
   const dataNascimentoRef = useRef(null);
-
-  // Guardar instâncias IMask para manipular se precisar
   const maskRefs = useRef({});
 
-  // Inicializar máscaras e salvar instâncias para escutar 'accept' e atualizar estado
   useEffect(() => {
     if (cpfRef.current) {
       maskRefs.current.cpf = IMask(cpfRef.current, {
@@ -102,59 +98,58 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     }
 
     if (dataNascimentoRef.current) {
-  maskRefs.current.dataNascimento = IMask(dataNascimentoRef.current, {
-    mask: IMask.MaskedDate,
-    pattern: "d{/}m{/}Y",
-    lazy: false,
-    blocks: {
-      d: { mask: IMask.MaskedRange, from: 1, to: 31, maxLength: 2 },
-      m: { mask: IMask.MaskedRange, from: 1, to: 12, maxLength: 2 },
-      Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 },
-    },
-  });
-  maskRefs.current.dataNascimento.on("accept", () => {
-    setForm((prev) => ({
-      ...prev,
-      dataNascimento: maskRefs.current.dataNascimento.value,
-    }));
-  });
-}
-    // Limpar máscaras ao desmontar
+      maskRefs.current.dataNascimento = IMask(dataNascimentoRef.current, {
+        mask: IMask.MaskedDate,
+        pattern: "d{/}m{/}Y",
+        lazy: false,
+        blocks: {
+          d: { mask: IMask.MaskedRange, from: 1, to: 31, maxLength: 2 },
+          m: { mask: IMask.MaskedRange, from: 1, to: 12, maxLength: 2 },
+          Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 },
+        },
+      });
+      maskRefs.current.dataNascimento.on("accept", () => {
+        setForm((prev) => ({
+          ...prev,
+          dataNascimento: maskRefs.current.dataNascimento.value,
+        }));
+      });
+    }
+
     return () => {
       Object.values(maskRefs.current).forEach((mask) => mask.destroy());
       maskRefs.current = {};
     };
   }, []);
 
-  // Quando clienteSelecionado mudar, atualizar estado e máscaras
   useEffect(() => {
-  if (clienteSelecionado) {
-    setForm({ ...clienteSelecionado });
-    setTimeout(() => {
-      if (maskRefs.current.cpf) {
-        maskRefs.current.cpf.value = clienteSelecionado.cpf || "";
-        maskRefs.current.cpf.updateValue();
-      }
-      if (maskRefs.current.whatsapp) {
-        maskRefs.current.whatsapp.value = clienteSelecionado.whatsapp || "";
-        maskRefs.current.whatsapp.updateValue();
-      }
-      if (maskRefs.current.celular) {
-        maskRefs.current.celular.value = clienteSelecionado.celular || "";
-        maskRefs.current.celular.updateValue();
-      }
-      if (maskRefs.current.cep) {
-        maskRefs.current.cep.value = clienteSelecionado.cep || "";
-        maskRefs.current.cep.updateValue();
-      }
-      if (maskRefs.current.dataNascimento) {
-        maskRefs.current.dataNascimento.value = clienteSelecionado.dataNascimento || "";
-        maskRefs.current.dataNascimento.updateValue();
-      }
-    }, 0);
-  }
-}, [clienteSelecionado]);
-  // Fechar form com ESC
+    if (clienteSelecionado) {
+      setForm({ ...clienteSelecionado });
+      setTimeout(() => {
+        if (maskRefs.current.cpf) {
+          maskRefs.current.cpf.value = clienteSelecionado.cpf || "";
+          maskRefs.current.cpf.updateValue();
+        }
+        if (maskRefs.current.whatsapp) {
+          maskRefs.current.whatsapp.value = clienteSelecionado.whatsapp || "";
+          maskRefs.current.whatsapp.updateValue();
+        }
+        if (maskRefs.current.celular) {
+          maskRefs.current.celular.value = clienteSelecionado.celular || "";
+          maskRefs.current.celular.updateValue();
+        }
+        if (maskRefs.current.cep) {
+          maskRefs.current.cep.value = clienteSelecionado.cep || "";
+          maskRefs.current.cep.updateValue();
+        }
+        if (maskRefs.current.dataNascimento) {
+          maskRefs.current.dataNascimento.value = clienteSelecionado.dataNascimento || "";
+          maskRefs.current.dataNascimento.updateValue();
+        }
+      }, 0);
+    }
+  }, [clienteSelecionado]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") onCancel();
@@ -163,7 +158,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onCancel]);
 
-  // Validação CPF (sem alterações)
   function validarCPF(strCPF) {
     const cpf = strCPF.replace(/[^\d]+/g, "");
     if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
@@ -181,7 +175,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     return resto === parseInt(cpf.substring(10, 11));
   }
 
-  // Buscar endereço pelo CEP
   async function buscarEndereco(cep) {
     const cepLimpo = cep.replace(/\D/g, "");
     if (cepLimpo.length !== 8) return;
@@ -215,37 +208,29 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     }
   }
 
-  // Atualizar campos de texto simples (exceto campos com máscara, que são controlados por 'accept')
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    // Só atualizar estado para campos não mascarados
     if (
       ["cpf", "whatsapp", "celular", "cep", "dataNascimento"].includes(name)
     ) {
-      // máscara atualiza via evento 'accept', ignorar onChange normal
       return;
     }
 
     setForm((prev) => ({ ...prev, [name]: value }));
 
-    // Quando CEP completar, buscar endereço
     if (name === "cep" && value.replace(/\D/g, "").length === 8) {
       buscarEndereco(value);
     }
   };
 
-  // Validar formulário
   const validarForm = () => {
     const newErrors = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
 
-    // Validar WhatsApp: deve estar preenchido e ter o formato completo (14 ou 15 caracteres)
     const whatsappLen = form.whatsapp.replace(/\D/g, "").length;
     if (!form.whatsapp.trim()) newErrors.whatsapp = "WhatsApp é obrigatório";
-    else if (whatsappLen < 10)
-      // mínimo para telefone fixo + DDD (10 dígitos)
-      newErrors.whatsapp = "WhatsApp incompleto";
+    else if (whatsappLen < 10) newErrors.whatsapp = "WhatsApp incompleto";
 
     if (!form.cpf.trim()) {
       newErrors.cpf = "CPF é obrigatório";
@@ -259,10 +244,10 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Enviar para backend (sem alterações)
+  // IMPORTANTE: alterei a URL da API para o backend correto
   const salvarClienteBackend = async (dados) => {
     try {
-      const urlBase = "http://localhost:3333/api/clientes";
+      const urlBase = "http://localhost:5000/api/clientes";
       const isEdit = !!dados.id;
 
       const response = await fetch(
@@ -291,7 +276,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     }
   };
 
-  // Submeter formulário
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validarForm()) return;
@@ -318,11 +302,15 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     const clienteSalvo = await salvarClienteBackend(dadosParaSalvar);
     if (clienteSalvo) onSave(clienteSalvo);
   };
+
   return (
     <form
       onSubmit={handleSubmit}
       className="max-w-4xl mx-auto bg-white p-6 rounded shadow-md space-y-6"
     >
+      {/* Campos do formulário aqui (igual ao seu código original) */}
+      {/* Copiei exatamente igual pra não perder a estrutura */}
+
       <div>
         <label className="block font-semibold mb-1" htmlFor="nome">
           Nome *

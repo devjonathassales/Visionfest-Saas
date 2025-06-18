@@ -11,29 +11,18 @@ export default function FornecedorForm({ onSave, fornecedorSelecionado, onCancel
   });
 
   const [errors, setErrors] = useState({});
-
   const cpfCnpjRef = useRef(null);
   const whatsappRef = useRef(null);
 
-  // Máscaras
+  // Máscaras para CPF/CNPJ e WhatsApp
   useEffect(() => {
     if (cpfCnpjRef.current) {
       IMask(cpfCnpjRef.current, {
         mask: [
-          {
-            mask: '000.000.000-00',
-            maxLength: 14,
-            lazy: false,
-            regex: /^\d{0,11}$/,
-          },
-          {
-            mask: '00.000.000/0000-00',
-            maxLength: 18,
-            lazy: false,
-            regex: /^\d{12,14}$/,
-          }
+          { mask: '000.000.000-00' },
+          { mask: '00.000.000/0000-00' }
         ],
-        dispatch: function (appended, dynamicMasked) {
+        dispatch: (appended, dynamicMasked) => {
           const number = (dynamicMasked.value + appended).replace(/\D/g, '');
           return number.length > 11
             ? dynamicMasked.compiledMasks[1]
@@ -45,19 +34,14 @@ export default function FornecedorForm({ onSave, fornecedorSelecionado, onCancel
     if (whatsappRef.current) {
       IMask(whatsappRef.current, {
         mask: [
-          {
-            mask: '(00) 00000-0000',
-            startsWith: '9',
-            lazy: false
-          },
-          {
-            mask: '(00) 0000-0000',
-            lazy: false
-          }
+          { mask: '(00) 00000-0000' },
+          { mask: '(00) 0000-0000' }
         ],
-        dispatch: function (appended, dynamicMasked) {
-          var number = (dynamicMasked.value + appended).replace(/\D/g, '');
-          return number.length > 10 ? dynamicMasked.compiledMasks[0] : dynamicMasked.compiledMasks[1];
+        dispatch: (appended, dynamicMasked) => {
+          const number = (dynamicMasked.value + appended).replace(/\D/g, '');
+          return number.length > 10
+            ? dynamicMasked.compiledMasks[0]
+            : dynamicMasked.compiledMasks[1];
         }
       });
     }
@@ -66,100 +50,90 @@ export default function FornecedorForm({ onSave, fornecedorSelecionado, onCancel
   useEffect(() => {
     if (fornecedorSelecionado) {
       setForm({ ...fornecedorSelecionado });
+    } else {
+      setForm({
+        nome: '',
+        cpfCnpj: '',
+        endereco: '',
+        whatsapp: '',
+        email: '',
+      });
     }
   }, [fornecedorSelecionado]);
 
   useEffect(() => {
-      const handleKeyDown = (e) => {
-        if (e.key === 'Escape') {
-          onCancel();
-        }
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onCancel]);
-    
-  // Validação CPF (mesma do seu código)
-  function validarCPF(strCPF) {
-    const cpf = strCPF.replace(/[^\d]+/g, '');
-    if (cpf.length !== 11) return false;
-    if (/^(\d)\1+$/.test(cpf)) return false;
-    let soma = 0;
-    let resto;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
 
-    for (let i=1; i<=9; i++)
-      soma += parseInt(cpf.substring(i-1, i)) * (11 - i);
+  function validarCPF(strCPF) {
+    const cpf = strCPF.replace(/\D/g, '');
+    if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+    let soma = 0, resto;
+    for (let i = 1; i <= 9; i++) soma += parseInt(cpf[i - 1]) * (11 - i);
     resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
-    if (resto !== parseInt(cpf.substring(9, 10))) return false;
+    if (resto !== parseInt(cpf[9])) return false;
 
     soma = 0;
-    for (let i=1; i<=10; i++)
-      soma += parseInt(cpf.substring(i-1, i)) * (12 - i);
+    for (let i = 1; i <= 10; i++) soma += parseInt(cpf[i - 1]) * (12 - i);
     resto = (soma * 10) % 11;
     if (resto === 10 || resto === 11) resto = 0;
-    if (resto !== parseInt(cpf.substring(10, 11))) return false;
-
-    return true;
+    return resto === parseInt(cpf[10]);
   }
 
-  // Validação CNPJ simples
   function validarCNPJ(cnpj) {
-    cnpj = cnpj.replace(/[^\d]+/g,'');
+    cnpj = cnpj.replace(/\D/g, '');
+    if (cnpj.length !== 14 || /^(\d)\1+$/.test(cnpj)) return false;
 
-    if(cnpj.length !== 14) return false;
-
-    // Elimina CNPJs inválidos conhecidos
-    if (/^(\d)\1+$/.test(cnpj)) return false;
-
-    // Validação dígito verificador
     let tamanho = cnpj.length - 2;
-    let numeros = cnpj.substring(0,tamanho);
+    let numeros = cnpj.substring(0, tamanho);
     let digitos = cnpj.substring(tamanho);
-    let soma = 0;
-    let pos = tamanho - 7;
+    let soma = 0, pos = tamanho - 7;
+
     for (let i = tamanho; i >= 1; i--) {
-      soma += numeros.charAt(tamanho - i) * pos--;
+      soma += numeros[tamanho - i] * pos--;
       if (pos < 2) pos = 9;
     }
-    let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
-    if (resultado !== parseInt(digitos.charAt(0))) return false;
 
-    tamanho = tamanho + 1;
-    numeros = cnpj.substring(0,tamanho);
+    let resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+    if (resultado !== parseInt(digitos[0])) return false;
+
+    tamanho++;
+    numeros = cnpj.substring(0, tamanho);
     soma = 0;
     pos = tamanho - 7;
+
     for (let i = tamanho; i >= 1; i--) {
-      soma += numeros.charAt(tamanho - i) * pos--;
+      soma += numeros[tamanho - i] * pos--;
       if (pos < 2) pos = 9;
     }
-    resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
-    if (resultado !== parseInt(digitos.charAt(1))) return false;
 
-    return true;
+    resultado = soma % 11 < 2 ? 0 : 11 - soma % 11;
+    return resultado === parseInt(digitos[1]);
   }
 
   const validarForm = () => {
     const newErrors = {};
     if (!form.nome.trim()) newErrors.nome = 'Nome é obrigatório';
     if (!form.whatsapp.trim()) newErrors.whatsapp = 'WhatsApp é obrigatório';
+    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
+
     if (!form.cpfCnpj.trim()) {
       newErrors.cpfCnpj = 'CPF/CNPJ é obrigatório';
     } else {
       const num = form.cpfCnpj.replace(/\D/g, '');
-      if (num.length === 11) {
-        if (!validarCPF(form.cpfCnpj)) {
-          newErrors.cpfCnpj = 'CPF inválido';
-        }
-      } else if (num.length === 14) {
-        if (!validarCNPJ(form.cpfCnpj)) {
-          newErrors.cpfCnpj = 'CNPJ inválido';
-        }
-      } else {
+      if (num.length === 11 && !validarCPF(form.cpfCnpj)) {
+        newErrors.cpfCnpj = 'CPF inválido';
+      } else if (num.length === 14 && !validarCNPJ(form.cpfCnpj)) {
+        newErrors.cpfCnpj = 'CNPJ inválido';
+      } else if (num.length !== 11 && num.length !== 14) {
         newErrors.cpfCnpj = 'CPF/CNPJ inválido';
       }
     }
-    if (!form.email.trim()) newErrors.email = 'Email é obrigatório';
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -174,7 +148,14 @@ export default function FornecedorForm({ onSave, fornecedorSelecionado, onCancel
     e.preventDefault();
     if (!validarForm()) return;
 
-    onSave(form);
+    // Normaliza dados antes de salvar (remove máscara)
+    const fornecedorLimpo = {
+      ...form,
+      cpfCnpj: form.cpfCnpj.replace(/\D/g, ''),
+      whatsapp: form.whatsapp.replace(/\D/g, '')
+    };
+
+    onSave(fornecedorLimpo);
   };
 
   return (

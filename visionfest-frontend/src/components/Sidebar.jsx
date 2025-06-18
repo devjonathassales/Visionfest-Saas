@@ -46,7 +46,6 @@ const menuStructure = [
       { label: 'Permissões de Usuários', path: '/configuracoes/permissoes' },
       { label: 'Faturas', path: '/configuracoes/faturas' },
       { label: 'Contrato', path: '/configuracoes/contrato' },
-      { label: 'Alterar Plano', path: '/configuracoes/plano' },
     ]
   },
 ];

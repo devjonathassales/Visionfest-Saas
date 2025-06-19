@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react';
 
-export default function CentroCustoForm({ onClose, onSalvar }) {
+export default function CentroCustoForm({ onClose, onSalvar, centroSelecionado }) {
   const [descricao, setDescricao] = useState('');
   const [tipo, setTipo] = useState('Custo');
+
+  useEffect(() => {
+    if (centroSelecionado) {
+      setDescricao(centroSelecionado.descricao);
+      setTipo(centroSelecionado.tipo);
+    }
+  }, [centroSelecionado]);
 
   useEffect(() => {
     const escFunction = (e) => {
@@ -15,13 +22,22 @@ export default function CentroCustoForm({ onClose, onSalvar }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!descricao.trim()) return;
-    onSalvar({ descricao, tipo });
+
+    const dados = {
+      descricao,
+      tipo,
+      ...(centroSelecionado?.id && { id: centroSelecionado.id }),
+    };
+
+    onSalvar(dados);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
       <div className="bg-white rounded shadow-lg p-6 w-full max-w-md">
-        <h2 className="text-xl font-bold mb-4 text-green-600">Novo Centro de Custo/Receita</h2>
+        <h2 className="text-xl font-bold mb-4 text-green-600">
+          {centroSelecionado ? 'Editar Centro de Custo/Receita' : 'Novo Centro de Custo/Receita'}
+        </h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block mb-1 font-semibold">Descrição</label>

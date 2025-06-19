@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE_URL = 'http://localhost:5000/api';
+
 export default function MovimentarEstoqueForm({ onClose, onSave }) {
   const [produtos, setProdutos] = useState([]);
   const [busca, setBusca] = useState('');
@@ -8,18 +10,15 @@ export default function MovimentarEstoqueForm({ onClose, onSave }) {
   const [tipo, setTipo] = useState('entrada');
 
   useEffect(() => {
-    setProdutos([
-      { id: 1, nome: 'Cadeira Tiffany' },
-      { id: 2, nome: 'Mesa de vidro' },
-      { id: 3, nome: 'Bolo Fake' },
-    ]);
+    fetch(`${API_BASE_URL}/produtos`)
+      .then((res) => res.json())
+      .then((data) => setProdutos(data))
+      .catch((err) => console.error('Erro ao carregar produtos:', err));
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose(); // Fecha ao pressionar ESC
-      }
+      if (e.key === 'Escape') onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -34,7 +33,6 @@ export default function MovimentarEstoqueForm({ onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!produtoSelecionado || !quantidade) return;
-
     onSave({
       produtoId: produtoSelecionado.id,
       tipo,
@@ -57,7 +55,7 @@ export default function MovimentarEstoqueForm({ onClose, onSave }) {
             value={busca}
             onChange={(e) => {
               setBusca(e.target.value);
-              setProdutoSelecionado(null); // limpa seleção ao digitar novamente
+              setProdutoSelecionado(null);
             }}
             className="w-full border px-3 py-2 rounded"
             placeholder="Digite pelo menos 3 letras..."

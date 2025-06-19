@@ -30,4 +30,5 @@ const Produto = sequelize.define('Produto', {
   tableName: 'produtos',
 });
 
+
 module.exports = Produto;

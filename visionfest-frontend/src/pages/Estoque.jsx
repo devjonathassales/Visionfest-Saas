@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import MovimentarEstoqueForm from '../components/MovimentarEstoqueForm';
 import dayjs from 'dayjs';
 import 'dayjs/locale/pt-br';
 import { toast } from 'react-toastify';
+
 dayjs.locale('pt-br');
+const API_BASE_URL = 'http://localhost:5000/api';
 
 function getSemanaAtual() {
   const hoje = dayjs();
-  const inicio = hoje.startOf('week'); // domingo
-  const fim = hoje.endOf('week'); // sábado
+  const inicio = hoje.startOf('week');
+  const fim = hoje.endOf('week');
   return {
     inicio: inicio.format('YYYY-MM-DD'),
     fim: fim.format('YYYY-MM-DD'),
@@ -21,15 +23,9 @@ export default function EstoquePage() {
   const [visao, setVisao] = useState('semanal');
   const [{ inicio, fim }, setPeriodo] = useState(getSemanaAtual());
   const [mostrarMovimentacao, setMostrarMovimentacao] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === 'Escape') setMostrarMovimentacao(false);
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, []);
-
+  // Atualiza período quando a visão muda
   useEffect(() => {
     const hoje = dayjs();
     let novaDataInicio = hoje;
@@ -52,57 +48,45 @@ export default function EstoquePage() {
     });
   }, [visao]);
 
+  // Função para buscar produtos do estoque
+  const fetchEstoque = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/estoque?inicio=${inicio}&fim=${fim}`);
+      if (!res.ok) throw new Error('Erro ao buscar estoque');
+      const data = await res.json();
+      setProdutos(data);
+    } catch (error) {
+      toast.error('Erro ao carregar estoque: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [inicio, fim]);
+
   useEffect(() => {
-    setProdutos([
-      {
-        id: 1,
-        nome: 'Cadeira Tiffany',
-        estoque: 10,
-        estoqueMinimo: 5,
-        provisionado: 4,
-      },
-      {
-        id: 2,
-        nome: 'Toalha de Mesa Branca',
-        estoque: 15,
-        estoqueMinimo: 3,
-        provisionado: 5,
-      },
-    ]);
-  }, []);
+    fetchEstoque();
+  }, [fetchEstoque]);
 
   const produtosFiltrados = produtos.filter((produto) =>
     produto.nome.toLowerCase().includes(filtroTexto.toLowerCase())
   );
 
-  // Função chamada ao salvar movimentação
-  const onSaveMovimentacao = (movimentacao) => {
-    // Aqui você faria o update real no backend e recarregaria o estoque
-    // Por ora, só simulo e exibo um toast
-
-    // Exemplo: atualizar estado local só para simular a saída ou entrada
-    setProdutos((old) =>
-      old.map((p) => {
-        if (p.id === movimentacao.produtoId) {
-          const ajuste = movimentacao.tipo === 'entrada' ? movimentacao.quantidade : -movimentacao.quantidade;
-          const novoEstoque = p.estoque + ajuste;
-          return { ...p, estoque: novoEstoque < 0 ? 0 : novoEstoque };
-        }
-        return p;
-      })
-    );
-
-    setMostrarMovimentacao(false);
-    toast.success('Movimentação salva com sucesso!');
-
-    // Verifica se algum produto atingiu ou ficou abaixo do estoque mínimo
-    setTimeout(() => {
-      produtos.forEach((p) => {
-        if (p.estoque <= p.estoqueMinimo) {
-          toast.warn(`⚠ Estoque do produto "${p.nome}" atingiu o mínimo!`);
-        }
+  const onSaveMovimentacao = async (movimentacao) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/estoque/movimentar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(movimentacao),
       });
-    }, 1000);
+
+      if (!res.ok) throw new Error('Erro ao movimentar estoque');
+
+      toast.success('Movimentação registrada com sucesso!');
+      setMostrarMovimentacao(false);
+      await fetchEstoque();
+    } catch (error) {
+      toast.error('Erro ao movimentar estoque: ' + error.message);
+    }
   };
 
   return (
@@ -149,46 +133,50 @@ export default function EstoquePage() {
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full table-auto border rounded shadow">
-          <thead className="bg-gray-100">
-            <tr>
-              <th className="p-2 text-left">Produto</th>
-              <th className="p-2 text-center">Estoque Atual</th>
-              <th className="p-2 text-center">Estoque Mínimo</th>
-              <th className="p-2 text-center">Provisionado ({visao})</th>
-              <th className="p-2 text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {produtosFiltrados.map((produto) => {
-              const atingiuMinimo = produto.provisionado >= produto.estoqueMinimo;
-              return (
-                <tr key={produto.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2">{produto.nome}</td>
-                  <td className="p-2 text-center">{produto.estoque}</td>
-                  <td className="p-2 text-center">{produto.estoqueMinimo}</td>
-                  <td className="p-2 text-center">{produto.provisionado}</td>
-                  <td
-                    className={`p-2 text-center font-semibold ${
-                      atingiuMinimo ? 'text-red-500' : 'text-green-600'
-                    }`}
-                  >
-                    {atingiuMinimo ? '⚠ Atingiu o mínimo' : 'OK'}
+      {loading ? (
+        <p>Carregando estoque...</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full table-auto border rounded shadow">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 text-left">Produto</th>
+                <th className="p-2 text-center">Estoque Atual</th>
+                <th className="p-2 text-center">Estoque Mínimo</th>
+                <th className="p-2 text-center">Provisionado ({visao})</th>
+                <th className="p-2 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {produtosFiltrados.map((produto) => {
+                const atingiuMinimo = produto.provisionado >= produto.estoqueMinimo;
+                return (
+                  <tr key={produto.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{produto.nome}</td>
+                    <td className="p-2 text-center">{produto.estoque}</td>
+                    <td className="p-2 text-center">{produto.estoqueMinimo}</td>
+                    <td className="p-2 text-center">{produto.provisionado}</td>
+                    <td
+                      className={`p-2 text-center font-semibold ${
+                        atingiuMinimo ? 'text-red-500' : 'text-green-600'
+                      }`}
+                    >
+                      {atingiuMinimo ? '⚠ Atingiu o mínimo' : 'OK'}
+                    </td>
+                  </tr>
+                );
+              })}
+              {produtosFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="text-center py-4 text-gray-500">
+                    Nenhum produto encontrado.
                   </td>
                 </tr>
-              );
-            })}
-            {produtosFiltrados.length === 0 && (
-              <tr>
-                <td colSpan="5" className="text-center py-4 text-gray-500">
-                  Nenhum produto encontrado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {mostrarMovimentacao && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">

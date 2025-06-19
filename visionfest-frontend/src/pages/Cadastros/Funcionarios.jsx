@@ -1,44 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import FuncionarioForm from '../../components/FuncionarioForm';
 import FuncionarioVisualizar from '../../components/FuncionarioVisualizar';
 import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
 
-const funcionariosMock = [
-  {
-    id: 1,
-    nome: 'João Pereira',
-    rg: '12.345.678-9',
-    cpf: '000.000.000-00',
-    dataNascimento: '1985-05-10',
-    estadoCivil: 'Casado',
-    filhos: true,
-    filhosQtd: 2,
-    whatsapp: '85999999999',
-    email: 'joao@email.com',
-    cep: '60000-000',
-    logradouro: 'Rua A',
-    numero: '123',
-    bairro: 'Centro',
-    cidade: 'Fortaleza',
-    estado: 'CE',
-    agencia: '1234',
-    conta: '56789-0',
-    pixTipo: 'email',
-    pixChave: 'joao@email.com',
-    dataAdmissao: '2020-01-01',
-    dataDemissao: '',
-    status: 'ativo',
-    dataCadastro: '2020-01-01',
-  },
-];
+const API_BASE_URL = 'http://localhost:5000/api';
 
 export default function Funcionarios() {
-  const [funcionarios, setFuncionarios] = useState(funcionariosMock);
+  const [funcionarios, setFuncionarios] = useState([]);
   const [busca, setBusca] = useState('');
   const [showInativos, setShowInativos] = useState(false);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState(null);
   const [funcionarioVisualizar, setFuncionarioVisualizar] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchFuncionarios = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/funcionarios`);
+      if (!res.ok) throw new Error('Erro ao buscar funcionários');
+      const data = await res.json();
+      setFuncionarios(data);
+    } catch (err) {
+      alert('Erro: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFuncionarios();
+  }, []);
 
   const filtrar = () => {
     return funcionarios.filter(f => {
@@ -48,27 +40,47 @@ export default function Funcionarios() {
     });
   };
 
-  const handleSalvar = novo => {
-    const atual = { ...novo, status: novo.dataDemissao ? 'inativo' : 'ativo' };
-    if (novo.id) {
-      setFuncionarios(prev => prev.map(f => f.id === novo.id ? atual : f));
-    } else {
-      atual.id = Date.now();
-      atual.dataCadastro = new Date().toISOString().split('T')[0];
-      setFuncionarios(prev => [...prev, atual]);
+  const handleSalvar = async (novo) => {
+    try {
+      const metodo = novo.id ? 'PUT' : 'POST';
+      const url = novo.id
+        ? `${API_BASE_URL}/funcionarios/${novo.id}`
+        : `${API_BASE_URL}/funcionarios`;
+
+      const res = await fetch(url, {
+        method: metodo,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novo),
+      });
+
+      if (!res.ok) throw new Error('Erro ao salvar funcionário');
+
+      await fetchFuncionarios();
+      setMostrarFormulario(false);
+      setFuncionarioSelecionado(null);
+    } catch (err) {
+      alert('Erro ao salvar: ' + err.message);
     }
-    setMostrarFormulario(false);
-    setFuncionarioSelecionado(null);
   };
 
-  const handleEditar = f => {
-    setFuncionarioSelecionado(f);
+  const handleEditar = (func) => {
+    setFuncionarioSelecionado(func);
     setMostrarFormulario(true);
   };
 
-  const handleExcluir = id => {
-    if (window.confirm('Deseja excluir este funcionário?')) {
+  const handleExcluir = async (id) => {
+    if (!window.confirm('Deseja excluir este funcionário?')) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/funcionarios/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Erro ao excluir');
+
       setFuncionarios(prev => prev.filter(f => f.id !== id));
+    } catch (err) {
+      alert('Erro ao excluir: ' + err.message);
     }
   };
 
@@ -124,38 +136,44 @@ export default function Funcionarios() {
             </button>
           </div>
 
-          <table className="w-full border text-sm">
-            <thead className="bg-silver text-black">
-              <tr>
-                <th className="p-2 text-left">Nome</th>
-                <th className="p-2 text-left hidden md:table-cell">CPF</th>
-                <th className="p-2 text-left hidden md:table-cell">Admissão</th>
-                <th className="p-2 text-left hidden md:table-cell">Status</th>
-                <th className="p-2 text-center">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtrar().map(f => (
-                <tr key={f.id} className="border-t hover:bg-gray-50">
-                  <td className="p-2">{f.nome}</td>
-                  <td className="p-2 hidden md:table-cell">{f.cpf}</td>
-                  <td className="p-2 hidden md:table-cell">{f.dataAdmissao}</td>
-                  <td className="p-2 hidden md:table-cell">{f.status}</td>
-                  <td className="p-2 flex justify-center gap-2 text-primary">
-                    <button onClick={() => setFuncionarioVisualizar(f)} title="Visualizar">
-                      <FiEye />
-                    </button>
-                    <button onClick={() => handleEditar(f)} title="Editar">
-                      <FiEdit />
-                    </button>
-                    <button onClick={() => handleExcluir(f.id)} title="Excluir">
-                      <FiTrash2 />
-                    </button>
-                  </td>
+          {loading ? (
+            <div>Carregando funcionários...</div>
+          ) : (
+            <table className="w-full border text-sm">
+              <thead className="bg-silver text-black">
+                <tr>
+                  <th className="p-2 text-left">Nome</th>
+                  <th className="p-2 text-left hidden md:table-cell">CPF</th>
+                  <th className="p-2 text-left hidden md:table-cell">Admissão</th>
+                  <th className="p-2 text-left hidden md:table-cell">Status</th>
+                  <th className="p-2 text-center">Ações</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtrar().map(f => (
+                  <tr key={f.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{f.nome}</td>
+                    <td className="p-2 hidden md:table-cell">{f.cpf}</td>
+                    <td className="p-2 hidden md:table-cell">{f.dataAdmissao}</td>
+                    <td className="p-2 hidden md:table-cell">
+                      {f.dataDemissao ? 'Inativo' : 'Ativo'}
+                    </td>
+                    <td className="p-2 flex justify-center gap-2 text-primary">
+                      <button onClick={() => setFuncionarioVisualizar(f)} title="Visualizar">
+                        <FiEye />
+                      </button>
+                      <button onClick={() => handleEditar(f)} title="Editar">
+                        <FiEdit />
+                      </button>
+                      <button onClick={() => handleExcluir(f.id)} title="Excluir">
+                        <FiTrash2 />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </>
       )}
     </div>

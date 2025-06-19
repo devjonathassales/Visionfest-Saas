@@ -3,7 +3,8 @@ const cors = require("cors");
 require("dotenv").config();
 
 const clienteRoutes = require("./routes/clienteRoutes");
-const fornecedorRoutes = require('./routes/fornecedorRoutes'); 
+const fornecedorRoutes = require('./routes/fornecedorRoutes');
+const funcionarioRoutes = require('./routes/funcionarioRoutes');
 
 const app = express();
 
@@ -13,5 +14,6 @@ app.use(express.json());
 
 app.use("/api/clientes", clienteRoutes);
 app.use('/api/fornecedores', fornecedorRoutes);
+app.use('/api/funcionarios', funcionarioRoutes);
 
 module.exports = app;

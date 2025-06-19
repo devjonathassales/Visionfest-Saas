@@ -17,9 +17,15 @@ export default function ProdutosVisualiza({ produto, onClose }) {
         <h2 className="text-2xl font-semibold mb-4">Detalhes do Produto/Serviço</h2>
 
         <p><strong>Nome:</strong> {produto.nome}</p>
-        <p><strong>Valor:</strong> R$ {produto.valor.toFixed(2)}</p>
+        <p>
+          <strong>Valor:</strong>{' '}
+          {produto.valor !== undefined
+            ? produto.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+            : '—'}
+        </p>
         <p><strong>Movimenta Estoque:</strong> {produto.movimentaEstoque ? 'Sim' : 'Não'}</p>
         <p><strong>Estoque Mínimo:</strong> {produto.estoqueMinimo}</p>
+        <p><strong>Tipo de Produto/Serviço:</strong> {produto.tipoProduto === 'venda' ? 'Venda' : 'Locação'}</p>
       </div>
     </div>
   );

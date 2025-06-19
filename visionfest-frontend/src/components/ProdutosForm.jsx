@@ -61,20 +61,30 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
   const handleSubmit = (e) => {
     e.preventDefault();
 
+    if (!nome.trim()) {
+      alert('Nome é obrigatório');
+      return;
+    }
+
+    if (estoqueMinimo === '' || Number(estoqueMinimo) < 0) {
+      alert('Estoque mínimo deve ser zero ou maior');
+      return;
+    }
+
     onSave({
       id: produtoSelecionado?.id,
       nome,
       valor: limparFormatacao(valor),
       movimentaEstoque,
       estoqueMinimo: estoqueMinimo ? Number(estoqueMinimo) : 0,
-      tipoProduto, // <-- campo novo enviado ao salvar
+      tipoProduto,
     });
   };
 
   return (
     <form onSubmit={handleSubmit} className="max-w-md mx-auto p-4 border rounded shadow bg-white">
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Nome</label>
+        <label className="block mb-1 font-semibold">Nome *</label>
         <input
           type="text"
           className="input border border-gray-300 px-3 py-2 rounded w-full"
@@ -121,7 +131,7 @@ export default function ProdutosForm({ onSave, produtoSelecionado, onCancel }) {
       </div>
 
       <div className="mb-4">
-        <label className="block mb-1 font-semibold">Estoque mínimo</label>
+        <label className="block mb-1 font-semibold">Estoque mínimo *</label>
         <input
           type="number"
           min="0"

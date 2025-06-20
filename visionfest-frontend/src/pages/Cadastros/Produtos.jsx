@@ -85,7 +85,14 @@ export default function Produtos() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/produtos/${id}`, { method: 'DELETE' });
+
+      if (res.status === 400) {
+        const err = await res.json();
+        throw new Error(err.error || 'Não é possível excluir este produto');
+      }
+
       if (!res.ok) throw new Error('Erro ao excluir produto');
+
       setProdutos(prev => prev.filter(p => p.id !== id));
     } catch (error) {
       alert('Erro ao excluir produto: ' + error.message);
@@ -160,7 +167,12 @@ export default function Produtos() {
                 {filtrarProdutos().map(produto => (
                   <tr key={produto.id} className="border-t hover:bg-gray-50">
                     <td className="p-2">{produto.nome}</td>
-                    <td className="p-2">{produto.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td className="p-2">
+                      {produto.valor.toLocaleString('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL'
+                      })}
+                    </td>
                     <td className="p-2">{produto.movimentaEstoque ? 'Sim' : 'Não'}</td>
                     <td className="p-2">{produto.estoqueMinimo}</td>
                     <td className="p-2 flex justify-center gap-2 text-primary">

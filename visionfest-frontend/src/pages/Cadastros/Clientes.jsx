@@ -37,13 +37,11 @@ export default function Clientes() {
 
   const filtrarClientes = () => {
     let lista = [...clientes];
-
     if (busca.length >= 3) {
       lista = lista.filter(c =>
         c.nome.toLowerCase().includes(busca.toLowerCase())
       );
     }
-
     if (ordenarPor === 'alfabetica') {
       lista.sort((a, b) => a.nome.localeCompare(b.nome));
     } else if (ordenarPor === 'data' && dataInicio && dataFim) {
@@ -54,7 +52,6 @@ export default function Clientes() {
         return data >= inicio && data <= fim;
       });
     }
-
     return lista;
   };
 
@@ -62,26 +59,20 @@ export default function Clientes() {
     try {
       let res;
       if (novoCliente.id) {
-        // Atualizar cliente
         res = await fetch(`${API_BASE_URL}/clientes/${novoCliente.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(novoCliente),
         });
       } else {
-        // Criar cliente
         res = await fetch(`${API_BASE_URL}/clientes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(novoCliente),
         });
       }
-
       if (!res.ok) throw new Error('Erro ao salvar cliente');
-
-      // Recarregar lista do backend para manter tudo sincronizado
       await fetchClientes();
-
       setMostrarFormulario(false);
       setClienteSelecionado(null);
     } catch (error) {
@@ -99,6 +90,10 @@ export default function Clientes() {
 
     try {
       const res = await fetch(`${API_BASE_URL}/clientes/${id}`, { method: 'DELETE' });
+      if (res.status === 400) {
+        const err = await res.json();
+        throw new Error(err.error || 'Não é possível excluir este cliente');
+      }
       if (!res.ok) throw new Error('Erro ao excluir cliente');
       setClientes(prev => prev.filter(c => c.id !== id));
     } catch (error) {
@@ -128,6 +123,7 @@ export default function Clientes() {
 
       {!mostrarFormulario && !clienteVisualizar && (
         <>
+          {/* Filtros */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-2/3">
               <input
@@ -175,6 +171,7 @@ export default function Clientes() {
             </button>
           </div>
 
+          {/* Tabela */}
           {loading ? (
             <div>Carregando clientes...</div>
           ) : (

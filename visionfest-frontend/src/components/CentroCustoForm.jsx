@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
-export default function CentroCustoForm({ onClose, onSalvar, centroSelecionado }) {
-  const [descricao, setDescricao] = useState('');
-  const [tipo, setTipo] = useState('Custo');
+export default function CentroCustoForm({
+  onClose,
+  onSalvar,
+  centroSelecionado,
+}) {
+  const [descricao, setDescricao] = useState("");
+  const [tipo, setTipo] = useState("Custo");
 
   useEffect(() => {
     if (centroSelecionado) {
@@ -13,10 +17,10 @@ export default function CentroCustoForm({ onClose, onSalvar, centroSelecionado }
 
   useEffect(() => {
     const escFunction = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === "Escape") onClose();
     };
-    document.addEventListener('keydown', escFunction);
-    return () => document.removeEventListener('keydown', escFunction);
+    document.addEventListener("keydown", escFunction);
+    return () => document.removeEventListener("keydown", escFunction);
   }, [onClose]);
 
   const handleSubmit = (e) => {
@@ -36,7 +40,9 @@ export default function CentroCustoForm({ onClose, onSalvar, centroSelecionado }
     <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-center z-50">
       <div className="bg-white rounded shadow-lg p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-4 text-green-600">
-          {centroSelecionado ? 'Editar Centro de Custo/Receita' : 'Novo Centro de Custo/Receita'}
+          {centroSelecionado
+            ? "Editar Centro de Custo/Receita"
+            : "Novo Centro de Custo/Receita"}
         </h2>
         <form onSubmit={handleSubmit}>
           <div className="mb-4">

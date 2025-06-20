@@ -3,34 +3,32 @@ import { FiEdit2, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import CartaoCreditoForm from "../../components/CartaoCreditoForm";
 
+const API_URL = "http://localhost:5000/api/cartoes-credito";
+
 export default function CartoesCredito() {
   const [cartoes, setCartoes] = useState([]);
   const [busca, setBusca] = useState("");
   const [formAberto, setFormAberto] = useState(false);
   const [cartaoEditando, setCartaoEditando] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    setCartoes([
-      {
-        id: 1,
-        banco: "Nubank",
-        taxaVista: 2.9,
-        taxaParcelado: 4.5,
-      },
-    ]);
-  }, []);
-
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") {
-        setFormAberto(false);
-      }
-    };
-    if (formAberto) {
-      window.addEventListener("keydown", handleEsc);
+  const buscarCartoes = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) throw new Error("Erro ao carregar cartões");
+      const data = await res.json();
+      setCartoes(data);
+    } catch (err) {
+      toast.error("Erro ao buscar cartões: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [formAberto]);
+  };
+
+  useEffect(() => {
+    buscarCartoes();
+  }, []);
 
   const abrirFormNovo = () => {
     setCartaoEditando(null);
@@ -42,22 +40,53 @@ export default function CartoesCredito() {
     setFormAberto(true);
   };
 
-  const salvarCartao = (cartao) => {
-    if (cartao.id) {
-      setCartoes(cartoes.map((c) => (c.id === cartao.id ? cartao : c)));
-      toast.success("Cartão atualizado com sucesso!");
-    } else {
-      cartao.id = Date.now();
-      setCartoes([...cartoes, cartao]);
-      toast.success("Cartão adicionado com sucesso!");
+  const salvarCartao = async (cartao) => {
+    try {
+      const metodo = cartao.id ? "PUT" : "POST";
+      const url = cartao.id ? `${API_URL}/${cartao.id}` : API_URL;
+
+      const res = await fetch(url, {
+        method: metodo,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cartao),
+      });
+
+      if (!res.ok) throw new Error("Erro ao salvar cartão");
+      toast.success(
+        cartao.id
+          ? "Cartão atualizado com sucesso!"
+          : "Cartão adicionado com sucesso!"
+      );
+      buscarCartoes();
+      setFormAberto(false);
+    } catch (err) {
+      toast.error("Erro ao salvar: " + err.message);
     }
-    setFormAberto(false);
   };
 
-  const excluirCartao = (id) => {
-    // Adicione verificação futura para uso em títulos
-    setCartoes(cartoes.filter((c) => c.id !== id));
-    toast.success("Cartão excluído com sucesso!");
+  const excluirCartao = async (id) => {
+    const confirmar = window.confirm(
+      "Tem certeza que deseja excluir este cartão?"
+    );
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+
+      if (res.status === 409) {
+        toast.warn(
+          "Este cartão não pode ser excluído pois está vinculado a transações."
+        );
+        return;
+      }
+
+      if (!res.ok) throw new Error("Erro ao excluir cartão");
+
+      toast.success("Cartão excluído com sucesso!");
+      buscarCartoes();
+    } catch (err) {
+      toast.error("Erro ao excluir: " + err.message);
+    }
   };
 
   const cartoesFiltrados = cartoes.filter((c) =>
@@ -83,43 +112,72 @@ export default function CartoesCredito() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full border border-gray-200">
-          <thead>
-            <tr className="bg-gray-100 text-left">
-              <th className="p-2">Banco</th>
-              <th className="p-2">Taxa Débito (%)</th>
-              <th className="p-2">Taxa à Vista (%)</th>
-              <th className="p-2">Taxa Parcelado (%)</th>
-              <th className="p-2 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cartoesFiltrados.map((c) => (
-              <tr key={c.id} className="border-t">
-                <td className="p-2">{c.banco}</td>
-                <td className="p-2">{c.taxaDebito ?? "-"}</td>
-                <td className="p-2">{c.taxaVista ?? "-"}</td>
-                <td className="p-2">{c.taxaParcelado ?? "-"}</td>
-                <td className="p-2 text-right flex justify-end gap-2">
-                  <button
-                    className="text-blue-600"
-                    onClick={() => abrirFormEditar(c)}
-                    title="Editar"
-                  >
-                    <FiEdit2 />
-                  </button>
-                  <button
-                    className="text-red-600"
-                    onClick={() => excluirCartao(c.id)}
-                    title="Excluir"
-                  >
-                    <FiTrash2 />
-                  </button>
-                </td>
+        {loading ? (
+          <div>Carregando cartões...</div>
+        ) : (
+          <table className="w-full border border-gray-200 text-sm">
+            <thead>
+              <tr className="bg-gray-100 text-left">
+                <th className="p-2">Banco</th>
+                <th className="p-2">Taxa Débito (%)</th>
+                <th className="p-2">Taxa à Vista (%)</th>
+                <th className="p-2">Taxa Parcelado (%)</th>
+                <th className="p-2 text-right">Ações</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {cartoesFiltrados.map((c) => (
+                <tr key={c.id} className="border-t hover:bg-gray-50">
+                  <td className="p-2">{c.banco}</td>
+                  <td className="p-2">
+                    {c.taxaDebito !== undefined &&
+                    c.taxaDebito !== null &&
+                    c.taxaDebito !== ""
+                      ? Number(c.taxaDebito).toFixed(2)
+                      : "-"}
+                  </td>
+                  <td className="p-2">
+                    {c.taxaVista !== undefined &&
+                    c.taxaVista !== null &&
+                    c.taxaVista !== ""
+                      ? Number(c.taxaVista).toFixed(2)
+                      : "-"}
+                  </td>
+                  <td className="p-2">
+                    {c.taxaParcelado !== undefined &&
+                    c.taxaParcelado !== null &&
+                    c.taxaParcelado !== ""
+                      ? Number(c.taxaParcelado).toFixed(2)
+                      : "-"}
+                  </td>
+                  <td className="p-2 text-right flex justify-end gap-2">
+                    <button
+                      className="text-blue-600"
+                      onClick={() => abrirFormEditar(c)}
+                      title="Editar"
+                    >
+                      <FiEdit2 />
+                    </button>
+                    <button
+                      className="text-red-600"
+                      onClick={() => excluirCartao(c.id)}
+                      title="Excluir"
+                    >
+                      <FiTrash2 />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {cartoesFiltrados.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center p-4">
+                    Nenhum cartão encontrado.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {formAberto && (

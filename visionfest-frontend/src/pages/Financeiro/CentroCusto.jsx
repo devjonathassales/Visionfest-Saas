@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import CentroCustoForm from '../../components/CentroCustoForm';
 import { FiPlus, FiEdit, FiTrash2 } from 'react-icons/fi';
 
-const API_BASE_URL = 'http://localhost:5000/api/centros-custo';
+const API_BASE_URL = 'http://localhost:5000/api/centrocusto';
 
 export default function CentroCustoReceita() {
   const [centros, setCentros] = useState([]);

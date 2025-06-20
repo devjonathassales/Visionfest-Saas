@@ -41,8 +41,11 @@
 
 ---
 
+## Sistema idealizado e desenvolvido por VisionWare Soluções
+
 ## 🧪 Como rodar o Front-end localmente
 
 1. Clone o repositório:
 ```bash
 git clone https://github.com/devjonathassales/visionfest.git
+

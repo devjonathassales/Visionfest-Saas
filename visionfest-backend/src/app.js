@@ -10,6 +10,7 @@ const estoqueRoutes = require('./routes/estoqueRoutes');
 const centroCustoRoutes = require('./routes/centroCustoRoutes');
 const cartoesCreditoRoutes = require('./routes/cartoesCreditoRoutes');
 const contaBancariaRoutes = require('./routes/contaBancariaRoutes');
+const contasPagarRoutes = require('./routes/contasPagar');
 
 const app = express();
 
@@ -25,5 +26,6 @@ app.use('/api', estoqueRoutes);
 app.use('/api/centrocusto', centroCustoRoutes);
 app.use('/api/cartoes-credito', cartoesCreditoRoutes);
 app.use('/api/contas-bancarias', contaBancariaRoutes);
+app.use('/api/contas-pagar', contasPagarRoutes);
 
 module.exports = app;

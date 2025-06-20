@@ -1,5 +1,4 @@
-const Produto = require('../models/Produto');
-const EstoqueMovimentacao = require('../models/EstoqueMovimentacao');
+const { Produto, EstoqueMovimentacao } = require('../models');
 const { Op } = require('sequelize');
 
 module.exports = {
@@ -7,6 +6,10 @@ module.exports = {
   async listarEstoque(req, res) {
     try {
       const { inicio, fim } = req.query;
+
+      if (!inicio || !fim) {
+        return res.status(400).json({ erro: 'Informe o período inicial e final.' });
+      }
 
       const produtos = await Produto.findAll({
         order: [['nome', 'ASC']],
@@ -21,23 +24,20 @@ module.exports = {
       });
 
       const estoque = produtos.map((produto) => {
-        const entradas = movimentacoes.filter(
-          (m) => m.produtoId === produto.id && m.tipo === 'entrada'
-        ).reduce((acc, m) => acc + m.quantidade, 0);
+        const entradas = movimentacoes
+          .filter((m) => m.produtoId === produto.id && m.tipo === 'entrada')
+          .reduce((acc, m) => acc + m.quantidade, 0);
 
-        const saidas = movimentacoes.filter(
-          (m) => m.produtoId === produto.id && m.tipo === 'saida'
-        ).reduce((acc, m) => acc + m.quantidade, 0);
-
-        const provisionado = saidas; // Ex: contratos futuros
-        const estoqueAtual = entradas - saidas;
+        const saidas = movimentacoes
+          .filter((m) => m.produtoId === produto.id && m.tipo === 'saida')
+          .reduce((acc, m) => acc + m.quantidade, 0);
 
         return {
           id: produto.id,
           nome: produto.nome,
-          estoque: estoqueAtual,
+          estoque: entradas - saidas,
           estoqueMinimo: produto.estoqueMinimo,
-          provisionado,
+          provisionado: saidas, // pode ser ajustado se quiser separar provisão futura
         };
       });
 
@@ -53,13 +53,18 @@ module.exports = {
     try {
       const { produtoId, tipo, quantidade } = req.body;
 
+      if (!produtoId || !tipo || !quantidade) {
+        return res.status(400).json({ erro: 'Dados incompletos.' });
+      }
+
       const produto = await Produto.findByPk(produtoId);
-      if (!produto) return res.status(404).json({ erro: 'Produto não encontrado' });
+      if (!produto) return res.status(404).json({ erro: 'Produto não encontrado.' });
 
       const novaMovimentacao = await EstoqueMovimentacao.create({
         produtoId,
         tipo,
         quantidade,
+        data: new Date(), // se o campo `data` existir no modelo
       });
 
       res.status(201).json(novaMovimentacao);

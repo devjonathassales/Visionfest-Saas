@@ -3,32 +3,33 @@ import { FiPlus, FiEdit2, FiTrash2 } from 'react-icons/fi';
 import ContaBancariaForm from '../../components/ContaBancariaForm';
 import { toast } from 'react-toastify';
 
+const API_URL = 'http://localhost:5000/api/contas-bancarias';
+
 export default function ContasBancarias() {
   const [contas, setContas] = useState([]);
   const [busca, setBusca] = useState('');
   const [formAberto, setFormAberto] = useState(false);
   const [contaEditando, setContaEditando] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const carregarContas = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(API_URL);
+      if (!res.ok) throw new Error('Erro ao buscar contas');
+      const data = await res.json();
+      setContas(data);
+    } catch (err) {
+      toast.error('Erro ao carregar contas: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    setContas([
-      {
-        id: 1,
-        banco: 'Banco do Brasil',
-        agencia: '1234',
-        conta: '56789-0',
-        chavePix: { tipo: 'CPF', valor: '123.456.789-00' }
-      },
-      {
-        id: 2,
-        banco: 'Caixa Econômica',
-        agencia: '4321',
-        conta: '',
-        chavePix: null
-      }
-    ]);
+    carregarContas();
   }, []);
 
-  // 👇 Fechar modal com ESC
   useEffect(() => {
     const handleEsc = (e) => {
       if (e.key === 'Escape') {
@@ -43,11 +44,10 @@ export default function ContasBancarias() {
     };
   }, [formAberto]);
 
-  const contasFiltradas = contas.filter((c) =>
-    `${c.banco} ${c.agencia} ${c.conta}`
-      .toLowerCase()
-      .includes(busca.toLowerCase())
-  );
+  const contasFiltradas = contas.filter((c) => {
+    const textoBusca = `${c.banco} ${c.agencia} ${c.conta} ${c.chavePix?.tipo || ''} ${c.chavePix?.valor || ''}`.toLowerCase();
+    return textoBusca.includes(busca.toLowerCase());
+  });
 
   const abrirFormNovo = () => {
     setContaEditando(null);
@@ -63,26 +63,54 @@ export default function ContasBancarias() {
     setFormAberto(false);
   };
 
-  const salvarConta = (conta) => {
-    if (conta.id) {
-      setContas(contas.map((c) => (c.id === conta.id ? conta : c)));
-      toast.success('Conta atualizada com sucesso!');
-    } else {
-      conta.id = Date.now();
-      setContas([...contas, conta]);
-      toast.success('Conta adicionada com sucesso!');
+  const salvarConta = async (conta) => {
+    setLoading(true);
+    try {
+      const metodo = conta.id ? 'PUT' : 'POST';
+      const url = conta.id ? `${API_URL}/${conta.id}` : API_URL;
+
+      const res = await fetch(url, {
+        method: metodo,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(conta),
+      });
+
+      if (!res.ok) throw new Error('Erro ao salvar conta');
+
+      toast.success(conta.id ? 'Conta atualizada com sucesso!' : 'Conta adicionada com sucesso!');
+      await carregarContas();
+      fecharForm();
+    } catch (err) {
+      toast.error('Erro ao salvar conta: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-    fecharForm();
   };
 
-  const excluirConta = (id) => {
-    const temTituloVinculado = false;
-    if (temTituloVinculado) {
-      toast.error('Conta não pode ser excluída pois possui títulos vinculados.');
-      return;
+  const excluirConta = async (id) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta conta?')) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/${id}`, { method: 'DELETE' });
+
+      if (res.status === 204) {
+        toast.success('Conta excluída com sucesso!');
+        await carregarContas();
+        return;
+      }
+
+      const resultado = await res.json();
+
+      if (!res.ok) throw new Error(resultado.error || 'Erro ao excluir');
+
+      toast.success('Conta excluída com sucesso!');
+      await carregarContas();
+    } catch (err) {
+      toast.error('Erro ao excluir conta: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-    setContas(contas.filter((c) => c.id !== id));
-    toast.success('Conta excluída com sucesso!');
   };
 
   return (
@@ -94,10 +122,12 @@ export default function ContasBancarias() {
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="border border-gray-300 rounded px-4 py-2 w-full max-w-md"
+          disabled={loading}
         />
         <button
           onClick={abrirFormNovo}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"
+          className={`bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+          disabled={loading}
         >
           <FiPlus /> Adicionar
         </button>
@@ -115,39 +145,44 @@ export default function ContasBancarias() {
             </tr>
           </thead>
           <tbody>
-            {contasFiltradas.length === 0 && (
+            {contasFiltradas.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-4 text-gray-500">
                   Nenhuma conta encontrada.
                 </td>
               </tr>
+            ) : (
+              contasFiltradas.map((c) => (
+                <tr key={c.id} className="border-t hover:bg-gray-50">
+                  <td className="p-2">{c.banco}</td>
+                  <td className="p-2">{c.agencia}</td>
+                  <td className="p-2">{c.conta || '-'}</td>
+                  <td className="p-2">
+                    {c.chavePix && c.chavePix.valor
+                      ? `${c.chavePix.tipo}: ${c.chavePix.valor}`
+                      : '-'}
+                  </td>
+                  <td className="p-2 text-right flex justify-end gap-2">
+                    <button
+                      className={`text-blue-600 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={() => abrirFormEditar(c)}
+                      title="Editar"
+                      disabled={loading}
+                    >
+                      <FiEdit2 />
+                    </button>
+                    <button
+                      className={`text-red-600 ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onClick={() => excluirConta(c.id)}
+                      title="Excluir"
+                      disabled={loading}
+                    >
+                      <FiTrash2 />
+                    </button>
+                  </td>
+                </tr>
+              ))
             )}
-            {contasFiltradas.map((c) => (
-              <tr key={c.id} className="border-t">
-                <td className="p-2">{c.banco}</td>
-                <td className="p-2">{c.agencia}</td>
-                <td className="p-2">{c.conta || '-'}</td>
-                <td className="p-2">
-                  {c.chavePix ? `${c.chavePix.tipo}: ${c.chavePix.valor}` : '-'}
-                </td>
-                <td className="p-2 text-right flex justify-end gap-2">
-                  <button
-                    className="text-blue-600"
-                    onClick={() => abrirFormEditar(c)}
-                    title="Editar"
-                  >
-                    <FiEdit2 />
-                  </button>
-                  <button
-                    className="text-red-600"
-                    onClick={() => excluirConta(c.id)}
-                    title="Excluir"
-                  >
-                    <FiTrash2 />
-                  </button>
-                </td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>
@@ -159,6 +194,7 @@ export default function ContasBancarias() {
               onClick={fecharForm}
               className="absolute top-2 right-2 text-gray-500 hover:text-gray-700 font-bold text-xl"
               title="Fechar"
+              disabled={loading}
             >
               &times;
             </button>
@@ -166,6 +202,7 @@ export default function ContasBancarias() {
               conta={contaEditando}
               onCancel={fecharForm}
               onSave={salvarConta}
+              disabled={loading}
             />
           </div>
         </div>

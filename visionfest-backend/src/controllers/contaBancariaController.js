@@ -1,5 +1,5 @@
-const ContaBancaria = require('../models/ContaBancaria');
-
+const db = require('../models');
+const { ContaBancaria, Financeiro } = db;
 
 function formatarConta(c) {
   return {

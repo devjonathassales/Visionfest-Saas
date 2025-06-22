@@ -1,4 +1,5 @@
-const CartaoCredito = require('../models/CartaoCredito');
+const db = require("../models");
+const CartaoCredito = db.CartaoCredito;
 
 module.exports = {
   async listar(req, res) {

@@ -1,4 +1,4 @@
-const Funcionario = require('../models/Funcionario');
+const { Funcionario } = require('../models');
 
 module.exports = {
   async listar(req, res) {

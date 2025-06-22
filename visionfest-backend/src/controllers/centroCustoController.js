@@ -1,4 +1,6 @@
-const CentroCusto = require('../models/CentroCusto');
+const db = require('../models');
+const { CentroCusto } = db;
+const { Op } = require('sequelize'); // importante!
 
 exports.listar = async (req, res) => {
   try {
@@ -6,6 +8,24 @@ exports.listar = async (req, res) => {
     res.json(centros);
   } catch (error) {
     res.status(500).json({ error: 'Erro ao listar centros de custo' });
+  }
+};
+
+exports.listarCusto = async (req, res) => {
+  try {
+    const centros = await CentroCusto.findAll({
+      where: {
+        tipo: {
+          [Op.or]: ['Custo', 'Ambos'], // se quiser considerar também "Ambos"
+        },
+      },
+      order: [['descricao', 'ASC']],
+    });
+
+    res.json(centros);
+  } catch (error) {
+    console.error('Erro ao buscar centros de custo do tipo Custo:', error);
+    res.status(500).json({ error: 'Erro ao buscar centros de custo do tipo Custo' });
   }
 };
 

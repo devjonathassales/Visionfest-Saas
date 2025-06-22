@@ -10,7 +10,7 @@ const estoqueRoutes = require('./routes/estoqueRoutes');
 const centroCustoRoutes = require('./routes/centroCustoRoutes');
 const cartoesCreditoRoutes = require('./routes/cartoesCreditoRoutes');
 const contaBancariaRoutes = require('./routes/contaBancariaRoutes');
-const contasPagarRoutes = require('./routes/contasPagar');
+const contasPagarRoutes = require('./routes/contasPagarRoutes');
 
 const app = express();
 

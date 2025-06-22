@@ -1,23 +1,25 @@
-const { DataTypes, Model } = require("sequelize");
-const sequelize = require("./index");
+module.exports = (sequelize, DataTypes) => {
+  const CentroCusto = sequelize.define(
+    "CentroCusto",
+    {
+      id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
+      descricao: { type: DataTypes.STRING, allowNull: false },
+      tipo: {
+        type: DataTypes.ENUM("Custo", "Receita", "Ambos"),
+        allowNull: false,
+      },
+    },
+    {
+      tableName: "centros_custo",
+      timestamps: false,
+    }
+  );
 
-const CentroCusto = sequelize.define('CentroCusto', {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true,
-  },
-  descricao: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  tipo: {
-    type: DataTypes.ENUM('Custo', 'Receita', 'Ambos'),
-    allowNull: false,
-  },
-}, {
-  tableName: 'centros_custo',
-  timestamps: false,
-});
-
-module.exports = CentroCusto;
+  CentroCusto.associate = (models) => {
+  CentroCusto.hasMany(models.ContaPagar, {
+    foreignKey: "centroCustoId",
+    as: "contasPagar",
+  });
+};
+return CentroCusto;
+};

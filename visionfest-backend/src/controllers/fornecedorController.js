@@ -1,5 +1,5 @@
 // controllers/fornecedorController.js
-const Fornecedor = require('../models/Fornecedor');
+const { Fornecedor } = require('../models');
 
 module.exports = {
   async listar(req, res) {

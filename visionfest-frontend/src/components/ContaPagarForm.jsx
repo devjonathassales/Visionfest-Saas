@@ -1,60 +1,79 @@
 import React, { useEffect, useState } from "react";
 
-export default function ContasPagarForm({ onClose, setContas }) {
+export default function ContasPagarForm({ onClose, setContas, onPagar }) {
   const [descricao, setDescricao] = useState("");
-  const [centroCusto, setCentroCusto] = useState("");
+  const [centroCustoId, setCentroCustoId] = useState("");
   const [vencimento, setVencimento] = useState("");
-  const [pagamento, setPagamento] = useState("");
   const [valor, setValor] = useState("");
   const [desconto, setDesconto] = useState("");
   const [tipoDesconto, setTipoDesconto] = useState("valor");
-  const [valorTotal, setValorTotal] = useState("");
+  const [valorTotal, setValorTotal] = useState("0.00");
 
-  // Fecha com ESC
+  const [centros, setCentros] = useState([]);
+
   useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", handleEsc);
-    return () => document.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
+    fetch("http://localhost:5000/api/centrocusto")
+      .then(res => res.json())
+      .then(data => {
+        const somenteCustos = data.filter(c => c.tipo === "Custo" || c.tipo === "Ambos");
+        setCentros(somenteCustos);
+      })
+      .catch(err => console.error("Erro ao carregar centros:", err));
+  }, []);
 
-  // Cálculo automático do valor total
   useEffect(() => {
     const v = parseFloat(valor) || 0;
     const d = parseFloat(desconto) || 0;
-    let total = v;
-
-    if (tipoDesconto === "percentual") {
-      total = v - (v * d) / 100;
-    } else {
-      total = v - d;
-    }
-
+    const total = tipoDesconto === "percentual" ? v - (v * d) / 100 : v - d;
     setValorTotal(total >= 0 ? total.toFixed(2) : "0.00");
   }, [valor, desconto, tipoDesconto]);
 
-  const handleSalvar = () => {
-    const novaConta = {
-      id: Date.now(),
-      descricao,
-      centroCusto,
-      vencimento,
-      pagamento,
-      valor,
-      desconto,
-      tipoDesconto,
-      valorTotal,
-      status: "aberto",
-    };
-    setContas((prev) => [...prev, novaConta]);
-    onClose();
+  const construirPayload = () => ({
+    descricao,
+    centroCustoId,
+    vencimento,
+    valor: parseFloat(valor),
+    desconto: parseFloat(desconto),
+    tipoDesconto,
+    valorTotal: parseFloat(valorTotal),
+  });
+
+  const handleSalvar = async () => {
+    try {
+      const novaConta = construirPayload();
+      const response = await fetch("http://localhost:5000/api/contas-pagar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(novaConta),
+      });
+      const data = await response.json();
+      setContas(prev => [...prev, data]);
+      onClose();
+    } catch (err) {
+      console.error("Erro ao salvar conta:", err);
+    }
+  };
+
+  const handleSalvarEPagar = async () => {
+    try {
+      const novaConta = construirPayload();
+      const response = await fetch("http://localhost:5000/api/contas-pagar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(novaConta),
+      });
+      const data = await response.json();
+      setContas(prev => [...prev, data]);
+      onPagar(data); // abre o modal de pagamento
+    } catch (err) {
+      console.error("Erro ao salvar e pagar:", err);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-xl">
-        <h2 className="text-xl font-bold mb-4">Nova Conta a Pagar</h2>
+        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Nova Conta a Pagar</h2>
         <div className="grid grid-cols-2 gap-4">
           <input
             type="text"
@@ -63,26 +82,21 @@ export default function ContasPagarForm({ onClose, setContas }) {
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
           />
-          <input
-            type="text"
-            placeholder="Centro de custo"
-            className="input input-bordered w-full"
-            value={centroCusto}
-            onChange={(e) => setCentroCusto(e.target.value)}
-          />
+          <select
+            className="select select-bordered w-full"
+            value={centroCustoId}
+            onChange={(e) => setCentroCustoId(e.target.value)}
+          >
+            <option value="">Centro de Custo</option>
+            {centros.map(c => (
+              <option key={c.id} value={c.id}>{c.descricao}</option>
+            ))}
+          </select>
           <input
             type="date"
-            placeholder="Vencimento"
             className="input input-bordered w-full"
             value={vencimento}
             onChange={(e) => setVencimento(e.target.value)}
-          />
-          <input
-            type="date"
-            placeholder="Data de pagamento"
-            className="input input-bordered w-full"
-            value={pagamento}
-            onChange={(e) => setPagamento(e.target.value)}
           />
           <input
             type="number"
@@ -93,7 +107,7 @@ export default function ContasPagarForm({ onClose, setContas }) {
           />
           <div className="flex gap-2">
             <select
-              className="select select-bordered w-1/2"
+              className="select select-bordered"
               value={tipoDesconto}
               onChange={(e) => setTipoDesconto(e.target.value)}
             >
@@ -118,10 +132,25 @@ export default function ContasPagarForm({ onClose, setContas }) {
         </div>
 
         <div className="flex justify-end mt-6 gap-2">
-          <button className="btn" onClick={onClose}>
+          <button
+            className="btn px-5 py-2 rounded-md"
+            style={{ backgroundColor: "#C0C0C0", color: "#000" }}
+            onClick={onClose}
+          >
             Cancelar
           </button>
-          <button className="btn btn-success" onClick={handleSalvar}>
+          <button
+            className="btn px-5 py-2 rounded-md"
+            style={{ backgroundColor: "#084C61", color: "#fff" }}
+            onClick={handleSalvarEPagar}
+          >
+            Salvar e Pagar
+          </button>
+          <button
+            className="btn px-5 py-2 rounded-md"
+            style={{ backgroundColor: "#7ED957", color: "#000" }}
+            onClick={handleSalvar}
+          >
             Salvar
           </button>
         </div>

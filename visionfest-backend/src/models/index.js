@@ -8,24 +8,21 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   logging: false,
 });
 
-const db = {};
+const db = { sequelize, Sequelize };
 
-// Carrega automaticamente todos os modelos na pasta
+// Carrega todos os models
 fs.readdirSync(__dirname)
   .filter((file) => file !== "index.js" && file.endsWith(".js"))
   .forEach((file) => {
-    const model = require(path.join(__dirname, file));
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes); // <-- função que retorna o model
     db[model.name] = model;
   });
 
-// Executa associações se houver
+// Executa associate se existir
 Object.values(db).forEach((model) => {
   if (typeof model.associate === "function") {
     model.associate(db);
   }
 });
-
-db.sequelize = sequelize;
-db.Sequelize = Sequelize;
 
 module.exports = db;

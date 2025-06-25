@@ -15,6 +15,8 @@ module.exports = (sequelize, DataTypes) => {
       contaBancariaId: DataTypes.INTEGER,
       valorPago: DataTypes.DECIMAL(10, 2),
       troco: DataTypes.DECIMAL(10, 2),
+      tipoCredito: DataTypes.STRING,
+      parcelas: DataTypes.INTEGER,
     },
     {
       tableName: "contas_pagar",
@@ -25,6 +27,10 @@ module.exports = (sequelize, DataTypes) => {
     ContaPagar.belongsTo(models.CentroCusto, {
       foreignKey: "centroCustoId",
       as: "centroCusto",
+    });
+    ContaPagar.belongsTo(models.ContaBancaria, {
+      foreignKey: "contaBancariaId",
+      as: "contaBancaria",
     });
   };
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-export default function ContasPagarForm({ onClose, setContas, onPagar }) {
+export default function ContasPagarForm({ onClose, onSave, onPagar }) {
   const [descricao, setDescricao] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [vencimento, setVencimento] = useState("");
@@ -8,7 +8,6 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
   const [desconto, setDesconto] = useState("");
   const [tipoDesconto, setTipoDesconto] = useState("valor");
   const [valorTotal, setValorTotal] = useState("0.00");
-
   const [centros, setCentros] = useState([]);
 
   useEffect(() => {
@@ -18,7 +17,7 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
         const somenteCustos = data.filter(c => c.tipo === "Custo" || c.tipo === "Ambos");
         setCentros(somenteCustos);
       })
-      .catch(err => console.error("Erro ao carregar centros:", err));
+      .catch(error => console.error("Erro ao carregar centros:", error));
   }, []);
 
   useEffect(() => {
@@ -46,11 +45,12 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(novaConta),
       });
+
       const data = await response.json();
-      setContas(prev => [...prev, data]);
-      onClose();
-    } catch (err) {
-      console.error("Erro ao salvar conta:", err);
+      if (onSave) onSave(data);
+      onClose(); // Fecha somente após salvar
+    } catch (error) {
+      console.error("Erro ao salvar conta:", error);
     }
   };
 
@@ -62,11 +62,13 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(novaConta),
       });
+
       const data = await response.json();
-      setContas(prev => [...prev, data]);
-      onPagar(data); // abre o modal de pagamento
-    } catch (err) {
-      console.error("Erro ao salvar e pagar:", err);
+      if (onSave) onSave(data);
+      if (onPagar) onPagar(data); // Aqui será aberto o PagamentoContaForm
+     
+    } catch (error) {
+      console.error("Erro ao salvar e pagar:", error);
     }
   };
 
@@ -107,7 +109,7 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
           />
           <div className="flex gap-2">
             <select
-              className="select select-bordered"
+              className="select select-bordered w-1/2"
               value={tipoDesconto}
               onChange={(e) => setTipoDesconto(e.target.value)}
             >
@@ -133,22 +135,22 @@ export default function ContasPagarForm({ onClose, setContas, onPagar }) {
 
         <div className="flex justify-end mt-6 gap-2">
           <button
-            className="btn px-5 py-2 rounded-md"
-            style={{ backgroundColor: "#C0C0C0", color: "#000" }}
+            className="px-5 py-2 rounded-lg text-black"
+            style={{ backgroundColor: "#C0C0C0" }}
             onClick={onClose}
           >
             Cancelar
           </button>
           <button
-            className="btn px-5 py-2 rounded-md"
-            style={{ backgroundColor: "#084C61", color: "#fff" }}
+            className="px-5 py-2 rounded-lg text-white"
+            style={{ backgroundColor: "#084C61" }}
             onClick={handleSalvarEPagar}
           >
             Salvar e Pagar
           </button>
           <button
-            className="btn px-5 py-2 rounded-md"
-            style={{ backgroundColor: "#7ED957", color: "#000" }}
+            className="px-5 py-2 rounded-lg text-black"
+            style={{ backgroundColor: "#7ED957" }}
             onClick={handleSalvar}
           >
             Salvar

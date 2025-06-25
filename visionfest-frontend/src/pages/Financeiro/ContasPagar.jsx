@@ -165,6 +165,9 @@ export default function ContasPagar() {
 
   return (
     <div className="p-4 space-y-4">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Contas a Pagar</h1>
+      </div>
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-2 border border-gray-300 rounded-md p-3 bg-white">
         <input

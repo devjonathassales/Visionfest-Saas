@@ -101,6 +101,9 @@ export default function Produtos() {
 
   return (
     <div className="p-4">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">Cadastro de Produtos/Serviços</h1>
+      </div>
       {produtoVisualizar && (
         <ProdutoVisualizar
           produto={produtoVisualizar}

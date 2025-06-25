@@ -95,7 +95,10 @@ export default function CartoesCredito() {
 
   return (
     <div className="p-4">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Cartões de Crédito</h1>
+      </div>
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 py-5">
         <input
           type="text"
           placeholder="Buscar cartão..."

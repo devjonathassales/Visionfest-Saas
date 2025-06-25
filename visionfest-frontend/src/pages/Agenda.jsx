@@ -52,11 +52,7 @@ export default function AgendaPage() {
     const firstDay = new Date(start.getFullYear(), start.getMonth(), 1);
     const lastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0);
 
-    for (
-      let d = new Date(firstDay);
-      d <= lastDay;
-      d.setDate(d.getDate() + 1)
-    ) {
+    for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
       const dataStr = d.toISOString().slice(0, 10);
       const eventosDoDia = contratosMock.filter(
         (e) => e.dataEvento === dataStr
@@ -77,7 +73,7 @@ export default function AgendaPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-full sm:max-w-7xl mx-auto">
-      <h1 className="text-2xl sm:text-3xl font-bold mb-4 text-green-600">
+      <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">
         Agenda de Eventos
       </h1>
 

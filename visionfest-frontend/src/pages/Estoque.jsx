@@ -95,7 +95,7 @@ export default function EstoquePage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4 text-[#7ed957]">Estoque</h1>
+      <h1 className="text-4xl font-bold mb-4 text-[#7ed957] text-center">Estoque</h1>
 
       <div className="flex flex-wrap gap-4 mb-4">
         <input

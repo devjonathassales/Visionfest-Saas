@@ -103,6 +103,9 @@ export default function Clientes() {
 
   return (
     <div className="p-4">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">Cadastro de Fornecedores</h1>
+      </div>
       {clienteVisualizar && (
         <ClienteVisualizar
           cliente={clienteVisualizar}

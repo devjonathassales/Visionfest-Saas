@@ -73,7 +73,10 @@ export default function CentroCustoReceita() {
 
   return (
     <div className="p-4">
-      <div className="flex justify-between items-center mb-4">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Centros de Custo/Receitas</h1>
+      </div>
+      <div className="flex justify-between items-center mb-4 py-5">
         <input
           type="text"
           placeholder="Pesquisar centro de custo..."

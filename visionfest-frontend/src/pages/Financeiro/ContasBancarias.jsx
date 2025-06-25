@@ -115,7 +115,10 @@ export default function ContasBancarias() {
 
   return (
     <div className="p-4">
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+      <div>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Contas Bancárias</h1>
+      </div>
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 py-5">
         <input
           type="text"
           placeholder="Buscar conta..."

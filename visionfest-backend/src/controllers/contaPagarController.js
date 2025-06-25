@@ -1,12 +1,13 @@
 const { ContaPagar, CentroCusto, ContaBancaria } = require("../models");
 
+// Listar todas as contas
 exports.listar = async (req, res) => {
   try {
     const contas = await ContaPagar.findAll({
       include: [
         {
           model: CentroCusto,
-          as: "centroCusto", // Alias conforme associação no model
+          as: "centroCusto",
           attributes: ["descricao"],
         },
         {
@@ -23,6 +24,8 @@ exports.listar = async (req, res) => {
     res.status(500).json({ error: "Erro ao listar contas." });
   }
 };
+
+// Obter uma conta por ID (com includes)
 exports.obterPorId = async (req, res) => {
   try {
     const { id } = req.params;
@@ -50,6 +53,8 @@ exports.obterPorId = async (req, res) => {
     res.status(500).json({ error: "Erro ao buscar conta." });
   }
 };
+
+// Criar nova conta
 exports.criar = async (req, res) => {
   try {
     const nova = await ContaPagar.create(req.body);
@@ -60,6 +65,7 @@ exports.criar = async (req, res) => {
   }
 };
 
+// Atualizar conta
 exports.atualizar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -74,41 +80,68 @@ exports.atualizar = async (req, res) => {
   }
 };
 
+// Baixar (pagar) conta
 exports.baixar = async (req, res) => {
   try {
     const { id } = req.params;
-    // Desestruture todos os campos que podem vir do frontend
     const {
       dataPagamento,
       formaPagamento,
-      contaBancariaId,
+      contaBancaria, // objeto enviado do frontend
       valorPago,
       troco,
-      tipoCredito, // se quiser salvar tipo crédito e parcelas, adicione aqui
+      tipoCredito,
       parcelas,
     } = req.body;
 
     const conta = await ContaPagar.findByPk(id);
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
-    // Atualize os campos incluindo status para pago
+    // Somente pix e débito exigem conta bancária
+    const contaBancariaId =
+      formaPagamento === "pix" || formaPagamento === "debito"
+        ? contaBancaria?.id || null
+        : null;
+
+    // Atualizar
     await conta.update({
       dataPagamento,
       formaPagamento,
-      contaBancariaId: contaBancariaId || null,
+      contaBancariaId,
       valorPago,
       troco,
-      tipoCredito: tipoCredito || null,
-      parcelas: parcelas || null,
+      tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
+      parcelas:
+        formaPagamento === "credito" && tipoCredito === "parcelado"
+          ? parcelas
+          : null,
       status: "pago",
     });
 
-    res.json(conta);
+    // Buscar novamente com includes para retornar ao frontend com todos os dados
+    const contaAtualizada = await ContaPagar.findByPk(id, {
+      include: [
+        {
+          model: CentroCusto,
+          as: "centroCusto",
+          attributes: ["descricao"],
+        },
+        {
+          model: ContaBancaria,
+          as: "contaBancaria",
+          attributes: ["banco", "agencia", "conta", "id"],
+        },
+      ],
+    });
+
+    res.json(contaAtualizada);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Erro ao processar pagamento." });
   }
 };
+
+// Estornar conta
 exports.estornar = async (req, res) => {
   try {
     const { id } = req.params;
@@ -122,7 +155,6 @@ exports.estornar = async (req, res) => {
         .json({ error: "Conta não está paga para ser estornada." });
     }
 
-    // Zerar os campos de pagamento e voltar status para aberto
     await conta.update({
       dataPagamento: null,
       formaPagamento: null,
@@ -141,6 +173,7 @@ exports.estornar = async (req, res) => {
   }
 };
 
+// Excluir conta
 exports.excluir = async (req, res) => {
   try {
     const { id } = req.params;

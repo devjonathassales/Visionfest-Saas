@@ -15,6 +15,39 @@ export default function ContasPagar() {
   const [contaSelecionada, setContaSelecionada] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [periodo, setPeriodo] = useState("mensal");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
+  const getDatasPorPeriodo = (tipo) => {
+    const hoje = new Date();
+    let inicio, fim;
+
+    if (tipo === "mensal") {
+      inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+    } else if (tipo === "semanal") {
+      const dia = hoje.getDay(); // 0 = Domingo
+      const diff = hoje.getDate() - dia;
+      inicio = new Date(hoje.setDate(diff));
+      fim = new Date(inicio);
+      fim.setDate(fim.getDate() + 6);
+    } else {
+      inicio = fim = hoje;
+    }
+
+    return {
+      inicio: inicio.toISOString().substring(0, 10),
+      fim: fim.toISOString().substring(0, 10),
+    };
+  };
+
+  useEffect(() => {
+    const { inicio, fim } = getDatasPorPeriodo(periodo);
+    setDataInicio(inicio);
+    setDataFim(fim);
+  }, [periodo]);
+
   const carregarContas = useCallback(async () => {
     setLoading(true);
     try {
@@ -53,16 +86,13 @@ export default function ContasPagar() {
     setLoading(true);
 
     try {
-      // Buscar conta detalhada do backend para garantir contaBancaria completa
       const res = await fetch(`${API_URL}/${conta.id}`);
       if (!res.ok) throw new Error("Erro ao carregar detalhes da conta");
       const contaDetalhada = await res.json();
-
       setContaSelecionada(contaDetalhada);
       setDetalhesAberto(true);
     } catch (err) {
       toast.error("Erro ao carregar detalhes: " + err.message);
-      // fallback: abrir com dados que já temos
       setContaSelecionada(conta);
       setDetalhesAberto(true);
     } finally {
@@ -98,7 +128,6 @@ export default function ContasPagar() {
       const contaAtualizada = await res.json();
       toast.success("Pagamento realizado com sucesso!");
       setPagamentoAberto(false);
-      // Atualiza o contaSelecionada para mostrar dados atualizados
       setContaSelecionada(contaAtualizada);
       await carregarContas();
     } catch (err) {
@@ -125,28 +154,58 @@ export default function ContasPagar() {
     }
   };
 
-  const contasFiltradas = contas.filter((c) =>
-    c.descricao?.toLowerCase().includes(busca.toLowerCase())
-  );
+  const contasFiltradas = contas.filter((c) => {
+    const dataVenc = new Date(c.vencimento).toISOString().substring(0, 10);
+    return (
+      c.descricao?.toLowerCase().includes(busca.toLowerCase()) &&
+      dataVenc >= dataInicio &&
+      dataVenc <= dataFim
+    );
+  });
 
   return (
     <div className="p-4 space-y-4">
-      {/* Filtro e botão */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-2">
+      {/* Filtros */}
+      <div className="flex flex-wrap items-end gap-2 border border-gray-300 rounded-md p-3 bg-white">
         <input
           type="text"
           placeholder="Buscar por descrição..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="border border-gray-300 rounded px-4 py-2 w-full max-w-md"
+          className="input input-bordered w-full sm:w-[45%] min-w-[160px]"
           disabled={loading}
         />
-        <button
-          onClick={abrirForm}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded flex items-center gap-2"
+        <select
+          className="select select-bordered w-full sm:w-[10%] min-w-[130px]"
+          value={periodo}
+          onChange={(e) => setPeriodo(e.target.value)}
           disabled={loading}
         >
-          <FiPlus /> Nova Conta
+          <option value="mensal">Mensal</option>
+          <option value="semanal">Semanal</option>
+          <option value="diario">Diário</option>
+        </select>
+
+        <input
+          type="date"
+          className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
+          value={dataInicio}
+          onChange={(e) => setDataInicio(e.target.value)}
+        />
+
+        <input
+          type="date"
+          className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
+          value={dataFim}
+          onChange={(e) => setDataFim(e.target.value)}
+        />
+
+        <button
+          onClick={abrirForm}
+          className="btn bg-[#7ED957] text-white font-bold h-[42px] min-w-[160px] px-6 w-full sm:w-auto sm:ml-auto flex items-center justify-center"
+          disabled={loading}
+        >
+          <FiPlus className="mr-1" /> Nova Conta
         </button>
       </div>
 

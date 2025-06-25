@@ -1,201 +1,229 @@
 import React, { useState, useEffect } from "react";
-
 const API_URL = "http://localhost:5000/api";
 
 export default function ReceberForm({ conta, onClose, onBaixa }) {
-  const [dataRecebimento, setDataRecebimento] = useState(() =>
+  const [dataRecebimento, setDataRecebimento] = useState(
     new Date().toISOString().slice(0, 10)
   );
   const [formaPagamento, setFormaPagamento] = useState("");
+  const [contaBancaria, setContaBancaria] = useState("");
+  const [maquina, setMaquina] = useState("");
+  const [cartaoId, setCartaoId] = useState("");
   const [tipoCredito, setTipoCredito] = useState("");
   const [parcelas, setParcelas] = useState(1);
+  const [taxaRepassada, setTaxaRepassada] = useState(false);
   const [valorRecebido, setValorRecebido] = useState(conta?.valorTotal || 0);
-  const [contaBancaria, setContaBancaria] = useState("");
   const [contasBancarias, setContasBancarias] = useState([]);
+  const [cartoes, setCartoes] = useState([]);
 
   useEffect(() => {
-    const fetchContas = async () => {
-      try {
-        const res = await fetch(`${API_URL}/contas-bancarias`);
-        if (!res.ok) throw new Error("Erro ao buscar contas bancárias");
-        setContasBancarias(await res.json());
-      } catch (err) {
-        alert("Erro ao buscar contas bancárias: " + err.message);
-      }
+    const carregarDados = async () => {
+      const [resContas, resCartoes] = await Promise.all([
+        fetch(`${API_URL}/contas-bancarias`),
+        fetch(`${API_URL}/cartoes-credito`)
+      ]);
+      setContasBancarias(await resContas.json());
+      setCartoes(await resCartoes.json());
     };
-    fetchContas();
+    carregarDados();
   }, []);
 
   useEffect(() => {
-    if (formaPagamento === "dinheiro") {
-      setValorRecebido(conta?.valorTotal || 0);
-      setContaBancaria("");
-      setTipoCredito("");
-      setParcelas(1);
+    let valor = parseFloat(conta?.valorTotal || 0);
+
+    if (["credito", "debito"].includes(formaPagamento) && cartaoId) {
+      const cartao = cartoes.find((c) => c.id === Number(cartaoId));
+      if (cartao && !taxaRepassada) {
+        let taxa = 0;
+        if (formaPagamento === "credito") {
+          taxa =
+            tipoCredito === "parcelado"
+              ? cartao.taxaParcelado || 0
+              : cartao.taxaVista || 0;
+        } else if (formaPagamento === "debito") {
+          taxa = cartao.taxaDebito || 0;
+        }
+        valor = valor * (1 - taxa / 100);
+      }
     }
 
-    if (formaPagamento !== "credito") {
-      setTipoCredito("");
-      setParcelas(1);
-    }
-
-    if (formaPagamento !== "pix" && formaPagamento !== "debito") {
-      setContaBancaria("");
-    }
-  }, [formaPagamento, conta]);
+    setValorRecebido(valor.toFixed(2));
+  }, [
+    formaPagamento,
+    cartaoId,
+    taxaRepassada,
+    tipoCredito,
+    cartoes,
+    conta?.valorTotal,
+  ]);
 
   const handleConfirmar = async () => {
+    const payload = {
+      dataRecebimento,
+      formaPagamento,
+      contaBancariaId: ["pix", "transferencia"].includes(formaPagamento)
+        ? Number(contaBancaria) || null
+        : null,
+      maquina: ["debito", "credito"].includes(formaPagamento) ? maquina : null,
+      cartaoId: ["credito", "debito"].includes(formaPagamento)
+        ? Number(cartaoId)
+        : null,
+      tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
+      parcelas:
+        formaPagamento === "credito" && tipoCredito === "parcelado"
+          ? parcelas
+          : null,
+      taxaRepassada,
+      valorRecebido: Number(valorRecebido),
+    };
+
     try {
-      const contaSelecionadaObj = contasBancarias.find(
-        (cb) => cb.id === parseInt(contaBancaria)
-      );
-
-      const dados = {
-        dataRecebimento,
-        formaPagamento,
-        contaBancaria:
-          formaPagamento === "pix" || formaPagamento === "debito"
-            ? contaSelecionadaObj || null
-            : null,
-        tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
-        parcelas:
-          formaPagamento === "credito" && tipoCredito === "parcelado"
-            ? parcelas
-            : null,
-        valorRecebido: parseFloat(valorRecebido),
-      };
-
       const res = await fetch(`${API_URL}/contas-receber/${conta.id}/receber`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dados),
+        body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error("Erro ao receber conta");
-
-      const dataAtualizada = await res.json();
-      onBaixa(dataAtualizada);
+      if (!res.ok) throw new Error("Erro ao receber");
+      const data = await res.json();
+      onBaixa(data); // aqui já dispara atualização
       onClose();
     } catch (err) {
-      alert("Erro ao receber: " + err.message);
+      alert("Erro: " + err.message);
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-md w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-white p-6 rounded-md w-full max-w-md max-h-screen overflow-y-auto">
         <h2 className="text-xl font-bold text-[#7ED957] mb-4">Receber Conta</h2>
 
-        {/* Informações da conta */}
-        <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm space-y-1 border">
-          <div><strong>Descrição:</strong> {conta?.descricao}</div>
-          <div><strong>Cliente:</strong> {conta?.cliente?.nome || "-"}</div>
-          <div><strong>Vencimento:</strong> {new Date(conta?.vencimento).toLocaleDateString()}</div>
-          <div><strong>Valor Total:</strong> R$ {parseFloat(conta?.valorTotal).toFixed(2)}</div>
-          <div><strong>Status:</strong> {conta?.status}</div>
+        <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm border">
+          <div><strong>{conta.descricao || "-"}</strong></div>
+          <div>Vencimento: {new Date(conta.vencimento).toLocaleDateString()}</div>
+          <div>Total: R$ {parseFloat(conta.valorTotal || 0).toFixed(2)}</div>
         </div>
 
-        {/* Formulário */}
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <label className="text-sm font-semibold block mb-1">Data de Recebimento</label>
-            <input
-              type="date"
-              className="input input-bordered w-full"
-              value={dataRecebimento}
-              onChange={(e) => setDataRecebimento(e.target.value)}
-            />
-          </div>
+        <label className="block mb-1">Data do Recebimento</label>
+        <input
+          type="date"
+          className="input input-bordered w-full mb-3"
+          value={dataRecebimento}
+          onChange={(e) => setDataRecebimento(e.target.value)}
+        />
 
-          <div>
-            <label className="text-sm font-semibold block mb-1">Forma de Pagamento</label>
+        <label className="block mb-1">Forma de Pagamento</label>
+        <select
+          className="select select-bordered w-full mb-3"
+          value={formaPagamento}
+          onChange={(e) => {
+            setFormaPagamento(e.target.value);
+            setCartaoId("");
+            setTipoCredito("");
+            setParcelas(1);
+            setTaxaRepassada(false);
+            setMaquina("");
+            setContaBancaria("");
+          }}
+        >
+          <option value="">Selecione</option>
+          <option value="dinheiro">Dinheiro</option>
+          <option value="pix">PIX</option>
+          <option value="debito">Débito</option>
+          <option value="credito">Crédito</option>
+          <option value="transferencia">Transferência</option>
+        </select>
+
+        {["pix", "transferencia"].includes(formaPagamento) && (
+          <>
+            <label className="block mb-1">Conta Bancária</label>
             <select
-              className="select select-bordered w-full"
-              value={formaPagamento}
-              onChange={(e) => setFormaPagamento(e.target.value)}
+              className="select select-bordered w-full mb-3"
+              value={contaBancaria}
+              onChange={(e) => setContaBancaria(e.target.value)}
             >
               <option value="">Selecione</option>
-              <option value="dinheiro">Dinheiro</option>
-              <option value="pix">PIX</option>
-              <option value="debito">Débito</option>
-              <option value="credito">Crédito</option>
-              <option value="transferencia">Transferência</option>
+              {contasBancarias.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.banco} - Ag. {c.agencia} / Cc. {c.conta}
+                </option>
+              ))}
             </select>
-          </div>
+          </>
+        )}
 
-          {(formaPagamento === "pix" || formaPagamento === "debito") && (
-            <div>
-              <label className="text-sm font-semibold block mb-1">Conta Bancária</label>
-              <select
-                className="select select-bordered w-full"
-                value={contaBancaria}
-                onChange={(e) => setContaBancaria(e.target.value)}
-              >
-                <option value="">Selecione</option>
-                {contasBancarias.map((cb) => (
-                  <option key={cb.id} value={cb.id}>
-                    {cb.banco} - Ag. {cb.agencia} / Cc. {cb.conta}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+        {["debito", "credito"].includes(formaPagamento) && (
+          <>
+            <label className="block mb-1">Máquina / Cartão</label>
+            <select
+              className="select select-bordered w-full mb-2"
+              value={cartaoId}
+              onChange={(e) => setCartaoId(e.target.value)}
+            >
+              <option value="">Selecione</option>
+              {cartoes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.banco} – Débito: {c.taxaDebito ?? 0}% / Crédito:{" "}
+                  {c.taxaVista ?? 0}% à vista, {c.taxaParcelado ?? 0}% parcelado
+                </option>
+              ))}
+            </select>
 
-          {formaPagamento === "credito" && (
-            <>
-              <div>
-                <label className="text-sm font-semibold block mb-1">Tipo de Crédito</label>
-                <select
-                  className="select select-bordered w-full"
-                  value={tipoCredito}
-                  onChange={(e) => setTipoCredito(e.target.value)}
-                >
-                  <option value="">Selecione</option>
-                  <option value="avista">À vista</option>
-                  <option value="parcelado">Parcelado</option>
-                </select>
-              </div>
+            <label className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                checked={taxaRepassada}
+                onChange={(e) => setTaxaRepassada(e.target.checked)}
+              />
+              Taxa repassada ao cliente?
+            </label>
+          </>
+        )}
 
-              {tipoCredito === "parcelado" && (
-                <div>
-                  <label className="text-sm font-semibold block mb-1">Parcelas</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="input input-bordered w-full"
-                    value={parcelas}
-                    onChange={(e) => setParcelas(Number(e.target.value))}
-                  />
-                </div>
-              )}
-            </>
-          )}
+        {formaPagamento === "credito" && (
+          <>
+            <label className="block mb-1">Tipo de Crédito</label>
+            <select
+              className="select select-bordered w-full mb-2"
+              value={tipoCredito}
+              onChange={(e) => setTipoCredito(e.target.value)}
+            >
+              <option value="">Selecione</option>
+              <option value="avista">À vista</option>
+              <option value="parcelado">Parcelado</option>
+            </select>
 
-          <div>
-            <label className="text-sm font-semibold block mb-1">Valor Recebido</label>
-            <input
-              type="number"
-              className="input input-bordered w-full"
-              value={valorRecebido}
-              onChange={(e) => setValorRecebido(e.target.value)}
-              disabled={formaPagamento === "dinheiro"}
-            />
-          </div>
-        </div>
+            {tipoCredito === "parcelado" && (
+              <>
+                <label className="block mb-1">Parcelas</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="input input-bordered w-full mb-3"
+                  value={parcelas}
+                  onChange={(e) => setParcelas(Number(e.target.value))}
+                />
+              </>
+            )}
+          </>
+        )}
 
-        <div className="flex justify-end mt-6 gap-2">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 rounded-lg text-black bg-gray-300"
-          >
+        <label className="block mb-1">Valor Recebido</label>
+        <input
+          type="text"
+          className="input input-bordered w-full mb-4"
+          value={`R$ ${parseFloat(valorRecebido).toFixed(2)}`}
+          disabled
+        />
+
+        <div className="flex justify-end gap-2 sticky bottom-0 bg-white pt-2">
+          <button className="btn bg-gray-300" onClick={onClose}>
             Cancelar
           </button>
           <button
+            className="btn bg-[#7ED957] text-white font-semibold"
             onClick={handleConfirmar}
-            className="px-5 py-2 rounded-lg text-black"
-            style={{ backgroundColor: "#7ED957" }}
           >
-            Confirmar Recebimento
+            Confirmar
           </button>
         </div>
       </div>

@@ -48,7 +48,8 @@ export default function ContasReceber() {
       setLoading(true);
       const res = await fetch(API_URL);
       if (!res.ok) throw new Error("Erro ao carregar");
-      setContas(await res.json());
+      const data = await res.json();
+      setContas(data);
     } catch (e) {
       toast.error(e.message);
     } finally {
@@ -64,6 +65,7 @@ export default function ContasReceber() {
     setContaSel(c);
     setMostrarReceberForm(true);
   };
+
   const fecharReceber = () => {
     setContaSel(null);
     setMostrarReceberForm(false);
@@ -74,7 +76,8 @@ export default function ContasReceber() {
       setLoading(true);
       const res = await fetch(`${API_URL}/${conta.id}`);
       if (!res.ok) throw new Error("Erro ao carregar detalhes");
-      setContaSel(await res.json());
+      const data = await res.json();
+      setContaSel(data);
     } catch {
       toast.error("Erro ao buscar detalhes");
       setContaSel(conta);
@@ -84,23 +87,10 @@ export default function ContasReceber() {
     }
   };
 
-  const handleReceber = async (dados) => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_URL}/${contaSel.id}/receber`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dados),
-      });
-      if (!res.ok) throw new Error("Erro ao receber");
-      toast.success("Recebido com sucesso!");
-      fecharReceber();
-      loadContas();
-    } catch (e) {
-      toast.error(e.message);
-    } finally {
-      setLoading(false);
-    }
+  const handleReceber = () => {
+    toast.success("Recebido com sucesso!");
+    fecharReceber();
+    loadContas();
   };
 
   const excluir = async (id) => {
@@ -139,20 +129,16 @@ export default function ContasReceber() {
       return v >= dataInicial && v <= dataFinal;
     })
     .filter((c) =>
-      pesquisa
-        ? c.descricao.toLowerCase().includes(pesquisa.toLowerCase())
-        : true
+      pesquisa ? c.descricao.toLowerCase().includes(pesquisa.toLowerCase()) : true
     )
     .sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center">
-          Contas a Receber
-        </h1>
-      </div>
-      {/* Filtros */}
+      <h1 className="text-4xl font-bold text-[#7ED957] text-center">
+        Contas a Receber
+      </h1>
+
       <div className="flex flex-wrap items-end gap-2 border border-gray-300 rounded-md p-3 bg-white">
         <input
           type="text"
@@ -171,7 +157,6 @@ export default function ContasReceber() {
           <option value="semanal">Semanal</option>
           <option value="diario">Diário</option>
         </select>
-
         <input
           type="date"
           className="input input-bordered w-full sm:w-[13%] w-[130px]"
@@ -184,7 +169,6 @@ export default function ContasReceber() {
           value={format(dataFinal, "yyyy-MM-dd")}
           onChange={(e) => setDataFinal(new Date(e.target.value))}
         />
-
         <button
           onClick={() => setMostrarForm(true)}
           className="btn bg-[#7ED957] text-white font-bold h-[42px] min-w-[160px] px-6 w-full sm:w-auto sm:ml-auto flex items-center justify-center"
@@ -194,7 +178,6 @@ export default function ContasReceber() {
         </button>
       </div>
 
-      {/* Tabela */}
       <div className="overflow-x-auto">
         <table className="w-full border border-gray-200 text-center">
           <thead className="bg-gray-100">
@@ -227,7 +210,7 @@ export default function ContasReceber() {
                       : "-"}
                   </td>
                   <td className="flex gap-2 justify-center">
-                    {c.status === "aberto" && (
+                    {c.status === "aberto" ? (
                       <>
                         <button
                           className="text-green-600"
@@ -244,8 +227,7 @@ export default function ContasReceber() {
                           <FiTrash2 />
                         </button>
                       </>
-                    )}
-                    {c.status === "pago" && (
+                    ) : (
                       <>
                         <button
                           className="text-blue-600"
@@ -271,20 +253,14 @@ export default function ContasReceber() {
         </table>
       </div>
 
-      {/* Modais */}
       {mostrarForm && (
-        <ContaReceberForm
-          onClose={() => setMostrarForm(false)}
-          onSave={loadContas}
-        />
+        <ContaReceberForm onClose={() => setMostrarForm(false)} onSave={loadContas} />
       )}
+
       {mostrarReceberForm && contaSel && (
-        <ReceberForm
-          conta={contaSel}
-          onClose={fecharReceber}
-          onBaixa={handleReceber}
-        />
+        <ReceberForm conta={contaSel} onClose={fecharReceber} onBaixa={handleReceber} />
       )}
+
       {detalhesAberto && contaSel && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-md w-full max-w-lg space-y-4">
@@ -302,9 +278,7 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Vencimento:</span>
-                <span>
-                  {format(new Date(contaSel.vencimento), "dd/MM/yyyy")}
-                </span>
+                <span>{format(new Date(contaSel.vencimento), "dd/MM/yyyy")}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Recebido em:</span>
@@ -316,21 +290,15 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Forma de Pagamento:</span>
-                <span className="capitalize">
-                  {contaSel.formaPagamento || "-"}
-                </span>
+                <span className="capitalize">{contaSel.formaPagamento || "-"}</span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Valor Recebido:</span>
-                <span>
-                  R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}
-                </span>
+                <span>R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}</span>
               </div>
 
-              {/* Detalhes Bancários */}
-              {["pix", "debito", "transferencia"].includes(
-                contaSel.formaPagamento
-              ) &&
+              {/* Dados Bancários */}
+              {["pix", "debito", "transferencia"].includes(contaSel.formaPagamento) &&
                 contaSel.contaBancaria && (
                   <>
                     <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
@@ -351,29 +319,28 @@ export default function ContasReceber() {
                   </>
                 )}
 
-              {/* Crédito */}
-              {contaSel.formaPagamento === "credito" &&
-                contaSel.tipoCredito && (
-                  <>
-                    <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
-                      Informações do Crédito
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Tipo:</span>
-                      <span>
-                        {contaSel.tipoCredito === "parcelado"
-                          ? "Parcelado"
-                          : "À vista"}
-                      </span>
-                    </div>
-                    {contaSel.tipoCredito === "parcelado" && (
-                      <div className="flex justify-between">
-                        <span className="font-semibold">Parcelas:</span>
-                        <span>{contaSel.parcelas}</span>
-                      </div>
-                    )}
-                  </>
-                )}
+              {/* Crédito/Débito info */}
+              {["debito", "credito"].includes(contaSel.formaPagamento) && contaSel.maquina && (
+                <div className="flex justify-between">
+                  <span className="font-semibold">Máquina:</span>
+                  <span>{contaSel.maquina}</span>
+                </div>
+              )}
+              {contaSel.formaPagamento === "credito" && contaSel.cartaoCredito && (
+                <>
+                  <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
+                    Informações do Crédito
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Cartão:</span>
+                    <span>{contaSel.cartaoCredito.banco}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-semibold">Taxa repassada:</span>
+                    <span>{contaSel.taxaRepassada ? "Sim" : "Não"}</span>
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end mt-4">
               <button

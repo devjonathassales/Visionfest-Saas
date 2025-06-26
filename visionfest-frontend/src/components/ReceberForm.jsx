@@ -2,9 +2,7 @@ import React, { useState, useEffect } from "react";
 const API_URL = "http://localhost:5000/api";
 
 export default function ReceberForm({ conta, onClose, onBaixa }) {
-  const [dataRecebimento, setDataRecebimento] = useState(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [dataRecebimento, setDataRecebimento] = useState(new Date().toISOString().slice(0, 10));
   const [formaPagamento, setFormaPagamento] = useState("");
   const [contaBancaria, setContaBancaria] = useState("");
   const [maquina, setMaquina] = useState("");
@@ -13,6 +11,7 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
   const [parcelas, setParcelas] = useState(1);
   const [taxaRepassada, setTaxaRepassada] = useState(false);
   const [valorRecebido, setValorRecebido] = useState(conta?.valorTotal || 0);
+  const [novaDataVencimento, setNovaDataVencimento] = useState("");
   const [contasBancarias, setContasBancarias] = useState([]);
   const [cartoes, setCartoes] = useState([]);
 
@@ -30,23 +29,18 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
 
   useEffect(() => {
     let valor = parseFloat(conta?.valorTotal || 0);
-
     if (["credito", "debito"].includes(formaPagamento) && cartaoId) {
       const cartao = cartoes.find((c) => c.id === Number(cartaoId));
       if (cartao && !taxaRepassada) {
         let taxa = 0;
         if (formaPagamento === "credito") {
-          taxa =
-            tipoCredito === "parcelado"
-              ? cartao.taxaParcelado || 0
-              : cartao.taxaVista || 0;
+          taxa = tipoCredito === "parcelado" ? cartao.taxaParcelado || 0 : cartao.taxaVista || 0;
         } else if (formaPagamento === "debito") {
           taxa = cartao.taxaDebito || 0;
         }
         valor = valor * (1 - taxa / 100);
       }
     }
-
     setValorRecebido(valor.toFixed(2));
   }, [
     formaPagamento,
@@ -58,6 +52,40 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
   ]);
 
   const handleConfirmar = async () => {
+    const recebido = parseFloat(valorRecebido);
+    const total = parseFloat(conta.valorTotal || 0);
+
+    // Validações obrigatórias
+    if (!formaPagamento) {
+      alert("Selecione a forma de pagamento.");
+      return;
+    }
+
+    if (["pix", "transferencia"].includes(formaPagamento) && !contaBancaria) {
+      alert("Selecione a conta bancária.");
+      return;
+    }
+
+    if (["credito", "debito"].includes(formaPagamento) && !cartaoId) {
+      alert("Selecione o cartão.");
+      return;
+    }
+
+    if (formaPagamento === "credito" && !tipoCredito) {
+      alert("Selecione o tipo de crédito.");
+      return;
+    }
+
+    if (formaPagamento === "credito" && tipoCredito === "parcelado" && parcelas < 1) {
+      alert("Informe a quantidade de parcelas.");
+      return;
+    }
+
+    if (recebido < total && !novaDataVencimento) {
+      alert("Informe a nova data de vencimento para o valor restante.");
+      return;
+    }
+
     const payload = {
       dataRecebimento,
       formaPagamento,
@@ -74,7 +102,8 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
           ? parcelas
           : null,
       taxaRepassada,
-      valorRecebido: Number(valorRecebido),
+      valorRecebido: recebido,
+      novaDataVencimento: recebido < total ? novaDataVencimento : null,
     };
 
     try {
@@ -85,7 +114,7 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
       });
       if (!res.ok) throw new Error("Erro ao receber");
       const data = await res.json();
-      onBaixa(data); // aqui já dispara atualização
+      onBaixa(data);
       onClose();
     } catch (err) {
       alert("Erro: " + err.message);
@@ -209,11 +238,26 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
 
         <label className="block mb-1">Valor Recebido</label>
         <input
-          type="text"
-          className="input input-bordered w-full mb-4"
-          value={`R$ ${parseFloat(valorRecebido).toFixed(2)}`}
-          disabled
+          type="number"
+          min="0"
+          max={parseFloat(conta.valorTotal || 0)}
+          className="input input-bordered w-full mb-3"
+          value={valorRecebido}
+          onChange={(e) => setValorRecebido(e.target.value)}
         />
+
+        {parseFloat(valorRecebido) < parseFloat(conta.valorTotal || 0) && (
+          <>
+            <label className="block mb-1">Nova Data de Vencimento (Restante)</label>
+            <input
+              type="date"
+              className="input input-bordered w-full mb-4"
+              value={novaDataVencimento}
+              onChange={(e) => setNovaDataVencimento(e.target.value)}
+              required
+            />
+          </>
+        )}
 
         <div className="flex justify-end gap-2 sticky bottom-0 bg-white pt-2">
           <button className="btn bg-gray-300" onClick={onClose}>

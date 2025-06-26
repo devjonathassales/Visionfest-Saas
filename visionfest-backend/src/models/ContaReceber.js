@@ -54,6 +54,15 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      referenciaId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "contas_receber",
+          key: "id",
+        },
+        field: "referencia_id",
+      },
     },
     {
       tableName: "contas_receber",
@@ -75,6 +84,11 @@ module.exports = (sequelize, DataTypes) => {
     ContaReceber.belongsTo(models.Cliente, {
       as: "cliente",
       foreignKey: { name: "clienteId", allowNull: true },
+    });
+
+    ContaReceber.belongsTo(models.ContaReceber, {
+      as: "referencia",
+      foreignKey: "referenciaId",
     });
   };
 

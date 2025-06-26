@@ -1,13 +1,14 @@
-const { ContaReceber, CentroCusto, ContaBancaria } = require('../models');
+const { ContaReceber, CentroCusto, ContaBancaria, Cliente } = require('../models');
 
 exports.listar = async (req, res) => {
   try {
     const contas = await ContaReceber.findAll({
       include: [
         { model: CentroCusto, as: 'centroReceita', attributes: ['descricao'] },
-        { model: ContaBancaria, as: 'contaBancaria', attributes: ['banco','agencia','conta','id'] },
+        { model: ContaBancaria, as: 'contaBancaria', attributes: ['banco', 'agencia', 'conta', 'id'] },
+        { model: Cliente, as: 'cliente', attributes: ['id', 'nome'] }
       ],
-      order: [['vencimento','ASC']],
+      order: [['vencimento', 'ASC']],
     });
     res.json(contas);
   } catch (err) {
@@ -21,10 +22,11 @@ exports.obterPorId = async (req, res) => {
     const conta = await ContaReceber.findByPk(req.params.id, {
       include: [
         { model: CentroCusto, as: 'centroReceita', attributes: ['descricao'] },
-        { model: ContaBancaria, as: 'contaBancaria', attributes: ['banco','agencia','conta','id'] },
+        { model: ContaBancaria, as: 'contaBancaria', attributes: ['banco', 'agencia', 'conta', 'id'] },
+        { model: Cliente, as: 'cliente', attributes: ['id', 'nome'] }
       ],
     });
-    if (!conta) return res.status(404).json({error: 'Conta não encontrada.'});
+    if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
     res.json(conta);
   } catch (err) {
     console.error(err);
@@ -36,23 +38,38 @@ exports.criar = async (req, res) => {
   try {
     const nova = await ContaReceber.create(req.body);
     res.status(201).json(nova);
-  } catch(e) { console.error(e); res.status(500).json({error:'Erro ao criar.'}); }
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Erro ao criar conta a receber.' });
+  }
 };
 
-exports.atualizar = async (req,res) => {
+exports.atualizar = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({error:'Conta não encontrada.'});
+    if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
     await conta.update(req.body);
     res.json(conta);
-  } catch(e){console.error(e);res.status(500).json({error:'Erro ao atualizar.'});}
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Erro ao atualizar conta.' });
+  }
 };
 
 exports.receber = async (req, res) => {
   try {
-    const { dataRecebimento, formaPagamento, contaBancariaId, tipoCredito, parcelas, valorRecebido } = req.body;
+    const {
+      dataRecebimento,
+      formaPagamento,
+      contaBancariaId,
+      tipoCredito,
+      parcelas,
+      valorRecebido
+    } = req.body;
+
     const conta = await ContaReceber.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({error:'Conta não encontrada.'});
+    if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
+
     await conta.update({
       dataRecebimento,
       formaPagamento,
@@ -62,15 +79,20 @@ exports.receber = async (req, res) => {
       parcelas: parcelas || null,
       status: 'pago',
     });
+
     res.json(conta);
-  } catch(e){console.error(e);res.status(500).json({error:'Erro ao receber conta.'});}
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Erro ao receber conta.' });
+  }
 };
 
-exports.estornar = async (req,res) => {
+exports.estornar = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({error:'Conta não encontrada.'});
-    if (conta.status !== 'pago') return res.status(400).json({error:'Só é possível estornar paga.'});
+    if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
+    if (conta.status !== 'pago') return res.status(400).json({ error: 'Só é possível estornar uma conta paga.' });
+
     await conta.update({
       dataRecebimento: null,
       formaPagamento: null,
@@ -80,16 +102,24 @@ exports.estornar = async (req,res) => {
       parcelas: null,
       status: 'aberto',
     });
-    res.json({message:'Estornado com sucesso.'});
-  } catch(e){console.error(e);res.status(500).json({error:'Erro ao estornar conta.'});}
+
+    res.json({ message: 'Estornado com sucesso.' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Erro ao estornar conta.' });
+  }
 };
 
-exports.excluir = async (req,res) => {
+exports.excluir = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({error:'Conta não encontrada.'});
-    if (conta.status === 'pago') return res.status(400).json({error:'Não pode excluir paga.'});
+    if (!conta) return res.status(404).json({ error: 'Conta não encontrada.' });
+    if (conta.status === 'pago') return res.status(400).json({ error: 'Não é possível excluir uma conta já paga.' });
+
     await conta.destroy();
     res.sendStatus(204);
-  } catch(e){console.error(e);res.status(500).json({error:'Erro ao excluir.'});}
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Erro ao excluir conta.' });
+  }
 };

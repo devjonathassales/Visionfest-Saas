@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-export default function ContaReceberForm({ onClose, onSave }) {
+export default function ContaReceberForm({ onClose, onSave, onPagar }) {
   const [descricao, setDescricao] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [clientes, setClientes] = useState([]);
@@ -25,9 +25,12 @@ export default function ContaReceberForm({ onClose, onSave }) {
     fetch("http://localhost:5000/api/centrocusto")
       .then((res) => res.json())
       .then((data) => {
-        const custos = data.filter((c) => c.tipo === "Receita" || c.tipo === "Ambos");
+        const custos = data.filter(
+          (c) => c.tipo === "Receita" || c.tipo === "Ambos"
+        );
         setCentros(custos);
-      });
+      })
+      .catch((err) => console.error("Erro ao carregar centros de custo", err));
   }, []);
 
   // 🔁 Recalcular valor total
@@ -38,7 +41,8 @@ export default function ContaReceberForm({ onClose, onSave }) {
     setValorTotal(total >= 0 ? total.toFixed(2) : "0.00");
   }, [valor, desconto, tipoDesconto]);
 
-  const handleSalvar = async () => {
+  // Função para salvar conta e, opcionalmente, abrir form de pagamento
+  const salvarConta = async (depoisSalvar) => {
     try {
       const novaConta = {
         descricao,
@@ -57,18 +61,28 @@ export default function ContaReceberForm({ onClose, onSave }) {
         body: JSON.stringify(novaConta),
       });
 
+      if (!res.ok) throw new Error("Erro ao salvar conta");
+
       const data = await res.json();
+
       if (onSave) onSave(data);
       onClose();
+
+      if (depoisSalvar === "pagar" && onPagar) {
+        onPagar(data); // abre o formulário de pagamento com a conta criada
+      }
     } catch (error) {
       console.error("Erro ao salvar conta:", error);
+      alert("Erro ao salvar conta. Veja o console para mais detalhes.");
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-xl">
-        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Nova Conta a Receber</h2>
+        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">
+          Nova Conta a Receber
+        </h2>
 
         <div className="grid grid-cols-2 gap-4">
           <input
@@ -86,7 +100,9 @@ export default function ContaReceberForm({ onClose, onSave }) {
           >
             <option value="">Selecione o Cliente</option>
             {clientes.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
+              <option key={c.id} value={c.id}>
+                {c.nome}
+              </option>
             ))}
           </select>
 
@@ -97,7 +113,9 @@ export default function ContaReceberForm({ onClose, onSave }) {
           >
             <option value="">Centro de Receita</option>
             {centros.map((c) => (
-              <option key={c.id} value={c.id}>{c.descricao}</option>
+              <option key={c.id} value={c.id}>
+                {c.descricao}
+              </option>
             ))}
           </select>
 
@@ -155,9 +173,16 @@ export default function ContaReceberForm({ onClose, onSave }) {
           <button
             className="px-5 py-2 rounded-lg text-black"
             style={{ backgroundColor: "#7ED957" }}
-            onClick={handleSalvar}
+            onClick={() => salvarConta("salvar")}
           >
             Salvar
+          </button>
+          <button
+            className="px-5 py-2 rounded-lg text-white"
+            style={{ backgroundColor: "#3b82f6" }}
+            onClick={() => salvarConta("pagar")}
+          >
+            Salvar e Pagar
           </button>
         </div>
       </div>

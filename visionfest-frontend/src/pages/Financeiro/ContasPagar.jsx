@@ -19,6 +19,11 @@ export default function ContasPagar() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
+  // Novo estado para filtro por fornecedor
+  const [fornecedores, setFornecedores] = useState([]);
+  const [fornecedorIdFiltro, setFornecedorIdFiltro] = useState("");
+
+  // Função para obter datas conforme período
   const getDatasPorPeriodo = (tipo) => {
     const hoje = new Date();
     let inicio, fim;
@@ -27,7 +32,7 @@ export default function ContasPagar() {
       inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
       fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
     } else if (tipo === "semanal") {
-      const dia = hoje.getDay(); // 0 = Domingo
+      const dia = hoje.getDay();
       const diff = hoje.getDate() - dia;
       inicio = new Date(hoje.setDate(diff));
       fim = new Date(inicio);
@@ -42,16 +47,39 @@ export default function ContasPagar() {
     };
   };
 
+  // Atualiza dataInicio e dataFim quando muda o período
   useEffect(() => {
     const { inicio, fim } = getDatasPorPeriodo(periodo);
     setDataInicio(inicio);
     setDataFim(fim);
   }, [periodo]);
 
+  // Buscar fornecedores para filtro (supondo API /api/fornecedores)
+  const carregarFornecedores = useCallback(async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/fornecedores");
+      if (!res.ok) throw new Error("Erro ao buscar fornecedores");
+      const dados = await res.json();
+      setFornecedores(dados);
+    } catch (err) {
+      toast.error("Erro ao carregar fornecedores: " + err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarFornecedores();
+  }, [carregarFornecedores]);
+
+  // Carregar contas com filtro (incluindo fornecedorIdFiltro)
   const carregarContas = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(API_URL);
+      const params = new URLSearchParams({
+        dataInicio,
+        dataFim,
+        fornecedorId: fornecedorIdFiltro,
+      });
+      const res = await fetch(`${API_URL}?${params.toString()}`);
       if (!res.ok) throw new Error("Erro ao buscar contas");
       const data = await res.json();
       setContas(data);
@@ -60,12 +88,13 @@ export default function ContasPagar() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [dataInicio, dataFim, fornecedorIdFiltro]);
 
   useEffect(() => {
     carregarContas();
   }, [carregarContas]);
 
+  // Os outros métodos permanecem os mesmos...
   const abrirForm = () => {
     setContaSelecionada(null);
     setFormAberto(true);
@@ -84,7 +113,6 @@ export default function ContasPagar() {
     setFormAberto(false);
     setPagamentoAberto(false);
     setLoading(true);
-
     try {
       const res = await fetch(`${API_URL}/${conta.id}`);
       if (!res.ok) throw new Error("Erro ao carregar detalhes da conta");
@@ -154,20 +182,15 @@ export default function ContasPagar() {
     }
   };
 
-  const contasFiltradas = contas.filter((c) => {
-    const dataVenc = new Date(c.vencimento).toISOString().substring(0, 10);
-    return (
-      c.descricao?.toLowerCase().includes(busca.toLowerCase()) &&
-      dataVenc >= dataInicio &&
-      dataVenc <= dataFim
-    );
-  });
+  // Filtra localmente pelo texto da busca na descrição
+  const contasFiltradas = contas.filter((c) =>
+    c.descricao?.toLowerCase().includes(busca.toLowerCase())
+  );
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Contas a Pagar</h1>
-      </div>
+      <h1 className="text-4xl font-bold text-[#7ED957] text-center">Contas a Pagar</h1>
+
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-2 border border-gray-300 rounded-md p-3 bg-white">
         <input
@@ -175,9 +198,10 @@ export default function ContasPagar() {
           placeholder="Buscar por descrição..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="input input-bordered w-full sm:w-[45%] min-w-[160px]"
+          className="input input-bordered w-full sm:w-[25%] min-w-[160px]"
           disabled={loading}
         />
+
         <select
           className="select select-bordered w-full sm:w-[10%] min-w-[130px]"
           value={periodo}
@@ -194,6 +218,7 @@ export default function ContasPagar() {
           className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
           value={dataInicio}
           onChange={(e) => setDataInicio(e.target.value)}
+          disabled={loading}
         />
 
         <input
@@ -201,11 +226,27 @@ export default function ContasPagar() {
           className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
           value={dataFim}
           onChange={(e) => setDataFim(e.target.value)}
+          disabled={loading}
         />
+
+        {/* Novo filtro por fornecedor */}
+        <select
+          className="select select-bordered w-full sm:w-[20%] min-w-[180px]"
+          value={fornecedorIdFiltro}
+          onChange={(e) => setFornecedorIdFiltro(e.target.value)}
+          disabled={loading}
+        >
+          <option value="">Todos os fornecedores</option>
+          {fornecedores.map((f) => (
+            <option key={f.id} value={f.id}>
+              {f.nome}
+            </option>
+          ))}
+        </select>
 
         <button
           onClick={abrirForm}
-          className="btn bg-[#7ED957] text-white font-bold h-[42px] min-w-[160px] px-6 w-full sm:w-auto sm:ml-auto flex items-center justify-center"
+          className="btn bg-[#7ED957] text-white font-bold h-[42px] min-w-[160px] px-6 w-full sm:w-auto sm:ml-auto"
           disabled={loading}
         >
           <FiPlus className="mr-1" /> Nova Conta
@@ -219,6 +260,7 @@ export default function ContasPagar() {
             <tr>
               <th className="p-2 text-left">Descrição</th>
               <th className="p-2 text-left">Centro de Custo</th>
+              <th className="p-2 text-left">Fornecedor</th>
               <th className="p-2 text-right">Valor</th>
               <th className="p-2 text-center">Vencimento</th>
               <th className="p-2 text-center">Status</th>
@@ -228,7 +270,7 @@ export default function ContasPagar() {
           <tbody>
             {contasFiltradas.length === 0 ? (
               <tr>
-                <td colSpan="6" className="text-center text-gray-500 py-4">
+                <td colSpan="7" className="text-center text-gray-500 py-4">
                   Nenhuma conta encontrada.
                 </td>
               </tr>
@@ -237,6 +279,7 @@ export default function ContasPagar() {
                 <tr key={c.id} className="border-t hover:bg-gray-50">
                   <td className="p-2">{c.descricao}</td>
                   <td className="p-2">{c.centroCusto?.descricao || "-"}</td>
+                  <td className="p-2">{c.fornecedor?.nome || "-"}</td>
                   <td className="p-2 text-right">
                     R$ {parseFloat(c.valorTotal).toFixed(2)}
                   </td>
@@ -316,103 +359,42 @@ export default function ContasPagar() {
 
       {/* Modal: Detalhes da Conta Paga */}
       {detalhesAberto && contaSelecionada && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-md w-full max-w-lg space-y-4">
-            <h2 className="text-xl font-bold text-[#7ED957]">
-              Detalhes da Conta Paga
-            </h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="font-semibold">Descrição:</span>
-                <span>{contaSelecionada.descricao}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Centro de Custo:</span>
-                <span>{contaSelecionada.centroCusto?.descricao || "-"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Vencimento:</span>
-                <span>
-                  {new Date(contaSelecionada.vencimento).toLocaleDateString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Data de Baixa:</span>
-                <span>
-                  {contaSelecionada.dataPagamento
-                    ? new Date(
-                        contaSelecionada.dataPagamento
-                      ).toLocaleDateString()
-                    : "-"}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Forma de Pagamento:</span>
-                <span>{contaSelecionada.formaPagamento || "-"}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-semibold">Valor Pago:</span>
-                <span>
-                  R$ {parseFloat(contaSelecionada.valorPago || 0).toFixed(2)}
-                </span>
-              </div>
-
-              {/* Detalhes Bancários se aplicável */}
-              {(contaSelecionada.formaPagamento === "pix" ||
-                contaSelecionada.formaPagamento === "debito" ||
-                contaSelecionada.formaPagamento === "credito") &&
-                contaSelecionada.contaBancaria && (
-                  <>
-                    <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
-                      Dados da Conta Bancária
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Banco:</span>
-                      <span>{contaSelecionada.contaBancaria.banco}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Agência:</span>
-                      <span>{contaSelecionada.contaBancaria.agencia}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Conta:</span>
-                      <span>{contaSelecionada.contaBancaria.conta}</span>
-                    </div>
-                  </>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
+          <div className="bg-white rounded-md p-6 w-full max-w-lg relative">
+            <button
+              onClick={() => setDetalhesAberto(false)}
+              className="absolute top-2 right-2 text-gray-600 hover:text-black font-bold text-xl"
+            >
+              &times;
+            </button>
+            <h2 className="text-xl font-semibold mb-4">Detalhes da Conta</h2>
+            <p><strong>Descrição:</strong> {contaSelecionada.descricao}</p>
+            <p><strong>Centro de Custo:</strong> {contaSelecionada.centroCusto?.descricao || "-"}</p>
+            <p><strong>Fornecedor:</strong> {contaSelecionada.fornecedor?.nome || "-"}</p>
+            <p><strong>Valor Total:</strong> R$ {parseFloat(contaSelecionada.valorTotal).toFixed(2)}</p>
+            <p><strong>Vencimento:</strong> {new Date(contaSelecionada.vencimento).toLocaleDateString()}</p>
+            <p><strong>Status:</strong> {contaSelecionada.status}</p>
+            {contaSelecionada.status === "pago" && (
+              <>
+                <p><strong>Data Pagamento:</strong> {new Date(contaSelecionada.dataPagamento).toLocaleDateString()}</p>
+                <p><strong>Forma Pagamento:</strong> {contaSelecionada.formaPagamento}</p>
+                {contaSelecionada.contaBancaria && (
+                  <p>
+                    <strong>Conta Bancária:</strong> {contaSelecionada.contaBancaria.banco} - Agência {contaSelecionada.contaBancaria.agencia} - Conta {contaSelecionada.contaBancaria.conta}
+                  </p>
                 )}
-
-              {contaSelecionada.formaPagamento === "credito" &&
-                contaSelecionada.tipoCredito && (
+                <p><strong>Valor Pago:</strong> R$ {parseFloat(contaSelecionada.valorPago).toFixed(2)}</p>
+                <p><strong>Troco:</strong> R$ {parseFloat(contaSelecionada.troco || 0).toFixed(2)}</p>
+                {contaSelecionada.formaPagamento === "credito" && (
                   <>
-                    <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
-                      Informações do Crédito
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="font-semibold">Tipo de Crédito:</span>
-                      <span>
-                        {contaSelecionada.tipoCredito === "parcelado"
-                          ? "Parcelado"
-                          : "À vista"}
-                      </span>
-                    </div>
+                    <p><strong>Tipo Crédito:</strong> {contaSelecionada.tipoCredito}</p>
                     {contaSelecionada.tipoCredito === "parcelado" && (
-                      <div className="flex justify-between">
-                        <span className="font-semibold">Parcelas:</span>
-                        <span>{contaSelecionada.parcelas}</span>
-                      </div>
+                      <p><strong>Parcelas:</strong> {contaSelecionada.parcelas}</p>
                     )}
                   </>
                 )}
-            </div>
-
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => setDetalhesAberto(false)}
-                className="px-5 py-2 rounded-lg text-black bg-gray-200"
-              >
-                Fechar
-              </button>
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}

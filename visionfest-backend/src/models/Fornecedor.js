@@ -15,5 +15,12 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
+  Fornecedor.associate = (models) => {
+    Fornecedor.hasMany(models.ContaPagar, {
+      foreignKey: "fornecedorId",
+      as: "contasPagar",
+    });
+  };
+
   return Fornecedor;
 };

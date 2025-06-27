@@ -11,38 +11,53 @@ export default function PagamentoContaForm({
   const [tipoCredito, setTipoCredito] = useState("");
   const [parcelas, setParcelas] = useState(1);
   const [valorPago, setValorPago] = useState(conta?.valorTotal || 0);
+  const [novaDataVencimento, setNovaDataVencimento] = useState("");
   const [contasBancarias, setContasBancarias] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/contas-bancarias")
       .then((res) => res.json())
       .then(setContasBancarias)
-      .catch((err) =>
-        console.error("Erro ao carregar contas bancárias:", err)
-      );
+      .catch((err) => console.error("Erro ao carregar contas bancárias:", err));
   }, []);
 
   useEffect(() => {
     if (formaPagamento === "dinheiro") {
-      setValorPago(conta?.valorTotal || 0);
       setContaBancaria("");
       setTipoCredito("");
       setParcelas(1);
     }
 
-    // Limpa campos se mudar de crédito para outro
     if (formaPagamento !== "credito") {
       setTipoCredito("");
       setParcelas(1);
     }
 
-    // Limpa conta bancária se não for pix ou débito
     if (formaPagamento !== "pix" && formaPagamento !== "debito") {
       setContaBancaria("");
     }
   }, [formaPagamento, conta]);
 
   const handleSubmit = () => {
+    if (!formaPagamento) return alert("Selecione a forma de pagamento.");
+    if (
+      (formaPagamento === "pix" || formaPagamento === "debito") &&
+      !contaBancaria
+    )
+      return alert("Selecione a conta bancária.");
+    if (formaPagamento === "credito") {
+      if (!tipoCredito) return alert("Selecione o tipo de crédito.");
+      if (tipoCredito === "parcelado" && (!parcelas || parseInt(parcelas) < 1))
+        return alert("Informe a quantidade de parcelas.");
+    }
+
+    const valorPagoNum = parseFloat(valorPago);
+    const valorTotalNum = parseFloat(conta.valorTotal);
+
+    if (valorPagoNum < valorTotalNum && !novaDataVencimento) {
+      return alert("Informe a nova data de vencimento para o valor restante.");
+    }
+
     const contaSelecionadaObj = contasBancarias.find(
       (cb) => cb.id === parseInt(contaBancaria)
     );
@@ -50,15 +65,18 @@ export default function PagamentoContaForm({
     const dadosPagamento = {
       dataPagamento: new Date().toISOString(),
       formaPagamento,
-      contaBancaria: formaPagamento === "pix" || formaPagamento === "debito"
-        ? contaSelecionadaObj || null
-        : null,
+      contaBancaria:
+        formaPagamento === "pix" || formaPagamento === "debito"
+          ? contaSelecionadaObj || null
+          : null,
       tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
       parcelas:
         formaPagamento === "credito" && tipoCredito === "parcelado"
           ? parcelas
           : null,
-      valorPago: parseFloat(valorPago),
+      valorPago: valorPagoNum,
+      novaDataVencimento:
+        valorPagoNum < valorTotalNum ? novaDataVencimento : null,
     };
 
     onConfirm && onConfirm(dadosPagamento);
@@ -69,20 +87,34 @@ export default function PagamentoContaForm({
       <div className="bg-white p-6 rounded-md w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Baixar Conta</h2>
 
-        {/* Dados da conta */}
+        {/* Informações da conta */}
         <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm space-y-1 border">
-          <div><strong>Descrição:</strong> {conta?.descricao}</div>
-          <div><strong>Centro de Custo:</strong> {conta?.centroCusto?.descricao || "-"}</div>
-          <div><strong>Vencimento:</strong> {new Date(conta?.vencimento).toLocaleDateString()}</div>
-          <div><strong>Valor Total:</strong> R$ {parseFloat(conta?.valorTotal).toFixed(2)}</div>
-          <div><strong>Status:</strong> {conta?.status}</div>
+          <div>
+            <strong>Descrição:</strong> {conta?.descricao}
+          </div>
+          <div>
+            <strong>Centro de Custo:</strong>{" "}
+            {conta?.centroCusto?.descricao || "-"}
+          </div>
+          <div>
+            <strong>Vencimento:</strong>{" "}
+            {new Date(conta?.vencimento).toLocaleDateString()}
+          </div>
+          <div>
+            <strong>Valor Total:</strong> R${" "}
+            {parseFloat(conta?.valorTotal).toFixed(2)}
+          </div>
+          <div>
+            <strong>Status:</strong> {conta?.status}
+          </div>
         </div>
 
         {/* Formulário */}
         <div className="grid grid-cols-1 gap-4">
-          {/* Forma de pagamento */}
           <div>
-            <label className="text-sm font-semibold block mb-1">Forma de Pagamento</label>
+            <label className="text-sm font-semibold block mb-1">
+              Forma de Pagamento
+            </label>
             <select
               className="select select-bordered w-full"
               value={formaPagamento}
@@ -98,10 +130,11 @@ export default function PagamentoContaForm({
             </select>
           </div>
 
-          {/* Conta bancária apenas para pix e débito */}
           {(formaPagamento === "pix" || formaPagamento === "debito") && (
             <div>
-              <label className="text-sm font-semibold block mb-1">Conta Bancária</label>
+              <label className="text-sm font-semibold block mb-1">
+                Conta Bancária
+              </label>
               <select
                 className="select select-bordered w-full"
                 value={contaBancaria}
@@ -118,11 +151,12 @@ export default function PagamentoContaForm({
             </div>
           )}
 
-          {/* Tipo crédito */}
           {formaPagamento === "credito" && (
             <>
               <div>
-                <label className="text-sm font-semibold block mb-1">Tipo de Crédito</label>
+                <label className="text-sm font-semibold block mb-1">
+                  Tipo de Crédito
+                </label>
                 <select
                   className="select select-bordered w-full"
                   value={tipoCredito}
@@ -134,10 +168,11 @@ export default function PagamentoContaForm({
                   <option value="parcelado">Parcelado</option>
                 </select>
               </div>
-
               {tipoCredito === "parcelado" && (
                 <div>
-                  <label className="text-sm font-semibold block mb-1">Parcelas</label>
+                  <label className="text-sm font-semibold block mb-1">
+                    Parcelas
+                  </label>
                   <input
                     type="number"
                     min={1}
@@ -151,9 +186,10 @@ export default function PagamentoContaForm({
             </>
           )}
 
-          {/* Valor pago */}
           <div>
-            <label className="text-sm font-semibold block mb-1">Valor Pago</label>
+            <label className="text-sm font-semibold block mb-1">
+              Valor Pago
+            </label>
             <input
               type="number"
               className="input input-bordered w-full"
@@ -162,6 +198,21 @@ export default function PagamentoContaForm({
               disabled={disabled || formaPagamento === "dinheiro"}
             />
           </div>
+
+          {parseFloat(valorPago) < parseFloat(conta?.valorTotal) && (
+            <div>
+              <label className="text-sm font-semibold block mb-1">
+                Nova Data de Vencimento
+              </label>
+              <input
+                type="date"
+                className="input input-bordered w-full"
+                value={novaDataVencimento}
+                onChange={(e) => setNovaDataVencimento(e.target.value)}
+                disabled={disabled}
+              />
+            </div>
+          )}
         </div>
 
         {/* Botões */}

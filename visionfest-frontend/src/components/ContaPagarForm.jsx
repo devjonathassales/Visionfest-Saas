@@ -3,33 +3,44 @@ import React, { useEffect, useState } from "react";
 export default function ContasPagarForm({ onClose, onSave, onPagar }) {
   const [descricao, setDescricao] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
+  const [fornecedorId, setFornecedorId] = useState("");
   const [vencimento, setVencimento] = useState("");
   const [valor, setValor] = useState("");
   const [desconto, setDesconto] = useState("");
   const [tipoDesconto, setTipoDesconto] = useState("valor");
   const [valorTotal, setValorTotal] = useState("0.00");
   const [centros, setCentros] = useState([]);
+  const [fornecedores, setFornecedores] = useState([]);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/centrocusto")
-      .then(res => res.json())
-      .then(data => {
-        const somenteCustos = data.filter(c => c.tipo === "Custo" || c.tipo === "Ambos");
+      .then((res) => res.json())
+      .then((data) => {
+        const somenteCustos = data.filter(
+          (c) => c.tipo === "Custo" || c.tipo === "Ambos"
+        );
         setCentros(somenteCustos);
       })
-      .catch(error => console.error("Erro ao carregar centros:", error));
+      .catch((error) => console.error("Erro ao carregar centros:", error));
+
+    fetch("http://localhost:5000/api/fornecedores")
+      .then((res) => res.json())
+      .then(setFornecedores)
+      .catch((error) => console.error("Erro ao carregar fornecedores:", error));
   }, []);
 
   useEffect(() => {
     const v = parseFloat(valor) || 0;
     const d = parseFloat(desconto) || 0;
-    const total = tipoDesconto === "percentual" ? v - (v * d) / 100 : v - d;
+    const total =
+      tipoDesconto === "percentual" ? v - (v * d) / 100 : v - d;
     setValorTotal(total >= 0 ? total.toFixed(2) : "0.00");
   }, [valor, desconto, tipoDesconto]);
 
   const construirPayload = () => ({
     descricao,
     centroCustoId,
+    fornecedorId,
     vencimento,
     valor: parseFloat(valor),
     desconto: parseFloat(desconto),
@@ -38,6 +49,11 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
   });
 
   const handleSalvar = async () => {
+    if (!fornecedorId) {
+      alert("Selecione um fornecedor antes de salvar.");
+      return;
+    }
+
     try {
       const novaConta = construirPayload();
       const response = await fetch("http://localhost:5000/api/contas-pagar", {
@@ -48,13 +64,18 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
 
       const data = await response.json();
       if (onSave) onSave(data);
-      onClose(); // Fecha somente após salvar
+      onClose();
     } catch (error) {
       console.error("Erro ao salvar conta:", error);
     }
   };
 
   const handleSalvarEPagar = async () => {
+    if (!fornecedorId) {
+      alert("Selecione um fornecedor antes de salvar.");
+      return;
+    }
+
     try {
       const novaConta = construirPayload();
       const response = await fetch("http://localhost:5000/api/contas-pagar", {
@@ -65,8 +86,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
 
       const data = await response.json();
       if (onSave) onSave(data);
-      if (onPagar) onPagar(data); // Aqui será aberto o PagamentoContaForm
-     
+      if (onPagar) onPagar(data);
     } catch (error) {
       console.error("Erro ao salvar e pagar:", error);
     }
@@ -84,22 +104,40 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
           />
+
           <select
             className="select select-bordered w-full"
             value={centroCustoId}
             onChange={(e) => setCentroCustoId(e.target.value)}
           >
             <option value="">Centro de Custo</option>
-            {centros.map(c => (
-              <option key={c.id} value={c.id}>{c.descricao}</option>
+            {centros.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.descricao}
+              </option>
             ))}
           </select>
+
+          <select
+            className="select select-bordered w-full"
+            value={fornecedorId}
+            onChange={(e) => setFornecedorId(e.target.value)}
+          >
+            <option value="">Fornecedor</option>
+            {fornecedores.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.nome}
+              </option>
+            ))}
+          </select>
+
           <input
             type="date"
             className="input input-bordered w-full"
             value={vencimento}
             onChange={(e) => setVencimento(e.target.value)}
           />
+
           <input
             type="number"
             placeholder="Valor (R$)"
@@ -107,6 +145,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             value={valor}
             onChange={(e) => setValor(e.target.value)}
           />
+
           <div className="flex gap-2">
             <select
               className="select select-bordered w-1/2"
@@ -124,6 +163,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
               onChange={(e) => setDesconto(e.target.value)}
             />
           </div>
+
           <input
             type="text"
             placeholder="Valor Total"

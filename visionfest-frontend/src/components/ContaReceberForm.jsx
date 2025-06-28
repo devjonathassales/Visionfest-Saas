@@ -25,9 +25,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
     fetch("http://localhost:5000/api/centrocusto")
       .then((res) => res.json())
       .then((data) => {
-        const custos = data.filter(
-          (c) => c.tipo === "Receita" || c.tipo === "Ambos"
-        );
+        const custos = data.filter((c) => c.tipo === "Receita" || c.tipo === "Ambos");
         setCentros(custos);
       })
       .catch((err) => console.error("Erro ao carregar centros de custo", err));
@@ -80,9 +78,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-xl">
-        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">
-          Nova Conta a Receber
-        </h2>
+        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Nova Conta a Receber</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <input
@@ -179,7 +175,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
           </button>
           <button
             className="px-5 py-2 rounded-lg text-white"
-            style={{ backgroundColor: "#3b82f6" }}
+            style={{ backgroundColor: "#7ed900" }}
             onClick={() => salvarConta("pagar")}
           >
             Salvar e Pagar

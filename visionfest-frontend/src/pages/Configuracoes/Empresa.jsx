@@ -1,240 +1,137 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import EmpresaCard from "../../components/EmpresaCard";
+import EmpresaForm from "../../components/EmpresaForm";
+import ModalVisualizarEmpresa from "../../components/ModalVisualizarEmpresa";
+
+const API_BASE = "http://localhost:5000/api";
 
 export default function CadastroEmpresa() {
-  const [empresa, setEmpresa] = useState({
-    nome: "",
-    documento: "",
-    whatsapp: "",
-    telefone: "",
-    email: "",
-    instagram: "",
-    logo: null,
-    enderecos: [
-      { logradouro: "", numero: "", bairro: "", cidade: "", estado: "", cep: "", padrao: true }
-    ],
-  });
+  const [empresas, setEmpresas] = useState([]);
+  const [mostrarFormulario, setMostrarFormulario] = useState(false);
+  const [empresaSelecionada, setEmpresaSelecionada] = useState(null);
+  const [empresaVisualizar, setEmpresaVisualizar] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleChange = (e, index = null, campo = null) => {
-    if (campo && index !== null) {
-      const novosEnderecos = [...empresa.enderecos];
-      novosEnderecos[index][campo] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+  useEffect(() => {
+    carregarEmpresas();
+  }, []);
 
-      // Se marcar como padrão, desmarca os outros
-      if (campo === "padrao" && e.target.checked) {
-        novosEnderecos.forEach((_, i) => {
-          novosEnderecos[i].padrao = i === index;
-        });
-      }
-
-      setEmpresa({ ...empresa, enderecos: novosEnderecos });
-    } else {
-      const { name, value } = e.target;
-      setEmpresa({ ...empresa, [name]: value });
+  const carregarEmpresas = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/empresa/todas`);
+      if (!res.ok) throw new Error("Erro ao carregar empresas");
+      const data = await res.json();
+      setEmpresas(data || []);
+    } catch (err) {
+      console.error("Erro ao carregar empresas:", err);
+      alert("Erro ao carregar empresas");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleLogoUpload = (e) => {
-    setEmpresa({ ...empresa, logo: e.target.files[0] });
+  const abrirFormulario = (empresa = null) => {
+    setEmpresaSelecionada(
+      empresa || {
+        nome: "",
+        documento: "",
+        whatsapp: "",
+        telefone: "",
+        email: "",
+        instagram: "",
+        logo: null,
+        enderecos: [
+          {
+            logradouro: "",
+            numero: "",
+            bairro: "",
+            cidade: "",
+            estado: "",
+            cep: "",
+            padrao: true,
+          },
+        ],
+      }
+    );
+    setMostrarFormulario(true);
   };
 
-  const adicionarEndereco = () => {
-    setEmpresa({
-      ...empresa,
-      enderecos: [
-        ...empresa.enderecos,
-        { logradouro: "", numero: "", bairro: "", cidade: "", estado: "", cep: "", padrao: false },
-      ],
-    });
+  const fecharFormulario = () => {
+    setMostrarFormulario(false);
+    setEmpresaSelecionada(null);
+    carregarEmpresas();
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // Aqui você pode enviar os dados para a API
-    alert("Empresa cadastrada com sucesso!");
+  const excluirEmpresa = async (empresa) => {
+    const confirmar = window.confirm(
+      `Tem certeza que deseja excluir a empresa "${empresa.nome}"?`
+    );
+    if (!confirmar) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/empresa/${empresa.id}`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || "Erro ao excluir empresa");
+
+      alert("Empresa excluída com sucesso!");
+      carregarEmpresas();
+    } catch (err) {
+      console.error("Erro ao excluir empresa:", err);
+      alert(err.message || "Erro ao excluir empresa");
+    }
   };
 
   return (
-    <div className="p-8 font-open">
+    <div className="p-6 font-open max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6">
-        Cadastro de Empresa
+        Empresas Cadastradas
       </h1>
 
-      <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-md p-6 space-y-6 max-w-3xl">
-        {/* Dados básicos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">Nome da Empresa</label>
-            <input
-              type="text"
-              name="nome"
-              value={empresa.nome}
-              onChange={handleChange}
-              required
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
+      {loading && <p>Carregando empresas...</p>}
 
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">CPF ou CNPJ</label>
-            <input
-              type="text"
-              name="documento"
-              value={empresa.documento}
-              onChange={handleChange}
-              required
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
+      {!loading && empresas.length === 0 && (
+        <p className="text-gray-500 mb-4">Nenhuma empresa cadastrada ainda.</p>
+      )}
 
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">Whatsapp</label>
-            <input
-              type="text"
-              name="whatsapp"
-              value={empresa.whatsapp}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">Telefone</label>
-            <input
-              type="text"
-              name="telefone"
-              value={empresa.telefone}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">E-mail</label>
-            <input
-              type="email"
-              name="email"
-              value={empresa.email}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-gray-700 font-semibold mb-1">Instagram</label>
-            <input
-              type="text"
-              name="instagram"
-              value={empresa.instagram}
-              onChange={handleChange}
-              className="w-full border px-3 py-2 rounded focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-        </div>
-
-        {/* Upload de Logo */}
-        <div>
-          <label className="block text-gray-700 font-semibold mb-1">Logomarca</label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleLogoUpload}
-            className="w-full"
+      {!loading &&
+        empresas.map((empresa, i) => (
+          <EmpresaCard
+            key={empresa.id || i}
+            empresa={empresa}
+            onEditar={() => abrirFormulario(empresa)}
+            onVisualizar={() => setEmpresaVisualizar(empresa)}
+            onExcluir={() => excluirEmpresa(empresa)}
           />
-          {empresa.logo && (
-            <p className="text-sm text-gray-600 mt-1">
-              Arquivo selecionado: {empresa.logo.name}
-            </p>
-          )}
-        </div>
+        ))}
 
-        {/* Endereços */}
-        <div>
-          <h2 className="text-xl font-montserrat font-semibold text-gray-800 mb-2">
-            Endereço(s)
-          </h2>
-          {empresa.enderecos.map((endereco, index) => (
-            <div key={index} className="mb-4 border p-4 rounded bg-gray-50 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input
-                  type="text"
-                  placeholder="Logradouro"
-                  value={endereco.logradouro}
-                  onChange={(e) => handleChange(e, index, "logradouro")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Número"
-                  value={endereco.numero}
-                  onChange={(e) => handleChange(e, index, "numero")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Bairro"
-                  value={endereco.bairro}
-                  onChange={(e) => handleChange(e, index, "bairro")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-              </div>
+      {!mostrarFormulario && (
+        <button
+          onClick={() => abrirFormulario()}
+          className="bg-[#7ED957] text-white px-6 py-2 rounded mt-4 hover:bg-[#65b344]"
+        >
+          Cadastrar Empresa
+        </button>
+      )}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input
-                  type="text"
-                  placeholder="Cidade"
-                  value={endereco.cidade}
-                  onChange={(e) => handleChange(e, index, "cidade")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="Estado"
-                  value={endereco.estado}
-                  onChange={(e) => handleChange(e, index, "estado")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-                <input
-                  type="text"
-                  placeholder="CEP"
-                  value={endereco.cep}
-                  onChange={(e) => handleChange(e, index, "cep")}
-                  className="border px-3 py-2 rounded w-full"
-                  required
-                />
-              </div>
+      {mostrarFormulario && empresaSelecionada && (
+        <EmpresaForm
+          empresa={empresaSelecionada}
+          onCancelar={fecharFormulario}
+          onSalvar={fecharFormulario}
+        />
+      )}
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={endereco.padrao}
-                  onChange={(e) => handleChange(e, index, "padrao")}
-                />
-                <label className="text-gray-700">Tornar este endereço o padrão</label>
-              </div>
-            </div>
-          ))}
-
-          <div className="flex items-center gap-2 mt-2">
-            <input type="checkbox" onChange={adicionarEndereco} />
-            <label className="text-gray-700">Adicionar outro endereço</label>
-          </div>
-        </div>
-
-        {/* Botão de Envio */}
-        <div className="text-right">
-          <button
-            type="submit"
-            className="bg-[#7ED957] hover:bg-green-600 text-white font-semibold px-6 py-2 rounded shadow"
-          >
-            Salvar Empresa
-          </button>
-        </div>
-      </form>
+      {empresaVisualizar && (
+        <ModalVisualizarEmpresa
+          empresa={empresaVisualizar}
+          onClose={() => setEmpresaVisualizar(null)}
+        />
+      )}
     </div>
   );
 }

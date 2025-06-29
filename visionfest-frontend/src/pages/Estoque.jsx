@@ -95,7 +95,9 @@ export default function EstoquePage() {
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      <h1 className="text-4xl font-bold mb-4 text-[#7ed957] text-center">Estoque</h1>
+      <h1 className="text-4xl font-bold mb-4 text-[#7ed957] text-center">
+        Estoque
+      </h1>
 
       <div className="flex flex-wrap gap-4 mb-4">
         <input
@@ -146,23 +148,27 @@ export default function EstoquePage() {
           <thead className="bg-gray-100">
             <tr>
               <th className="p-2 text-left">Produto</th>
-              <th className="p-2 text-center">Estoque Atual</th>
-              <th className="p-2 text-center">Estoque Mínimo</th>
+              <th className="p-2 text-center">Estoque Real</th>
               <th className="p-2 text-center">Provisionado</th>
+              <th className="p-2 text-center">Disponível</th>
+              <th className="p-2 text-center">Estoque Mínimo</th>
               <th className="p-2 text-center">Status</th>
             </tr>
           </thead>
           <tbody>
             {produtosFiltrados.map((produto) => {
-              const estoqueReal = produto.estoque - produto.provisionado;
-              const atingiuMinimo = estoqueReal <= produto.estoqueMinimo;
+              const estoqueReal = produto.estoque;
+              const provisionado = produto.provisionado;
+              const estoqueDisponivel = estoqueReal - provisionado;
+              const atingiuMinimo = estoqueDisponivel <= produto.estoqueMinimo;
 
               return (
                 <tr key={produto.id} className="border-t hover:bg-gray-50">
                   <td className="p-2">{produto.nome}</td>
-                  <td className="p-2 text-center">{produto.estoque}</td>
+                  <td className="p-2 text-center">{estoqueReal}</td>
+                  <td className="p-2 text-center">{provisionado}</td>
+                  <td className="p-2 text-center">{estoqueDisponivel}</td>
                   <td className="p-2 text-center">{produto.estoqueMinimo}</td>
-                  <td className="p-2 text-center">{produto.provisionado}</td>
                   <td
                     className={`p-2 text-center font-semibold ${
                       atingiuMinimo ? "text-red-500" : "text-green-600"
@@ -175,7 +181,7 @@ export default function EstoquePage() {
             })}
             {produtosFiltrados.length === 0 && (
               <tr>
-                <td colSpan="5" className="text-center py-4 text-gray-500">
+                <td colSpan="6" className="text-center py-4 text-gray-500">
                   Nenhum produto encontrado.
                 </td>
               </tr>

@@ -1,164 +1,59 @@
-import React from 'react';
+import React from "react";
 
 export default function ContratoVisualiza({ contrato, onClose }) {
-  if (!contrato) return null;
-
-  const {
-    cliente,
-    produtos,
-    tema,
-    cerimonialista,    // adicionado aqui
-    dataEvento,
-    horaInicio,
-    horaFim,
-    endereco,
-    buffet,
-    valorTotal,
-    desconto,
-    valorFinal,
-    entrada,
-    formaEntrada,
-    parcelas,
-    dataContrato,
-    empresa,
-  } = contrato;
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-5xl p-8 rounded shadow overflow-y-auto max-h-[90vh]">
-        {/* Cabeçalho */}
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-green-600">Contrato</h2>
-            <p className="text-sm text-gray-500">Data de Assinatura: {dataContrato}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-600 hover:text-red-600 font-bold text-xl"
-          >
-            ×
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 z-50 overflow-auto">
+      <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 overflow-auto max-h-[90vh]">
+        <h2 className="text-2xl font-bold text-[#7ED957] mb-6">
+          Contrato - {contrato.cliente}
+        </h2>
 
-        {/* Empresa */}
-        <div className="mb-6 border p-4 rounded">
-          <h3 className="font-semibold text-gray-700">Dados da Empresa</h3>
-          <p><strong>{empresa?.nome}</strong></p>
-          <p>{empresa?.endereco}</p>
-          <p>{empresa?.telefone} | {empresa?.email}</p>
-          {empresa?.logo && (
-            <img src={empresa.logo} alt="Logo Empresa" className="h-16 mt-2" />
+        <div className="space-y-3 text-sm md:text-base">
+          <p><strong>Data do Evento:</strong> {contrato.dataEvento}</p>
+          <p><strong>Horário Início:</strong> {contrato.horarioInicio}</p>
+          {contrato.horarioTermino && <p><strong>Horário Término:</strong> {contrato.horarioTermino}</p>}
+          <p><strong>Local:</strong> {contrato.local} - {contrato.bairro}</p>
+          <p><strong>Status:</strong> {contrato.status}</p>
+          <p><strong>Valor Total:</strong> R$ {contrato.valorTotal?.toFixed(2)}</p>
+
+          <h3 className="font-semibold mt-6">Produtos / Serviços</h3>
+          <ul className="list-disc list-inside">
+            {contrato.produtosSelecionados?.map((p) => (
+              <li key={p.produtoId}>
+                {p.nome} - Qtd: {p.quantidade} - Valor Unit: R$ {p.valor.toFixed(2)}
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-6"><strong>Cor/Tema da Festa:</strong> {contrato.corTema || "Não informado"}</p>
+          <p><strong>Endereço do Evento:</strong> {contrato.enderecoEvento || "Não informado"}</p>
+          <p><strong>Nome do Buffet/Bairro:</strong> {contrato.nomeBuffet}</p>
+          <p><strong>Valor Entrada:</strong> R$ {contrato.valorEntrada?.toFixed(2) || "0.00"}</p>
+          <p><strong>Forma Pagamento Entrada:</strong> {contrato.formaPagamentoEntradaNome || contrato.formaPagamentoEntradaId || "-"}</p>
+          <p><strong>Valor Restante:</strong> R$ {contrato.valorRestante?.toFixed(2) || "0.00"}</p>
+
+          {contrato.parcelas?.length > 0 && (
+            <>
+              <h3 className="font-semibold mt-6">Parcelas</h3>
+              <ul className="list-disc list-inside">
+                {contrato.parcelas.map((p, i) => (
+                  <li key={i}>
+                    R$ {Number(p.valor).toFixed(2)} - Vencimento: {p.vencimento}
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
         </div>
 
-        {/* Cliente */}
-        <div className="mb-6">
-          <h3 className="font-semibold text-gray-700 mb-2">Cliente:</h3>
-          <p><strong>{cliente}</strong></p>
+        <div className="flex justify-end mt-6 gap-4">
+          <button
+            onClick={onClose}
+            className="px-6 py-2 rounded border border-gray-300 hover:bg-gray-100"
+          >
+            Fechar
+          </button>
         </div>
-
-        {/* Detalhes do Evento */}
-        <div className="mb-6 grid md:grid-cols-2 gap-4">
-          <div>
-            <h4 className="font-semibold text-gray-700">Tema / Cores:</h4>
-            <p>{tema || 'Não informado'}</p>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-700">Cerimonialista:</h4>
-            <p>{cerimonialista || 'Não informado'}</p>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-700">Data do Evento:</h4>
-            <p>{dataEvento} - {horaInicio} às {horaFim}</p>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-700">Buffet / Bairro:</h4>
-            <p>{buffet}</p>
-          </div>
-          <div>
-            <h4 className="font-semibold text-gray-700">Endereço do Evento:</h4>
-            <p>{endereco || 'Não informado'}</p>
-          </div>
-        </div>
-
-        {/* Produtos / Serviços */}
-        <div className="mb-6">
-          <h4 className="font-semibold text-gray-700 mb-2">Produtos / Serviços Contratados:</h4>
-          <table className="w-full text-sm border">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border px-2 py-1 text-left">Produto</th>
-                <th className="border px-2 py-1 text-center">Qtd</th>
-                <th className="border px-2 py-1 text-right">Valor Unit.</th>
-                <th className="border px-2 py-1 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {produtos.map((item, index) => (
-                <tr key={index}>
-                  <td className="border px-2 py-1">{item.nome}</td>
-                  <td className="border px-2 py-1 text-center">{item.quantidade}</td>
-                  <td className="border px-2 py-1 text-right">R$ {item.preco.toFixed(2)}</td>
-                  <td className="border px-2 py-1 text-right">
-                    R$ {(item.preco * item.quantidade).toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Valores Financeiros */}
-        <div className="mb-6 grid md:grid-cols-2 gap-4">
-          <div>
-            <p>Valor Total: <strong>R$ {valorTotal.toFixed(2)}</strong></p>
-            <p>Desconto: <strong>R$ {desconto.toFixed(2)}</strong></p>
-            <p>Valor Final: <strong>R$ {valorFinal.toFixed(2)}</strong></p>
-          </div>
-          <div>
-            <p>Entrada: <strong>R$ {entrada.toFixed(2)}</strong></p>
-            <p>Forma de Pagamento da Entrada: <strong>{formaEntrada}</strong></p>
-            <p>Restante: <strong>R$ {(valorFinal - entrada).toFixed(2)}</strong></p>
-          </div>
-        </div>
-
-        {/* Parcelas */}
-        {parcelas.length > 0 && (
-          <div className="mb-6">
-            <h4 className="font-semibold text-gray-700 mb-2">Parcelas do Restante:</h4>
-            <table className="w-full text-sm border">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border px-2 py-1 text-center">Nº</th>
-                  <th className="border px-2 py-1 text-right">Valor</th>
-                  <th className="border px-2 py-1 text-center">Vencimento</th>
-                </tr>
-              </thead>
-              <tbody>
-                {parcelas.map((parcela, index) => (
-                  <tr key={index}>
-                    <td className="border px-2 py-1 text-center">{index + 1}</td>
-                    <td className="border px-2 py-1 text-right">R$ {parseFloat(parcela.valor).toFixed(2)}</td>
-                    <td className="border px-2 py-1 text-center">{parcela.vencimento}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Assinaturas */}
-        <div className="mt-10 flex justify-between items-center">
-          <div className="text-center">
-            <div className="border-t border-black w-64 mx-auto"></div>
-            <p className="text-sm mt-1">Assinatura do Cliente</p>
-          </div>
-          <div className="text-center">
-            <div className="border-t border-black w-64 mx-auto"></div>
-            <p className="text-sm mt-1">Assinatura da Empresa</p>
-          </div>
-        </div>
-
       </div>
     </div>
   );

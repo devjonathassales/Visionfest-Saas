@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const controller = require('../controllers/contaReceberController');
 
+// ⚠️ ROTAS FIXAS PRIMEIRO
+router.get('/formas-pagamento', controller.getFormasPagamento);
+
+// ROTAS COM PARÂMETROS
 router.get('/', controller.listar);
 router.get('/:id', controller.obterPorId);
 router.post('/', controller.criar);

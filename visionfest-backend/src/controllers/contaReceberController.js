@@ -27,8 +27,14 @@ exports.listar = async (req, res) => {
 };
 
 exports.obterPorId = async (req, res) => {
+  const { id } = req.params;
+
+  if (isNaN(Number(id))) {
+    return res.status(400).json({ error: "ID inválido." });
+  }
+
   try {
-    const conta = await ContaReceber.findByPk(req.params.id, {
+    const conta = await ContaReceber.findByPk(id, {
       include: [
         { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
         {
@@ -61,6 +67,7 @@ exports.atualizar = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+
     await conta.update(req.body);
     res.json(conta);
   } catch (e) {
@@ -79,6 +86,8 @@ exports.receber = async (req, res) => {
       parcelas,
       valorRecebido,
       novaDataVencimento,
+      cartaoId,
+      taxaRepassada,
     } = req.body;
 
     const conta = await ContaReceber.findByPk(req.params.id);
@@ -88,12 +97,14 @@ exports.receber = async (req, res) => {
     const valorTotalNum = parseFloat(conta.valorTotal || 0);
 
     await conta.update({
-      dataRecebimento,
+      dataRecebimento: dataRecebimento || new Date(),
       formaPagamento,
       contaBancariaId: contaBancariaId || null,
+      cartaoId: cartaoId || null,
       valorRecebido: valorRecebidoNum,
       tipoCredito: tipoCredito || null,
       parcelas: parcelas || null,
+      taxaRepassada: taxaRepassada || false,
       status: "pago",
     });
 
@@ -125,18 +136,20 @@ exports.estornar = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-    if (conta.status !== "pago")
-      return res
-        .status(400)
-        .json({ error: "Só é possível estornar uma conta paga." });
+
+    if (conta.status !== "pago") {
+      return res.status(400).json({ error: "Só é possível estornar uma conta paga." });
+    }
 
     await conta.update({
       dataRecebimento: null,
       formaPagamento: null,
       contaBancariaId: null,
+      cartaoId: null,
       valorRecebido: null,
       tipoCredito: null,
       parcelas: null,
+      taxaRepassada: false,
       status: "aberto",
     });
 
@@ -151,15 +164,32 @@ exports.excluir = async (req, res) => {
   try {
     const conta = await ContaReceber.findByPk(req.params.id);
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-    if (conta.status === "pago")
-      return res
-        .status(400)
-        .json({ error: "Não é possível excluir uma conta já paga." });
+
+    if (conta.status === "pago") {
+      return res.status(400).json({ error: "Não é possível excluir uma conta já paga." });
+    }
 
     await conta.destroy();
     res.sendStatus(204);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao excluir conta." });
+  }
+};
+
+exports.getFormasPagamento = (req, res) => {
+  try {
+    const formasPagamento = [
+      { id: 1, nome: "Dinheiro" },
+      { id: 2, nome: "Cartão de Crédito" },
+      { id: 3, nome: "Cartão de Débito" },
+      { id: 4, nome: "Pix" },
+      { id: 5, nome: "Transferência" },
+      { id: 6, nome: "Boleto" },
+    ];
+    res.json(formasPagamento);
+  } catch (err) {
+    console.error("Erro ao obter formas de pagamento:", err);
+    res.status(500).json({ error: "Erro ao obter formas de pagamento." });
   }
 };

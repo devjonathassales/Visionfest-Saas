@@ -15,9 +15,19 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
+      produtoId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: { model: "produtos", key: "id" },
+      },
     },
     {
       tableName: "estoque_movimentacoes",
+      indexes: [
+        { fields: ["produtoId"] },
+        { fields: ["data"] },
+        { fields: ["produtoId", "data"] },
+      ],
       timestamps: true,
     }
   );

@@ -17,6 +17,7 @@ const caixaRoutes = require("./routes/caixaRoutes");
 const empresaRoutes = require("./routes/empresaRoutes");
 const usuarioRoutes = require('./routes/usuarioRoutes');
 const permissoesRoutes = require('./routes/permissoesRoutes');
+const contratosRouter = require("./routes/contratoRoutes");
 
 const app = express();
 
@@ -41,5 +42,6 @@ app.use('/api/caixa', caixaRoutes);
 app.use('/api/empresa', empresaRoutes);
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/permissoes', permissoesRoutes);
+app.use("/api/contratos", contratosRouter);
 
 module.exports = app;

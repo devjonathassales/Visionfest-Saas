@@ -63,6 +63,15 @@ module.exports = (sequelize, DataTypes) => {
         },
         field: "referencia_id",
       },
+      contratoId: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: "contratos",
+          key: "id",
+        },
+        field: "contrato_id",
+      },
     },
     {
       tableName: "contas_receber",
@@ -89,6 +98,10 @@ module.exports = (sequelize, DataTypes) => {
     ContaReceber.belongsTo(models.ContaReceber, {
       as: "referencia",
       foreignKey: "referenciaId",
+    });
+    ContaReceber.belongsTo(models.Contrato, {
+      foreignKey: "contratoId",
+      as: "contrato",
     });
   };
 

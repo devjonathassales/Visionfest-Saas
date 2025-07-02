@@ -3,7 +3,10 @@ const {
   CentroCusto,
   ContaBancaria,
   Cliente,
+  Contrato,
 } = require("../models");
+
+const { atualizarStatusContratoSePago } = require("../utils/financeiro");
 
 exports.listar = async (req, res) => {
   try {
@@ -120,9 +123,15 @@ exports.receber = async (req, res) => {
         vencimento: novaDataVencimento,
         centroCustoId: conta.centroCustoId,
         clienteId: conta.clienteId,
+        contratoId: conta.contratoId || null,
         status: "aberto",
         referenciaId: conta.id,
       });
+    }
+
+    // ✅ Atualiza status do contrato se todas as contas estiverem pagas
+    if (conta.contratoId) {
+      await atualizarStatusContratoSePago(conta.contratoId);
     }
 
     res.json(conta);
@@ -138,7 +147,9 @@ exports.estornar = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status !== "pago") {
-      return res.status(400).json({ error: "Só é possível estornar uma conta paga." });
+      return res
+        .status(400)
+        .json({ error: "Só é possível estornar uma conta paga." });
     }
 
     await conta.update({
@@ -166,7 +177,9 @@ exports.excluir = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status === "pago") {
-      return res.status(400).json({ error: "Não é possível excluir uma conta já paga." });
+      return res
+        .status(400)
+        .json({ error: "Não é possível excluir uma conta já paga." });
     }
 
     await conta.destroy();

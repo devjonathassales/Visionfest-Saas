@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import ContratoForm from "../components/ContratoForm";
+import ContratoWizard from "../components/ContratoWizard";
 import ContratoVisualiza from "../components/ContratoVisualiza";
 import { toast } from "react-toastify";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
 export default function ContratosPage() {
-  const [mostrarForm, setMostrarForm] = useState(false);
+  const [mostrarWizard, setMostrarWizard] = useState(false);
   const [visualizandoContrato, setVisualizandoContrato] = useState(null);
 
   const [contratos, setContratos] = useState([]);
@@ -59,10 +59,12 @@ export default function ContratosPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto font-open">
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat">Contratos</h1>
+        <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat">
+          Contratos
+        </h1>
 
         <button
-          onClick={() => setMostrarForm(true)}
+          onClick={() => setMostrarWizard(true)}
           className="bg-[#7ED957] text-white px-5 py-2 rounded hover:bg-green-700 transition"
         >
           Novo Contrato
@@ -79,7 +81,10 @@ export default function ContratosPage() {
         />
 
         <div className="flex gap-2 items-center min-w-[320px]">
-          <label htmlFor="dataInicio" className="font-semibold whitespace-nowrap">
+          <label
+            htmlFor="dataInicio"
+            className="font-semibold whitespace-nowrap"
+          >
             Data Início:
           </label>
           <input
@@ -129,13 +134,21 @@ export default function ContratosPage() {
               contratos.map((contrato) => (
                 <tr key={contrato.id} className="hover:bg-gray-50">
                   <td className="border px-4 py-2">{contrato.cliente}</td>
-                  <td className="border px-4 py-2 text-center">{contrato.dataEvento}</td>
-                  <td className="border px-4 py-2 text-center">{contrato.horarioInicio}</td>
-                  <td className="border px-4 py-2 text-center">{contrato.horarioTermino || "-"}</td>
+                  <td className="border px-4 py-2 text-center">
+                    {contrato.dataEvento}
+                  </td>
+                  <td className="border px-4 py-2 text-center">
+                    {contrato.horarioInicio}
+                  </td>
+                  <td className="border px-4 py-2 text-center">
+                    {contrato.horarioTermino || "-"}
+                  </td>
                   <td className="border px-4 py-2">
                     {contrato.local} - {contrato.bairro}
                   </td>
-                  <td className="border px-4 py-2 text-center">{contrato.status}</td>
+                  <td className="border px-4 py-2 text-center">
+                    {contrato.status}
+                  </td>
                   <td className="border px-4 py-2 text-center">
                     <button
                       onClick={() => setVisualizandoContrato(contrato)}
@@ -152,11 +165,10 @@ export default function ContratosPage() {
         </table>
       </div>
 
-      {mostrarForm && (
-        <ContratoForm
-          onClose={() => setMostrarForm(false)}
-          onSalvar={() => {
-            setMostrarForm(false);
+      {mostrarWizard && (
+        <ContratoWizard
+          onFinalizar={() => {
+            setMostrarWizard(false);
             fetchContratos();
           }}
         />

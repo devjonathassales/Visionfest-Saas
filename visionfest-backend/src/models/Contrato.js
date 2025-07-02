@@ -1,7 +1,8 @@
+// models/Contrato.js
 module.exports = (sequelize, DataTypes) => {
   const Contrato = sequelize.define("Contrato", {
     clienteId: {
-      type: DataTypes.UUID, // Alterado para UUID
+      type: DataTypes.UUID,
       allowNull: false,
     },
     dataEvento: {
@@ -48,10 +49,6 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       defaultValue: 0,
     },
-    parcelasRestante: {
-      type: DataTypes.JSON, // array com parcelas {valor, vencimento}
-      allowNull: true,
-    },
     dataContrato: {
       type: DataTypes.DATEONLY,
       allowNull: false,
@@ -60,6 +57,9 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.ENUM("Aberto", "Parcialmente Pago", "Totalmente Pago"),
       defaultValue: "Aberto",
     },
+  }, {
+    tableName: "contratos", // <- se quiser deixar explícito
+    underscored: true,      // <- boas práticas
   });
 
   Contrato.associate = (models) => {
@@ -75,5 +75,5 @@ module.exports = (sequelize, DataTypes) => {
     });
   };
 
-  return Contrato;
+  return Contrato; // ✅ ESSENCIAL
 };

@@ -8,6 +8,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM("Custo", "Receita", "Ambos"),
         allowNull: false,
       },
+      ativo: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+      },
     },
     {
       tableName: "centros_custo",
@@ -16,10 +20,11 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   CentroCusto.associate = (models) => {
-  CentroCusto.hasMany(models.ContaPagar, {
-    foreignKey: "centroCustoId",
-    as: "contasPagar",
-  });
-};
-return CentroCusto;
+    CentroCusto.hasMany(models.ContaPagar, {
+      foreignKey: "centroCustoId",
+      as: "contasPagar",
+    });
+  };
+
+  return CentroCusto;
 };

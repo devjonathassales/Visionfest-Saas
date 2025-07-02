@@ -4,15 +4,16 @@ const {
   Produto,
   ContratoProduto,
   ContaReceber,
+  CentroCusto,
   sequelize,
 } = require("../models");
 const { Op } = require("sequelize");
+const { gerarContasReceberContrato } = require("../utils/financeiro");
 
 module.exports = {
   listar: async (req, res) => {
     try {
       const { cliente, dataInicio, dataFim } = req.query;
-
       const where = {};
 
       if (cliente) {
@@ -20,14 +21,11 @@ module.exports = {
           where: { nome: { [Op.iLike]: `%${cliente}%` } },
           attributes: ["id"],
         });
-        const clientesIds = clientes.map((c) => c.id);
-        where.clienteId = { [Op.in]: clientesIds };
+        where.clienteId = { [Op.in]: clientes.map((c) => c.id) };
       }
 
       if (dataInicio && dataFim) {
-        where.dataEvento = {
-          [Op.between]: [dataInicio, dataFim],
-        };
+        where.dataEvento = { [Op.between]: [dataInicio, dataFim] };
       }
 
       const contratos = await Contrato.findAll({
@@ -54,10 +52,10 @@ module.exports = {
         dataEvento,
         horarioInicio,
         horarioTermino,
-        localEvento,
+        enderecoEvento,
         nomeBuffet,
-        temaFesta,
-        produtos, // array [{produtoId, quantidade}]
+        corTema,
+        produtosSelecionados,
         valorTotal,
         descontoValor,
         descontoPercentual,
@@ -67,16 +65,21 @@ module.exports = {
         dataContrato,
       } = req.body;
 
-      // Criar contrato
+      const [centroContrato] = await CentroCusto.findOrCreate({
+        where: { descricao: "Contratos" },
+        defaults: { tipo: "Receita" },
+        transaction: t,
+      });
+
       const contrato = await Contrato.create(
         {
           clienteId,
           dataEvento,
           horarioInicio,
           horarioTermino,
-          localEvento,
+          localEvento: enderecoEvento,
           nomeBuffet,
-          temaFesta,
+          temaFesta: corTema,
           valorTotal,
           descontoValor,
           descontoPercentual,
@@ -94,59 +97,48 @@ module.exports = {
         { transaction: t }
       );
 
-      // Associar produtos com quantidade
-      if (produtos && produtos.length) {
-        for (const p of produtos) {
+      await contrato.reload({ transaction: t });
+
+      if (
+        Array.isArray(produtosSelecionados) &&
+        produtosSelecionados.length > 0
+      ) {
+        for (const p of produtosSelecionados) {
           await ContratoProduto.create(
             {
               contratoId: contrato.id,
               produtoId: p.produtoId,
               quantidade: p.quantidade || 1,
-              dataEvento: dataEvento,
+              dataEvento,
             },
             { transaction: t }
           );
         }
       }
 
-      // Criar contas a receber para entrada e restante
-      if (valorEntrada > 0) {
-        await ContaReceber.create(
-          {
-            descricao: `Entrada do contrato #${contrato.id}`,
-            valor: valorEntrada,
-            valorTotal: valorEntrada,
-            vencimento: dataContrato, // pode usar dataContrato como vencimento da entrada
-            status: "pago", // entrada já paga
-            clienteId,
-            contratoId: contrato.id,
-            dataRecebimento: new Date(),
-          },
-          { transaction: t }
-        );
-      }
-
-      if (valorRestante > 0) {
-        await ContaReceber.create(
-          {
-            descricao: `Saldo restante do contrato #${contrato.id}`,
-            valor: valorRestante,
-            valorTotal: valorRestante,
-            vencimento:
-              parcelasRestante && parcelasRestante.length > 0
-                ? parcelasRestante[0].vencimento
-                : dataContrato,
-            status: "aberto",
-            clienteId,
-            contratoId: contrato.id,
-          },
-          { transaction: t }
-        );
-      }
+      await gerarContasReceberContrato(
+        contrato,
+        {
+          clienteId,
+          centroCustoId: centroContrato.id,
+          valorEntrada,
+          dataContrato,
+          valorRestante,
+          parcelasRestante,
+        },
+        t
+      );
 
       await t.commit();
 
-      res.status(201).json(contrato);
+      const contratoCompleto = await Contrato.findByPk(contrato.id, {
+        include: [
+          { model: Cliente, attributes: ["id", "nome"] },
+          { model: Produto, through: { attributes: ["quantidade"] } },
+        ],
+      });
+
+      res.status(201).json(contratoCompleto);
     } catch (err) {
       await t.rollback();
       console.error(err);
@@ -163,10 +155,10 @@ module.exports = {
         dataEvento,
         horarioInicio,
         horarioTermino,
-        localEvento,
+        enderecoEvento,
         nomeBuffet,
-        temaFesta,
-        produtos,
+        corTema,
+        produtosSelecionados,
         valorTotal,
         descontoValor,
         descontoPercentual,
@@ -180,15 +172,21 @@ module.exports = {
       if (!contrato)
         return res.status(404).json({ error: "Contrato não encontrado" });
 
+      const [centroContrato] = await CentroCusto.findOrCreate({
+        where: { descricao: "Contratos" },
+        defaults: { tipo: "Receita" },
+        transaction: t,
+      });
+
       await contrato.update(
         {
           clienteId,
           dataEvento,
           horarioInicio,
           horarioTermino,
-          localEvento,
+          localEvento: enderecoEvento,
           nomeBuffet,
-          temaFesta,
+          temaFesta: corTema,
           valorTotal,
           descontoValor,
           descontoPercentual,
@@ -206,65 +204,53 @@ module.exports = {
         { transaction: t }
       );
 
-      // Atualizar produtos: remover antigos e inserir novos
       await ContratoProduto.destroy({
         where: { contratoId: id },
         transaction: t,
       });
-      if (produtos && produtos.length) {
-        for (const p of produtos) {
+
+      if (
+        Array.isArray(produtosSelecionados) &&
+        produtosSelecionados.length > 0
+      ) {
+        for (const p of produtosSelecionados) {
           await ContratoProduto.create(
             {
               contratoId: contrato.id,
               produtoId: p.produtoId,
               quantidade: p.quantidade || 1,
-              dataEvento: dataEvento,
+              dataEvento,
             },
             { transaction: t }
           );
         }
       }
 
-      // Atualizar contas a receber: remover antigas e recriar
       await ContaReceber.destroy({ where: { contratoId: id }, transaction: t });
 
-      if (valorEntrada > 0) {
-        await ContaReceber.create(
-          {
-            descricao: `Entrada do contrato #${contrato.id}`,
-            valor: valorEntrada,
-            valorTotal: valorEntrada,
-            vencimento: dataContrato,
-            status: "pago",
-            clienteId,
-            contratoId: contrato.id,
-            dataRecebimento: new Date(),
-          },
-          { transaction: t }
-        );
-      }
-
-      if (valorRestante > 0) {
-        await ContaReceber.create(
-          {
-            descricao: `Saldo restante do contrato #${contrato.id}`,
-            valor: valorRestante,
-            valorTotal: valorRestante,
-            vencimento:
-              parcelasRestante && parcelasRestante.length > 0
-                ? parcelasRestante[0].vencimento
-                : dataContrato,
-            status: "aberto",
-            clienteId,
-            contratoId: contrato.id,
-          },
-          { transaction: t }
-        );
-      }
+      await gerarContasReceberContrato(
+        contrato,
+        {
+          clienteId,
+          centroCustoId: centroContrato.id,
+          valorEntrada,
+          dataContrato,
+          valorRestante,
+          parcelasRestante,
+        },
+        t
+      );
 
       await t.commit();
 
-      res.json(contrato);
+      const contratoAtualizado = await Contrato.findByPk(contrato.id, {
+        include: [
+          { model: Cliente, attributes: ["id", "nome"] },
+          { model: Produto, through: { attributes: ["quantidade"] } },
+        ],
+      });
+
+      res.json(contratoAtualizado);
     } catch (err) {
       await t.rollback();
       console.error(err);
@@ -276,7 +262,6 @@ module.exports = {
     const t = await sequelize.transaction();
     try {
       const id = req.params.id;
-
       const contrato = await Contrato.findByPk(id);
       if (!contrato)
         return res.status(404).json({ error: "Contrato não encontrado" });
@@ -285,11 +270,12 @@ module.exports = {
         where: { contratoId: id },
         transaction: t,
       });
+
       await ContaReceber.destroy({ where: { contratoId: id }, transaction: t });
+
       await contrato.destroy({ transaction: t });
 
       await t.commit();
-
       res.json({ message: "Contrato excluído com sucesso" });
     } catch (err) {
       await t.rollback();
@@ -308,8 +294,10 @@ module.exports = {
           { model: ContaReceber, as: "contasReceber" },
         ],
       });
+
       if (!contrato)
         return res.status(404).json({ error: "Contrato não encontrado" });
+
       res.json(contrato);
     } catch (err) {
       console.error(err);

@@ -6,29 +6,36 @@ export default function PagamentoEntrada({
   form,
   setForm,
 }) {
-  const [valorAjustado, setValorAjustado] = useState(form.valorEntrada || 0);
+  const [valorAjustado, setValorAjustado] = useState("0.00");
 
   useEffect(() => {
-    let valor = parseFloat(form.valorEntrada || 0);
-    const cartao = cartoes.find((c) => c.id === Number(form.cartaoId));
-    if (
-      ["credito", "debito"].includes(form.formaPagamentoEntrada) &&
-      cartao &&
-      !form.taxaRepassada
-    ) {
-      let taxa = 0;
-      if (form.formaPagamentoEntrada === "credito") {
-        taxa =
-          form.tipoCredito === "parcelado"
-            ? cartao.taxaParcelado || 0
-            : cartao.taxaVista || 0;
-      } else {
-        taxa = cartao.taxaDebito || 0;
+    const calcularValorLiquido = () => {
+      let valor = parseFloat(form.valorEntrada || 0);
+      const cartao = cartoes.find((c) => c.id === Number(form.cartaoId));
+
+      if (
+        ["credito", "debito"].includes(form.formaPagamentoEntrada) &&
+        cartao &&
+        !form.taxaRepassada
+      ) {
+        let taxa = 0;
+        if (form.formaPagamentoEntrada === "credito") {
+          taxa =
+            form.tipoCredito === "parcelado"
+              ? cartao.taxaParcelado || 0
+              : cartao.taxaVista || 0;
+        } else {
+          taxa = cartao.taxaDebito || 0;
+        }
+
+        valor = valor * (1 - taxa / 100);
       }
-      valor = valor * (1 - taxa / 100);
-    }
-    setValorAjustado(valor.toFixed(2));
-    setForm((f) => ({ ...f, valorRecebido: valor }));
+
+      setForm((f) => ({ ...f, valorRecebido: valor }));
+      setValorAjustado(valor.toFixed(2));
+    };
+
+    calcularValorLiquido();
   }, [
     form.valorEntrada,
     form.formaPagamentoEntrada,
@@ -49,14 +56,16 @@ export default function PagamentoEntrada({
 
   return (
     <div className="border rounded-md p-4 bg-gray-50 space-y-3">
-      <h3 className="text-md font-semibold text-[#7ED957] mb-2">Forma de Pagamento da Entrada</h3>
+      <h3 className="text-md font-semibold text-[#7ED957] mb-2">
+        Forma de Pagamento da Entrada
+      </h3>
 
       {/* Forma de pagamento */}
       <div>
         <label className="block mb-1">Forma de Pagamento *</label>
         <select
           name="formaPagamentoEntrada"
-          className="select select-bordered w-full"
+          className="w-full border p-2 rounded"
           value={form.formaPagamentoEntrada}
           onChange={(e) => {
             const value = e.target.value;
@@ -80,13 +89,13 @@ export default function PagamentoEntrada({
         </select>
       </div>
 
-      {/* Conta bancária */}
+      {/* Conta Bancária */}
       {["pix", "transferencia"].includes(form.formaPagamentoEntrada) && (
         <div>
           <label className="block mb-1">Conta Bancária *</label>
           <select
             name="contaBancariaId"
-            className="select select-bordered w-full"
+            className="w-full border p-2 rounded"
             value={form.contaBancariaId}
             onChange={handleChange}
           >
@@ -100,14 +109,14 @@ export default function PagamentoEntrada({
         </div>
       )}
 
-      {/* Cartão e máquina */}
+      {/* Cartão */}
       {["credito", "debito"].includes(form.formaPagamentoEntrada) && (
         <>
           <div>
             <label className="block mb-1">Cartão *</label>
             <select
               name="cartaoId"
-              className="select select-bordered w-full"
+              className="w-full border p-2 rounded"
               value={form.cartaoId}
               onChange={handleChange}
             >
@@ -121,7 +130,7 @@ export default function PagamentoEntrada({
             </select>
           </div>
 
-          <label className="flex items-center gap-2 mt-1">
+          <label className="flex items-center gap-2 mt-2">
             <input
               type="checkbox"
               name="taxaRepassada"
@@ -140,7 +149,7 @@ export default function PagamentoEntrada({
             <label className="block mb-1">Tipo de Crédito *</label>
             <select
               name="tipoCredito"
-              className="select select-bordered w-full"
+              className="w-full border p-2 rounded"
               value={form.tipoCredito}
               onChange={handleChange}
             >
@@ -157,7 +166,7 @@ export default function PagamentoEntrada({
                 type="number"
                 min={1}
                 name="parcelasCredito"
-                className="input input-bordered w-full"
+                className="w-full border p-2 rounded"
                 value={form.parcelasCredito}
                 onChange={handleChange}
               />
@@ -166,18 +175,21 @@ export default function PagamentoEntrada({
         </>
       )}
 
-      {/* Valor líquido com taxa (exibição) */}
-      {["credito", "debito"].includes(form.formaPagamentoEntrada) && !form.taxaRepassada && (
-        <div>
-          <label className="block mb-1 text-sm">Valor líquido com taxa (aproximado)</label>
-          <input
-            type="text"
-            readOnly
-            className="input input-bordered bg-gray-100 w-full"
-            value={`R$ ${valorAjustado}`}
-          />
-        </div>
-      )}
+      {/* Valor líquido */}
+      {["credito", "debito"].includes(form.formaPagamentoEntrada) &&
+        !form.taxaRepassada && (
+          <div>
+            <label className="block mb-1 text-sm">
+              Valor líquido com taxa (aproximado)
+            </label>
+            <input
+              type="text"
+              readOnly
+              className="w-full bg-gray-100 border rounded p-2"
+              value={`R$ ${valorAjustado}`}
+            />
+          </div>
+        )}
     </div>
   );
 }

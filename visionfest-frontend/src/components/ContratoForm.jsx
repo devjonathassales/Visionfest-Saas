@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from "react";
 import Select from "react-select";
-import PagamentoEntrada from "./PagamentoEntrada";
 
 const API_BASE = "http://localhost:5000/api";
 
-export default function ContratoForm({ onClose, onSalvar }) {
+export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
-  const [formasPagamento, setFormasPagamento] = useState([]);
-  const [contasBancarias, setContasBancarias] = useState([]);
-  const [cartoes, setCartoes] = useState([]);
+
+  // Estado para controle do produto selecionado e quantidade temporária antes de adicionar
+  const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+  const [quantidadeProduto, setQuantidadeProduto] = useState(1);
 
   const [form, setForm] = useState({
     clienteId: "",
@@ -20,573 +20,412 @@ export default function ContratoForm({ onClose, onSalvar }) {
     horarioTermino: "",
     enderecoEvento: "",
     nomeBuffet: "",
-    desconto: { tipo: "valor", valor: 0 },
-    valorTotal: 0,
-    valorEntrada: 0,
-    formaPagamentoEntrada: "",
-    contaBancariaId: "",
-    cartaoId: "",
-    tipoCredito: "",
-    parcelasCredito: 1,
-    taxaRepassada: false,
-    valorRestante: 0,
-    parcelas: [],
     dataContrato: new Date().toISOString().slice(0, 10),
+    valorTotal: 0,
   });
 
+  // Carregar clientes e produtos
   useEffect(() => {
-    async function fetchDados() {
-      try {
-        const [rc, rp, rf, rb, rct] = await Promise.all([
-          fetch(`${API_BASE}/clientes`),
-          fetch(`${API_BASE}/produtos`),
-          fetch(`${API_BASE}/contas-receber/formas-pagamento`),
-          fetch(`${API_BASE}/contas-bancarias`),
-          fetch(`${API_BASE}/cartoes-credito`),
-        ]);
-
-        if (!rc.ok || !rp.ok || !rf.ok || !rb.ok || !rct.ok) {
-          throw new Error("Erro ao carregar dados do servidor");
-        }
-
-        const clientesJson = await rc.json();
-        const produtosJson = await rp.json();
-        const formasPagamentoJson = await rf.json();
-        const contasBancariasJson = await rb.json();
-        const cartoesJson = await rct.json();
-
-        setClientes(clientesJson);
-        setProdutos(produtosJson);
-        setFormasPagamento(Array.isArray(formasPagamentoJson) ? formasPagamentoJson : []);
-        setContasBancarias(contasBancariasJson);
-        setCartoes(cartoesJson);
-      } catch (err) {
-        console.error("Erro ao buscar dados:", err);
-        setFormasPagamento([]); // evita erro no render
-      }
+    async function carregarDados() {
+      const [resClientes, resProdutos] = await Promise.all([
+        fetch(`${API_BASE}/clientes`),
+        fetch(`${API_BASE}/produtos`),
+      ]);
+      const [clientesJson, produtosJson] = await Promise.all([
+        resClientes.json(),
+        resProdutos.json(),
+      ]);
+      setClientes(clientesJson);
+      setProdutos(produtosJson);
     }
-    fetchDados();
+    carregarDados();
   }, []);
 
+  // Preenche os campos se estiver editando
   useEffect(() => {
-    const totalProdutos = form.produtosSelecionados.reduce(
-      (acc, item) => acc + item.valor * item.quantidade,
+    if (contrato) {
+      setForm({
+        clienteId: contrato.clienteId,
+        produtosSelecionados:
+          contrato.Produtos?.map((p) => ({
+            produtoId: p.id,
+            nome: p.nome,
+            valor: p.valor,
+            quantidade: p.ContratoProduto?.quantidade || 1,
+          })) || [],
+        corTema: contrato.corTema || "",
+        dataEvento: contrato.dataEvento || "",
+        horarioInicio: contrato.horarioInicio || "",
+        horarioTermino: contrato.horarioTermino || "",
+        enderecoEvento: contrato.enderecoEvento || "",
+        nomeBuffet: contrato.nomeBuffet || "",
+        dataContrato:
+          contrato.dataContrato || new Date().toISOString().slice(0, 10),
+        valorTotal: 0, // Será recalculado
+      });
+    }
+  }, [contrato]);
+
+  // Recalcular valor total sempre que produtosSelecionados mudar
+  useEffect(() => {
+    const total = form.produtosSelecionados.reduce(
+      (acc, p) => acc + p.valor * p.quantidade,
       0
     );
-    const descontoVal =
-      form.desconto.tipo === "percentual"
-        ? (totalProdutos * form.desconto.valor) / 100
-        : form.desconto.valor;
-    const valorTotal = Math.max(totalProdutos - descontoVal, 0);
-    const valorRestante = Math.max(valorTotal - form.valorEntrada, 0);
-    setForm((f) => ({ ...f, valorTotal, valorRestante }));
-  }, [form.produtosSelecionados, form.desconto, form.valorEntrada]);
+    setForm((f) => ({ ...f, valorTotal: total }));
+  }, [form.produtosSelecionados]);
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    if (name.startsWith("desconto.")) {
-      const key = name.split(".")[1];
-      setForm((f) => ({
-        ...f,
-        desconto: {
-          ...f.desconto,
-          [key]: name === "desconto.valor" ? Number(value) : value,
-        },
-      }));
-    } else if (name === "taxaRepassada") {
-      setForm((f) => ({ ...f, taxaRepassada: checked }));
-    } else {
-      setForm((f) => ({
-        ...f,
-        [name]: type === "number" ? Number(value) : value,
-      }));
+  // Função para adicionar produto selecionado com a quantidade informada
+  const adicionarProduto = () => {
+    if (!produtoSelecionado) {
+      alert("Selecione um produto para adicionar.");
+      return;
     }
-  };
+    if (!quantidadeProduto || quantidadeProduto < 1) {
+      alert("Informe uma quantidade válida (mínimo 1).");
+      return;
+    }
 
-  const adicionarProduto = (produto) => {
     setForm((f) => {
-      const existe = f.produtosSelecionados.find((p) => p.produtoId === produto.id);
-      if (existe) {
+      const existente = f.produtosSelecionados.find(
+        (p) => p.produtoId === produtoSelecionado.value
+      );
+
+      if (existente) {
+        // Atualiza a quantidade somando
         return {
           ...f,
           produtosSelecionados: f.produtosSelecionados.map((p) =>
-            p.produtoId === produto.id ? { ...p, quantidade: p.quantidade + 1 } : p
+            p.produtoId === produtoSelecionado.value
+              ? { ...p, quantidade: p.quantidade + quantidadeProduto }
+              : p
           ),
         };
       }
+
+      // Adiciona novo produto
       return {
         ...f,
         produtosSelecionados: [
           ...f.produtosSelecionados,
           {
-            produtoId: produto.id,
-            nome: produto.nome,
-            quantidade: 1,
-            valor: produto.valor,
+            produtoId: produtoSelecionado.value,
+            nome: produtoSelecionado.label.split(" - R$")[0],
+            valor:
+              produtos.find((p) => p.id === produtoSelecionado.value)?.valor ||
+              0,
+            quantidade: quantidadeProduto,
           },
         ],
       };
     });
+
+    // Reseta seleção e quantidade
+    setProdutoSelecionado(null);
+    setQuantidadeProduto(1);
   };
 
-  const removerProduto = (produtoId) => {
-    setForm((f) => ({
-      ...f,
-      produtosSelecionados: f.produtosSelecionados.filter((p) => p.produtoId !== produtoId),
-    }));
-  };
-
-  const alterarQuantidade = (produtoId, quantidade) => {
-    if (quantidade < 1) return;
+  // Alterar quantidade do produto na lista
+  const alterarQuantidadeProduto = (produtoId, novaQuantidade) => {
+    if (novaQuantidade < 1) return;
     setForm((f) => ({
       ...f,
       produtosSelecionados: f.produtosSelecionados.map((p) =>
-        p.produtoId === produtoId ? { ...p, quantidade } : p
+        p.produtoId === produtoId ? { ...p, quantidade: novaQuantidade } : p
       ),
     }));
   };
 
-  const alterarParcela = (index, campo, valor) => {
-    setForm((f) => {
-      const ps = [...f.parcelas];
-      ps[index] = { ...ps[index], [campo]: valor };
-      return { ...f, parcelas: ps };
-    });
+  // Remover produto da lista
+  const removerProduto = (produtoId) => {
+    setForm((f) => ({
+      ...f,
+      produtosSelecionados: f.produtosSelecionados.filter(
+        (p) => p.produtoId !== produtoId
+      ),
+    }));
   };
 
-  const adicionarParcela = () =>
-    setForm((f) => ({
-      ...f,
-      parcelas: [...f.parcelas, { valor: "", vencimento: "" }],
-    }));
-
-  const removerParcela = (i) =>
-    setForm((f) => ({
-      ...f,
-      parcelas: f.parcelas.filter((_, idx) => idx !== i),
-    }));
+  // Validação simples antes do submit
+  const validarFormulario = () => {
+    if (!form.clienteId) {
+      alert("Selecione um cliente.");
+      return false;
+    }
+    if (form.produtosSelecionados.length === 0) {
+      alert("Adicione pelo menos um produto/serviço.");
+      return false;
+    }
+    if (!form.nomeBuffet.trim()) {
+      alert("Informe o nome do buffet.");
+      return false;
+    }
+    if (!form.dataEvento) {
+      alert("Informe a data do evento.");
+      return false;
+    }
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.clienteId || !form.dataEvento || form.produtosSelecionados.length === 0) {
-      alert("Preencha os campos obrigatórios.");
-      return;
-    }
-    if (form.valorEntrada > 0 && !form.formaPagamentoEntrada) {
-      alert("Selecione a forma de pagamento da entrada.");
-      return;
-    }
+    if (!validarFormulario()) return;
 
-    const payloadContrato = {
+    const produtosPayload = form.produtosSelecionados.map((p) => ({
+      produtoId: p.produtoId,
+      quantidade: p.quantidade,
+    }));
+
+    const payload = {
       clienteId: form.clienteId,
+      corTema: form.corTema,
       dataEvento: form.dataEvento,
       horarioInicio: form.horarioInicio,
       horarioTermino: form.horarioTermino,
-      localEvento: form.enderecoEvento,
+      enderecoEvento: form.enderecoEvento,
       nomeBuffet: form.nomeBuffet,
-      temaFesta: form.corTema,
-      produtos: form.produtosSelecionados.map((p) => ({
-        produtoId: p.produtoId,
-        quantidade: p.quantidade,
-      })),
-      valorTotal: form.valorTotal,
-      descontoValor: form.desconto.tipo === "valor" ? form.desconto.valor : 0,
-      descontoPercentual: form.desconto.tipo === "percentual",
-      valorEntrada: form.valorEntrada,
-      valorRestante: form.valorRestante,
-      parcelasRestante: form.parcelas,
       dataContrato: form.dataContrato,
+      produtos: produtosPayload,
+      valorTotal: form.valorTotal,
     };
 
     try {
-      const res = await fetch(`${API_BASE}/contratos`, {
-        method: "POST",
+      const url = contrato
+        ? `${API_BASE}/contratos/${contrato.id}`
+        : `${API_BASE}/contratos`;
+
+      const method = contrato ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payloadContrato),
+        body: JSON.stringify(payload),
       });
-      const contrato = await res.json();
 
-      if (form.valorEntrada > 0) {
-        const pagamento = {
-          formaPagamento: form.formaPagamentoEntrada,
-          contaBancariaId: form.contaBancariaId || null,
-          cartaoId: form.cartaoId || null,
-          tipoCredito: form.tipoCredito || null,
-          parcelas: form.tipoCredito === "parcelado" ? form.parcelasCredito : null,
-          taxaRepassada: form.taxaRepassada,
-          valorRecebido: form.valorEntrada,
-        };
+      if (!res.ok) throw new Error("Falha ao salvar contrato.");
 
-        await fetch(`${API_BASE}/contas-receber/${contrato.id}/receber`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(pagamento),
-        });
-      }
-
-      onSalvar(contrato);
-      onClose();
+      const data = await res.json();
+      onContratoSalvo(data);
     } catch (err) {
       console.error(err);
-      alert("Erro ao salvar contrato: " + err.message);
+      alert("Erro ao salvar contrato.");
     }
   };
 
-  // Componente interno para busca e seleção de produtos
-  function ProdutoSearch({ produtos, onAdicionar }) {
-    const [query, setQuery] = useState("");
-    const [filtrados, setFiltrados] = useState([]);
-
-    useEffect(() => {
-      if (!query) {
-        setFiltrados([]);
-        return;
-      }
-      const q = query.toLowerCase();
-      setFiltrados(produtos.filter((p) => p.nome.toLowerCase().includes(q)).slice(0, 10));
-    }, [query, produtos]);
-
-    return (
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Busque um produto..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-        />
-        {filtrados.length > 0 && (
-          <ul className="absolute z-10 bg-white border border-gray-300 w-full max-h-48 overflow-auto rounded mt-1">
-            {filtrados.map((p) => (
-              <li
-                key={p.id}
-                onClick={() => {
-                  onAdicionar(p);
-                  setQuery("");
-                  setFiltrados([]);
-                }}
-                className="cursor-pointer px-3 py-2 hover:bg-green-50"
-              >
-                {p.nome} — R$ {p.valor.toFixed(2)}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 z-50 overflow-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center pt-20 z-50">
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded-lg shadow-lg max-w-4xl w-full p-6 overflow-auto max-h-[90vh] space-y-6"
+        className="bg-white rounded p-6 max-w-3xl w-full space-y-4 shadow-lg"
       >
-        <h2 className="text-xl font-semibold text-[#7ED957] mb-4">Novo Contrato</h2>
+        <h2 className="text-xl font-bold text-[#7ED957]">
+          {contrato ? "Editar Contrato" : "Novo Contrato"}
+        </h2>
 
-        {/* Cliente */}
         <div>
           <label className="block font-semibold mb-1">Cliente *</label>
           <Select
-            options={clientes.map((c) => ({
-              value: c.id,
-              label: c.nome,
-            }))}
+            options={clientes.map((c) => ({ value: c.id, label: c.nome }))}
             value={
               clientes
                 .map((c) => ({ value: c.id, label: c.nome }))
                 .find((op) => op.value === form.clienteId) || null
             }
-            onChange={(selectedOption) =>
-              setForm((f) => ({
-                ...f,
-                clienteId: selectedOption ? selectedOption.value : "",
-              }))
+            onChange={(op) =>
+              setForm((f) => ({ ...f, clienteId: op?.value || "" }))
             }
-            placeholder="Selecione ou pesquise um cliente"
+            placeholder="Selecione um cliente"
             isClearable
-            className="react-select-container"
-            classNamePrefix="react-select"
           />
         </div>
 
-        {/* Produtos / Serviços */}
-        <div>
-          <label className="block font-semibold mb-2">Produtos / Serviços *</label>
-          <Select
-            options={produtos.map((p) => ({
-              value: p.id,
-              label: `${p.nome} — R$ ${p.valor.toFixed(2)}`,
-              produto: p,
-            }))}
-            onChange={(selectedOption) => {
-              if (selectedOption?.produto) {
-                adicionarProduto(selectedOption.produto);
+        <div className="grid grid-cols-3 gap-2 items-end">
+          <div>
+            <label className="block font-semibold mb-1">Adicionar Produto</label>
+            <Select
+              options={produtos.map((p) => ({
+                value: p.id,
+                label: `${p.nome} - R$ ${p.valor.toFixed(2)}`,
+              }))}
+              value={produtoSelecionado}
+              onChange={setProdutoSelecionado}
+              placeholder="Selecione um produto"
+              isClearable
+            />
+          </div>
+          <div>
+            <label className="block font-semibold mb-1">Quantidade</label>
+            <input
+              type="number"
+              min="1"
+              value={quantidadeProduto}
+              onChange={(e) =>
+                setQuantidadeProduto(parseInt(e.target.value) || 1)
               }
-            }}
-            placeholder="Selecione ou pesquise um produto"
-            isClearable
-            className="react-select-container"
-            classNamePrefix="react-select"
-          />
+              className="border rounded px-2 py-1 w-full"
+            />
+          </div>
+          <div>
+            <button
+              type="button"
+              onClick={adicionarProduto}
+              className="bg-[#7ED957] text-white px-4 py-2 rounded"
+            >
+              Adicionar
+            </button>
+          </div>
+        </div>
 
-          {/* Lista de produtos selecionados */}
-          {form.produtosSelecionados.length > 0 && (
-            <table className="w-full mt-4 text-sm border-collapse">
+        {form.produtosSelecionados.length > 0 && (
+          <div>
+            <h4 className="font-semibold mb-2">Produtos Selecionados</h4>
+            <table className="w-full border-collapse text-sm">
               <thead>
-                <tr>
-                  <th className="border px-2 py-1 text-left">Produto</th>
-                  <th className="border px-2 py-1">Qtd</th>
-                  <th className="border px-2 py-1">Valor Unit.</th>
-                  <th className="border px-2 py-1">Subtotal</th>
-                  <th className="border px-2 py-1">Remover</th>
+                <tr className="border-b border-gray-300">
+                  <th className="text-left p-2">Produto</th>
+                  <th className="text-left p-2">Valor Unit.</th>
+                  <th className="text-left p-2">Quantidade</th>
+                  <th className="text-left p-2">Subtotal</th>
+                  <th className="text-left p-2">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {form.produtosSelecionados.map((p) => (
-                  <tr key={p.produtoId}>
-                    <td className="border px-2 py-1">{p.nome}</td>
-                    <td className="border px-2 py-1">
+                  <tr key={p.produtoId} className="border-b border-gray-200">
+                    <td className="p-2">{p.nome}</td>
+                    <td className="p-2">R$ {p.valor.toFixed(2)}</td>
+                    <td className="p-2">
                       <input
                         type="number"
-                        min={1}
+                        min="1"
                         value={p.quantidade}
-                        onChange={(e) => alterarQuantidade(p.produtoId, +e.target.value)}
-                        className="w-16 border border-gray-300 rounded px-1 py-0.5"
+                        onChange={(e) =>
+                          alterarQuantidadeProduto(
+                            p.produtoId,
+                            parseInt(e.target.value) || 1
+                          )
+                        }
+                        className="border rounded px-1 py-0.5 w-16"
                       />
                     </td>
-                    <td className="border px-2 py-1 text-center">R$ {p.valor.toFixed(2)}</td>
-                    <td className="border px-2 py-1 text-center">
+                    <td className="p-2">
                       R$ {(p.valor * p.quantidade).toFixed(2)}
                     </td>
-                    <td className="border px-2 py-1 text-center">
+                    <td className="p-2">
                       <button
                         type="button"
                         onClick={() => removerProduto(p.produtoId)}
-                        className="text-red-600 hover:text-red-800 font-semibold"
+                        className="text-red-600 font-bold"
+                        title="Remover produto"
                       >
-                        X
+                        ✕
                       </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block font-semibold">Cor/Tema</label>
+            <input
+              type="text"
+              value={form.corTema}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, corTema: e.target.value }))
+              }
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
+          <div>
+            <label className="block font-semibold">Nome do Buffet *</label>
+            <input
+              type="text"
+              required
+              value={form.nomeBuffet}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, nomeBuffet: e.target.value }))
+              }
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
         </div>
 
-        {/* Cor ou tema da festa */}
+        <div className="grid grid-cols-3 gap-4">
+          <input
+            type="date"
+            value={form.dataEvento}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, dataEvento: e.target.value }))
+            }
+            className="border rounded px-2 py-1"
+          />
+          <input
+            type="time"
+            value={form.horarioInicio}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, horarioInicio: e.target.value }))
+            }
+            className="border rounded px-2 py-1"
+          />
+          <input
+            type="time"
+            value={form.horarioTermino}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, horarioTermino: e.target.value }))
+            }
+            className="border rounded px-2 py-1"
+          />
+        </div>
+
         <div>
-          <label className="block font-semibold mb-1">Cor/Tema da Festa (opcional)</label>
+          <label className="block font-semibold">Endereço do Evento</label>
           <input
             type="text"
-            name="corTema"
-            value={form.corTema}
-            onChange={handleChange}
-            placeholder="Ex: Azul e Branco"
-            className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
+            value={form.enderecoEvento}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, enderecoEvento: e.target.value }))
+            }
+            className="w-full border rounded px-2 py-1"
           />
         </div>
 
-        {/* Datas e horários */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block font-semibold mb-1">Data do Evento *</label>
-            <input
-              type="date"
-              name="dataEvento"
-              value={form.dataEvento}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Horário Início *</label>
-            <input
-              type="time"
-              name="horarioInicio"
-              value={form.horarioInicio}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Horário Término</label>
-            <input
-              type="time"
-              name="horarioTermino"
-              value={form.horarioTermino}
-              onChange={handleChange}
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-        </div>
-
-        {/* Endereço e buffet */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block font-semibold mb-1">Endereço do Evento (opcional)</label>
-            <input
-              type="text"
-              name="enderecoEvento"
-              value={form.enderecoEvento}
-              onChange={handleChange}
-              placeholder="Ex: Rua das Flores, 123"
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-          <div>
-            <label className="block font-semibold mb-1">Nome do Buffet/Bairro</label>
-            <input
-              type="text"
-              name="nomeBuffet"
-              value={form.nomeBuffet}
-              onChange={handleChange}
-              required
-              className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-        </div>
-
-        {/* Valores, desconto e entrada */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block font-semibold mb-1">Desconto</label>
-            <div className="flex gap-2">
-              <select
-                name="desconto.tipo"
-                value={form.desconto.tipo}
-                onChange={handleChange}
-                className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:border-[#7ED957]"
-              >
-                <option value="valor">Valor (R$)</option>
-                <option value="percentual">Percentual (%)</option>
-              </select>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.desconto.valor}
-                onChange={(e) =>
-                  setForm((f) => ({
-                    ...f,
-                    desconto: { ...f.desconto, valor: Number(e.target.value) },
-                  }))
-                }
-                className="border border-gray-300 rounded px-3 py-2 w-full focus:outline-none focus:border-[#7ED957]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block font-semibold mb-1">Valor Total (R$)</label>
-            <input
-              type="text"
-              value={form.valorTotal.toFixed(2)}
-              readOnly
-              className="border border-gray-300 rounded px-3 py-2 bg-gray-100 cursor-not-allowed"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold mb-1">Valor Entrada (R$)</label>
-            <input
-              type="number"
-              min="0"
-              max={form.valorTotal}
-              name="valorEntrada"
-              value={form.valorEntrada}
-              onChange={handleChange}
-              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
-            />
-          </div>
-
-          <div>
-            <label className="block font-semibold mb-1">Valor Restante (R$)</label>
-            <input
-              type="text"
-              value={form.valorRestante.toFixed(2)}
-              readOnly
-              className="border border-gray-300 rounded px-3 py-2 bg-gray-100 cursor-not-allowed"
-            />
-          </div>
-        </div>
-
-        {/* Forma de pagamento da entrada */}
-        {form.valorEntrada > 0 && (
-          <PagamentoEntrada
-            formasPagamento={formasPagamento}
-            contasBancarias={contasBancarias}
-            cartoes={cartoes}
-            form={form}
-            setForm={setForm}
+        <div>
+          <label className="block font-semibold">Data do Contrato</label>
+          <input
+            type="date"
+            value={form.dataContrato}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, dataContrato: e.target.value }))
+            }
+            className="border rounded px-2 py-1"
           />
-        )}
+        </div>
 
-        {/* Parcelas para o valor restante */}
-        {form.valorRestante > 0 && (
-          <div>
-            <label className="block font-semibold mb-2">Parcelas do valor restante</label>
-
-            {form.parcelas.map((p, i) => (
-              <div key={i} className="flex gap-4 mb-2 items-end">
-                <div>
-                  <label className="block text-sm font-semibold">Valor (R$)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={p.valor}
-                    onChange={(e) => alterarParcela(i, "valor", Number(e.target.value))}
-                    className="border border-gray-300 rounded px-3 py-2 w-32 focus:outline-none focus:border-[#7ED957]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold">Vencimento</label>
-                  <input
-                    type="date"
-                    value={p.vencimento}
-                    onChange={(e) => alterarParcela(i, "vencimento", e.target.value)}
-                    className="border border-gray-300 rounded px-3 py-2 w-40 focus:outline-none focus:border-[#7ED957]"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removerParcela(i)}
-                  className="text-red-600 font-semibold"
-                >
-                  Remover
-                </button>
-              </div>
-            ))}
-
-            <button
-              type="button"
-              onClick={adicionarParcela}
-              className="bg-[#7ED957] text-white rounded px-4 py-2 mt-2 hover:bg-green-600"
-            >
-              Adicionar Parcela
-            </button>
+        <div>
+          <label className="font-bold">Valor Total</label>
+          <div className="text-lg font-semibold">
+            R$ {form.valorTotal.toFixed(2)}
           </div>
-        )}
+        </div>
 
-        {/* Botões de ação */}
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="flex justify-end gap-4 pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 border border-gray-400 rounded hover:bg-gray-100"
+            className="px-4 py-2 border rounded"
           >
             Cancelar
           </button>
           <button
             type="submit"
-            className="px-4 py-2 bg-[#7ED957] text-white rounded hover:bg-green-600"
+            className="px-4 py-2 bg-[#7ED957] text-white rounded"
           >
-            Salvar Contrato
+            {contrato ? "Atualizar Contrato" : "Salvar Contrato"}
           </button>
         </div>
       </form>

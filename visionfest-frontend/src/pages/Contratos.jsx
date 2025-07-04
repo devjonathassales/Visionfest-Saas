@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import ContratoWizard from "../components/ContratoWizard";
 import ContratoVisualiza from "../components/ContratoVisualiza";
 import { toast } from "react-toastify";
+import { FaEye, FaEdit, FaTrash } from "react-icons/fa";
 
 const API_BASE_URL = "http://localhost:5000/api";
 
 export default function ContratosPage() {
   const [mostrarWizard, setMostrarWizard] = useState(false);
   const [visualizandoContrato, setVisualizandoContrato] = useState(null);
-
   const [contratos, setContratos] = useState([]);
   const [filtroCliente, setFiltroCliente] = useState("");
 
@@ -21,8 +21,9 @@ export default function ContratosPage() {
 
   const [dataFim, setDataFim] = useState(() => {
     const hoje = new Date();
-    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    return ultimoDia.toISOString().slice(0, 10);
+    return new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+      .toISOString()
+      .slice(0, 10);
   });
 
   const fetchContratos = useCallback(async () => {
@@ -56,6 +57,23 @@ export default function ContratosPage() {
     fetchContratos();
   }, [fetchContratos]);
 
+  const excluirContrato = async (id) => {
+    if (!window.confirm("Deseja realmente excluir este contrato?")) return;
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/contratos/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) throw new Error("Erro ao excluir contrato");
+
+      toast.success("Contrato excluído com sucesso!");
+      fetchContratos();
+    } catch (err) {
+      toast.error("Erro ao excluir contrato: " + err.message);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto font-open">
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
@@ -80,29 +98,26 @@ export default function ContratosPage() {
           onChange={(e) => setFiltroCliente(e.target.value)}
         />
 
-        <div className="flex gap-2 items-center min-w-[320px]">
-          <label
-            htmlFor="dataInicio"
-            className="font-semibold whitespace-nowrap"
-          >
+        <div className="flex flex-wrap gap-2 items-center min-w-[320px]">
+          <label htmlFor="dataInicio" className="font-semibold">
             Data Início:
           </label>
           <input
             id="dataInicio"
             type="date"
-            className="border border-gray-300 rounded px-3 py-2 flex-1 focus:outline-none focus:border-[#7ED957]"
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
             value={dataInicio}
             max={dataFim}
             onChange={(e) => setDataInicio(e.target.value)}
           />
 
-          <label htmlFor="dataFim" className="font-semibold whitespace-nowrap">
+          <label htmlFor="dataFim" className="font-semibold">
             Data Fim:
           </label>
           <input
             id="dataFim"
             type="date"
-            className="border border-gray-300 rounded px-3 py-2 flex-1 focus:outline-none focus:border-[#7ED957]"
+            className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:border-[#7ED957]"
             value={dataFim}
             min={dataInicio}
             onChange={(e) => setDataFim(e.target.value)}
@@ -113,13 +128,13 @@ export default function ContratosPage() {
       <div className="overflow-x-auto rounded shadow">
         <table className="w-full table-auto border-collapse text-sm md:text-base">
           <thead>
-            <tr className="bg-gray-100">
-              <th className="border px-4 py-3 text-left">Cliente</th>
-              <th className="border px-4 py-3">Data do Evento</th>
-              <th className="border px-4 py-3">Início</th>
-              <th className="border px-4 py-3">Término</th>
+            <tr className="bg-gray-100 text-left">
+              <th className="border px-4 py-3">Cliente</th>
+              <th className="border px-4 py-3 text-center">Data</th>
+              <th className="border px-4 py-3 text-center">Início</th>
+              <th className="border px-4 py-3 text-center">Término</th>
               <th className="border px-4 py-3">Local</th>
-              <th className="border px-4 py-3">Status</th>
+              <th className="border px-4 py-3 text-center">Status</th>
               <th className="border px-4 py-3 text-center">Ações</th>
             </tr>
           </thead>
@@ -150,13 +165,32 @@ export default function ContratosPage() {
                     {contrato.status}
                   </td>
                   <td className="border px-4 py-2 text-center">
-                    <button
-                      onClick={() => setVisualizandoContrato(contrato)}
-                      className="text-[#7ED957] font-semibold hover:underline"
-                      title="Visualizar Contrato"
-                    >
-                      Visualizar
-                    </button>
+                    <div className="flex justify-center gap-2 text-sm">
+                      <button
+                        onClick={() => setVisualizandoContrato(contrato)}
+                        className="text-[#7ED957] hover:underline"
+                        title="Visualizar"
+                      >
+                        <FaEye />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setMostrarWizard(true);
+                          setVisualizandoContrato(contrato);
+                        }}
+                        className="text-blue-500 hover:underline"
+                        title="Editar"
+                      >
+                        <FaEdit />
+                      </button>
+                      <button
+                        onClick={() => excluirContrato(contrato.id)}
+                        className="text-red-500 hover:underline"
+                        title="Excluir"
+                      >
+                        <FaTrash />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -167,14 +201,16 @@ export default function ContratosPage() {
 
       {mostrarWizard && (
         <ContratoWizard
+          contrato={visualizandoContrato}
           onFinalizar={() => {
             setMostrarWizard(false);
+            setVisualizandoContrato(null);
             fetchContratos();
           }}
         />
       )}
 
-      {visualizandoContrato && (
+      {visualizandoContrato && !mostrarWizard && (
         <ContratoVisualiza
           contrato={visualizandoContrato}
           onClose={() => setVisualizandoContrato(null)}

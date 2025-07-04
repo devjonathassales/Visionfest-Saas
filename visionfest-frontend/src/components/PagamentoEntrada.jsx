@@ -54,6 +54,10 @@ export default function PagamentoEntrada({
     }));
   };
 
+  const isContaObrigatoria = ["pix", "transferencia", "deposito", "boleto"].includes(
+    form.formaPagamentoEntrada
+  );
+
   return (
     <div className="border rounded-md p-4 bg-gray-50 space-y-3">
       <h3 className="text-md font-semibold text-[#7ED957] mb-2">
@@ -62,7 +66,7 @@ export default function PagamentoEntrada({
 
       {/* Forma de pagamento */}
       <div>
-        <label className="block mb-1">Forma de Pagamento *</label>
+        <label className="block font-medium mb-1">Forma de Pagamento *</label>
         <select
           name="formaPagamentoEntrada"
           className="w-full border p-2 rounded"
@@ -86,13 +90,15 @@ export default function PagamentoEntrada({
           <option value="debito">Débito</option>
           <option value="credito">Crédito</option>
           <option value="transferencia">Transferência</option>
+          <option value="deposito">Depósito</option>
+          <option value="boleto">Boleto</option>
         </select>
       </div>
 
       {/* Conta Bancária */}
-      {["pix", "transferencia"].includes(form.formaPagamentoEntrada) && (
+      {isContaObrigatoria && (
         <div>
-          <label className="block mb-1">Conta Bancária *</label>
+          <label className="block font-medium mb-1">Conta Bancária *</label>
           <select
             name="contaBancariaId"
             className="w-full border p-2 rounded"
@@ -113,7 +119,7 @@ export default function PagamentoEntrada({
       {["credito", "debito"].includes(form.formaPagamentoEntrada) && (
         <>
           <div>
-            <label className="block mb-1">Cartão *</label>
+            <label className="block font-medium mb-1">Cartão *</label>
             <select
               name="cartaoId"
               className="w-full border p-2 rounded"
@@ -130,23 +136,23 @@ export default function PagamentoEntrada({
             </select>
           </div>
 
-          <label className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 mt-2">
             <input
               type="checkbox"
               name="taxaRepassada"
               checked={form.taxaRepassada}
               onChange={handleChange}
             />
-            Repassar taxa ao cliente?
-          </label>
+            <label className="font-medium">Repassar taxa ao cliente?</label>
+          </div>
         </>
       )}
 
-      {/* Tipo de crédito */}
+      {/* Tipo de Crédito */}
       {form.formaPagamentoEntrada === "credito" && (
         <>
           <div>
-            <label className="block mb-1">Tipo de Crédito *</label>
+            <label className="block font-medium mb-1">Tipo de Crédito *</label>
             <select
               name="tipoCredito"
               className="w-full border p-2 rounded"
@@ -161,7 +167,7 @@ export default function PagamentoEntrada({
 
           {form.tipoCredito === "parcelado" && (
             <div>
-              <label className="block mb-1">Parcelas *</label>
+              <label className="block font-medium mb-1">Parcelas *</label>
               <input
                 type="number"
                 min={1}
@@ -179,7 +185,7 @@ export default function PagamentoEntrada({
       {["credito", "debito"].includes(form.formaPagamentoEntrada) &&
         !form.taxaRepassada && (
           <div>
-            <label className="block mb-1 text-sm">
+            <label className="block font-medium text-sm mb-1">
               Valor líquido com taxa (aproximado)
             </label>
             <input

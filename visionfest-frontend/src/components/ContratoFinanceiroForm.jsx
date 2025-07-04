@@ -3,15 +3,19 @@ import PagamentoEntrada from "./PagamentoEntrada";
 
 const API_BASE = "http://localhost:5000/api";
 
-export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) {
+export default function ContratoFinanceiroForm({
+  contrato,
+  onClose,
+  onSalvar,
+}) {
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [contasBancarias, setContasBancarias] = useState([]);
   const [cartoes, setCartoes] = useState([]);
 
   const [form, setForm] = useState({
     valorTotal: 0,
-    desconto: { tipo: "valor", valor: 0 },
-    valorEntrada: 0,
+    desconto: { tipo: "valor", valor: "" },
+    valorEntrada: "",
     formaPagamentoEntrada: "",
     contaBancariaId: "",
     cartaoId: "",
@@ -35,22 +39,20 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
     carregarDados();
   }, []);
 
-  // Carregar dados do contrato no formulário financeiro
   useEffect(() => {
     if (contrato) {
-      setForm({
-        valorTotal: contrato.valorTotal || 0,
+      const total = contrato.valorTotal || 0;
+      const entrada = contrato.valorEntrada || 0;
+      const restante = Math.max(total - entrada, 0);
+
+      setForm((f) => ({
+        ...f,
+        valorTotal: total,
         desconto: {
-          tipo:
-            contrato.descontoPercentual && contrato.descontoPercentual > 0
-              ? "percentual"
-              : "valor",
-          valor:
-            contrato.descontoPercentual && contrato.descontoPercentual > 0
-              ? contrato.descontoPercentual
-              : contrato.descontoValor || 0,
+          tipo: contrato.descontoPercentual ? "percentual" : "valor",
+          valor: contrato.descontoPercentual || contrato.descontoValor || "",
         },
-        valorEntrada: contrato.valorEntrada || 0,
+        valorEntrada: entrada || "",
         formaPagamentoEntrada: contrato.formaPagamentoEntrada || "",
         contaBancariaId: contrato.contaBancariaId || "",
         cartaoId: contrato.cartaoId || "",
@@ -60,31 +62,43 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
         parcelas:
           contrato.parcelasRestante?.map((p) => ({
             valor: p.valor,
-            vencimento: p.vencimento ? p.vencimento.slice(0, 10) : "",
-          })) || [],
-      });
+            vencimento: p.vencimento?.slice(0, 10) || "",
+          })) || (restante > 0 ? [{ valor: restante, vencimento: "" }] : []),
+      }));
     }
   }, [contrato]);
 
-  // Cálculo do desconto e valor restante
+  const parseCurrency = (val) => {
+    if (typeof val === "string") {
+      val = val.replace(",", ".").replace(/[^\d.]/g, "");
+    }
+    return parseFloat(val) || 0;
+  };
+
   const descontoCalculado =
     form.desconto.tipo === "percentual"
-      ? (form.valorTotal * form.desconto.valor) / 100
-      : form.desconto.valor;
+      ? (form.valorTotal * parseCurrency(form.desconto.valor)) / 100
+      : parseCurrency(form.desconto.valor);
 
   const totalComDesconto = Math.max(form.valorTotal - descontoCalculado, 0);
-  const valorRestante = Math.max(totalComDesconto - form.valorEntrada, 0);
+  const valorEntrada = parseCurrency(form.valorEntrada);
+  const valorRestante = Math.max(totalComDesconto - valorEntrada, 0);
   const somaParcelas = form.parcelas.reduce(
-    (acc, p) => acc + (parseFloat(p.valor) || 0),
+    (acc, p) => acc + parseCurrency(p.valor),
     0
   );
+
   const podeAdicionarParcela = somaParcelas < valorRestante;
 
   const adicionarParcela = () => {
-    if (podeAdicionarParcela) {
+    const restante = valorRestante - somaParcelas;
+    if (restante > 0) {
       setForm((f) => ({
         ...f,
-        parcelas: [...f.parcelas, { valor: "", vencimento: "" }],
+        parcelas: [
+          ...f.parcelas,
+          { valor: restante.toFixed(2), vencimento: "" },
+        ],
       }));
     }
   };
@@ -92,7 +106,15 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
   const alterarParcela = (index, campo, valor) => {
     setForm((f) => {
       const parcelas = [...f.parcelas];
-      parcelas[index][campo] = campo === "valor" ? parseFloat(valor) || 0 : valor;
+      if (campo === "valor") {
+        let val = parseCurrency(valor);
+        const restante =
+          valorRestante - somaParcelas + parseCurrency(parcelas[index].valor);
+        if (val > restante) val = restante;
+        parcelas[index].valor = val;
+      } else {
+        parcelas[index][campo] = valor;
+      }
       return { ...f, parcelas };
     });
   };
@@ -104,77 +126,48 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
     }));
   };
 
-  // Validações antes de salvar
   const validarFormulario = () => {
-    if (form.valorEntrada < 0) {
-      alert("Valor de entrada não pode ser negativo.");
-      return false;
-    }
-
-    if (form.desconto.valor < 0) {
-      alert("Valor do desconto não pode ser negativo.");
-      return false;
-    }
-
-    if (form.desconto.tipo === "percentual" && form.desconto.valor > 100) {
-      alert("Percentual de desconto não pode ser maior que 100%.");
-      return false;
-    }
-
-    if (somaParcelas > valorRestante) {
-      alert("A soma das parcelas não pode exceder o valor restante.");
-      return false;
-    }
+    if (valorEntrada < 0) return alert("Entrada não pode ser negativa.");
+    if (parseCurrency(form.desconto.valor) < 0)
+      return alert("Desconto inválido.");
+    if (
+      form.desconto.tipo === "percentual" &&
+      parseCurrency(form.desconto.valor) > 100
+    )
+      return alert("Desconto percentual não pode exceder 100%.");
+    if (somaParcelas > valorRestante)
+      return alert("Parcelas maiores que valor restante.");
 
     for (let i = 0; i < form.parcelas.length; i++) {
       const p = form.parcelas[i];
-      if (!p.valor || p.valor <= 0) {
-        alert(`Parcela ${i + 1}: Valor deve ser maior que zero.`);
-        return false;
-      }
-      if (!p.vencimento) {
-        alert(`Parcela ${i + 1}: Data de vencimento é obrigatória.`);
-        return false;
-      }
+      if (!p.valor || p.valor <= 0) return alert(`Parcela ${i + 1} inválida.`);
+      if (!p.vencimento) return alert(`Parcela ${i + 1} sem vencimento.`);
     }
 
-    // Se houver valorEntrada, validar forma de pagamento mínima
-    if (form.valorEntrada > 0) {
-      if (!form.formaPagamentoEntrada) {
-        alert("Selecione a forma de pagamento da entrada.");
-        return false;
-      }
-      // Dependendo da formaPagamentoEntrada, validar conta bancária, cartão etc.
-      if (
-        ["cartao_credito", "cartao_debito"].includes(form.formaPagamentoEntrada) &&
-        !form.cartaoId
-      ) {
-        alert("Selecione o cartão para o pagamento da entrada.");
-        return false;
-      }
-      if (
-        ["boleto", "deposito", "transferencia", "dinheiro"].includes(
-          form.formaPagamentoEntrada
-        ) &&
-        !form.contaBancariaId
-      ) {
-        alert("Selecione a conta bancária para o pagamento da entrada.");
-        return false;
-      }
+    if (valorEntrada > 0) {
+      const precisaConta = [
+        "pix",
+        "deposito",
+        "boleto",
+        "transferencia",
+      ].includes(form.formaPagamentoEntrada);
+      const precisaCartao = ["cartao_credito", "cartao_debito"].includes(
+        form.formaPagamentoEntrada
+      );
+
+      if (!form.formaPagamentoEntrada)
+        return alert("Informe a forma de pagamento da entrada.");
+      if (precisaConta && !form.contaBancariaId)
+        return alert("Selecione a conta bancária.");
+      if (precisaCartao && !form.cartaoId) return alert("Selecione o cartão.");
     }
 
     return true;
   };
 
   const handleSalvar = async () => {
-    if (!contrato?.id) {
-      alert("Contrato inválido.");
-      return;
-    }
-
-    if (!validarFormulario()) {
-      return;
-    }
+    if (!contrato?.id) return alert("Contrato inválido.");
+    if (!validarFormulario()) return;
 
     const payload = {
       clienteId: contrato.clienteId,
@@ -186,10 +179,14 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
       temaFesta: contrato.temaFesta,
       produtos: contrato.produtosSelecionados || [],
       valorTotal: form.valorTotal,
-      descontoValor: form.desconto.tipo === "valor" ? form.desconto.valor : 0,
-      descontoPercentual: form.desconto.tipo === "percentual" ? form.desconto.valor : 0,
-      valorEntrada: form.valorEntrada,
-      valorRestante: valorRestante,
+      descontoValor:
+        form.desconto.tipo === "valor" ? parseCurrency(form.desconto.valor) : 0,
+      descontoPercentual:
+        form.desconto.tipo === "percentual"
+          ? parseCurrency(form.desconto.valor)
+          : 0,
+      valorEntrada,
+      valorRestante,
       parcelasRestante: form.parcelas,
       dataContrato: contrato.dataContrato,
       formaPagamentoEntrada: form.formaPagamentoEntrada,
@@ -217,11 +214,13 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center pt-20 z-50">
-      <div className="bg-white rounded p-6 max-w-2xl w-full shadow-xl space-y-4">
-        <h2 className="text-xl font-bold text-[#7ED957]">Financeiro do Contrato</h2>
+    <div className="fixed inset-0 bg-black bg-opacity-40 overflow-auto z-50">
+      <div className="bg-white rounded p-6 max-w-3xl w-full mx-auto mt-10 mb-10 shadow-xl space-y-4">
+        <h2 className="text-xl font-bold text-[#7ED957]">
+          Financeiro do Contrato
+        </h2>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="font-semibold">Tipo de Desconto</label>
             <select
@@ -241,20 +240,19 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
           <div>
             <label className="font-semibold">Valor do Desconto</label>
             <input
-              type="number"
-              min="0"
-              step="0.01"
+              type="text"
               value={form.desconto.valor}
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
                   desconto: {
                     ...f.desconto,
-                    valor: parseFloat(e.target.value) || 0,
+                    valor: e.target.value,
                   },
                 }))
               }
               className="border rounded w-full p-1"
+              inputMode="decimal"
             />
           </div>
         </div>
@@ -262,21 +260,17 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
         <div>
           <label className="font-semibold">Valor de Entrada</label>
           <input
-            type="number"
-            min="0"
-            step="0.01"
+            type="text"
             value={form.valorEntrada}
             onChange={(e) =>
-              setForm((f) => ({
-                ...f,
-                valorEntrada: parseFloat(e.target.value) || 0,
-              }))
+              setForm((f) => ({ ...f, valorEntrada: e.target.value }))
             }
             className="border rounded w-full p-1"
+            inputMode="decimal"
           />
         </div>
 
-        {form.valorEntrada > 0 && (
+        {valorEntrada > 0 && (
           <PagamentoEntrada
             formasPagamento={formasPagamento}
             contasBancarias={contasBancarias}
@@ -293,11 +287,10 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
           </h4>
 
           {form.parcelas.map((p, i) => (
-            <div key={i} className="flex gap-4 mt-2 items-end">
+            <div key={i} className="flex flex-wrap gap-4 mt-2 items-end">
               <input
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 placeholder="Valor"
                 value={p.valor}
                 onChange={(e) => alterarParcela(i, "valor", e.target.value)}
@@ -306,7 +299,9 @@ export default function ContratoFinanceiroForm({ contrato, onClose, onSalvar }) 
               <input
                 type="date"
                 value={p.vencimento}
-                onChange={(e) => alterarParcela(i, "vencimento", e.target.value)}
+                onChange={(e) =>
+                  alterarParcela(i, "vencimento", e.target.value)
+                }
                 className="border rounded p-1"
               />
               <button

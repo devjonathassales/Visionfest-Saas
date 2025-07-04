@@ -10,8 +10,16 @@ const {
 const { Op } = require("sequelize");
 const { gerarContasReceberContrato } = require("../utils/financeiro");
 
-module.exports = {
-  listar: async (req, res) => {
+function limparCamposVazios(obj) {
+  const novoObj = {};
+  for (const key in obj) {
+    novoObj[key] = obj[key] === "" ? null : obj[key];
+  }
+  return novoObj;
+}
+
+const contratoController = {
+  async listar(req, res) {
     try {
       const { cliente, dataInicio, dataFim } = req.query;
       const where = {};
@@ -31,8 +39,11 @@ module.exports = {
       const contratos = await Contrato.findAll({
         where,
         include: [
-          { model: Cliente, attributes: ["nome"] },
-          { model: Produto, through: { attributes: ["quantidade"] } },
+          { model: Cliente, attributes: ["id", "nome"] },
+          {
+            model: Produto,
+            through: { attributes: ["quantidade", "dataEvento"] },
+          },
         ],
         order: [["dataEvento", "ASC"]],
       });
@@ -44,9 +55,34 @@ module.exports = {
     }
   },
 
-  criar: async (req, res) => {
+  async buscarPorId(req, res) {
+    try {
+      const { id } = req.params;
+      const contrato = await Contrato.findByPk(id, {
+        include: [
+          { model: Cliente, attributes: ["id", "nome"] },
+          {
+            model: Produto,
+            through: { attributes: ["quantidade", "dataEvento"] },
+          },
+          { model: ContaReceber, as: "contasReceber" },
+        ],
+      });
+      if (!contrato) {
+        return res.status(404).json({ error: "Contrato não encontrado" });
+      }
+      res.json(contrato);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Erro ao buscar contrato" });
+    }
+  },
+
+  async criar(req, res) {
     const t = await sequelize.transaction();
     try {
+      const dados = limparCamposVazios(req.body);
+
       const {
         clienteId,
         dataEvento,
@@ -55,7 +91,7 @@ module.exports = {
         enderecoEvento,
         nomeBuffet,
         corTema,
-        produtosSelecionados,
+        produtos,
         valorTotal,
         descontoValor,
         descontoPercentual,
@@ -63,7 +99,7 @@ module.exports = {
         valorRestante,
         parcelasRestante,
         dataContrato,
-      } = req.body;
+      } = dados;
 
       const [centroContrato] = await CentroCusto.findOrCreate({
         where: { descricao: "Contratos" },
@@ -97,25 +133,28 @@ module.exports = {
         { transaction: t }
       );
 
-      await contrato.reload({ transaction: t });
+      console.log("🆔 Contrato criado com ID:", contrato.id);
 
-      if (
-        Array.isArray(produtosSelecionados) &&
-        produtosSelecionados.length > 0
-      ) {
-        for (const p of produtosSelecionados) {
-          await ContratoProduto.create(
-            {
-              contratoId: contrato.id,
-              produtoId: p.produtoId,
-              quantidade: p.quantidade || 1,
-              dataEvento,
-            },
-            { transaction: t }
-          );
-        }
+      // ✅ Salvar produtos relacionados usando setProdutos()
+      if (Array.isArray(produtos) && produtos.length > 0) {
+        const produtosParaSalvar = produtos.map((p) => ({
+          contratoId: contrato.id,
+          produtoId: p.produtoId || p.id,
+          quantidade: p.quantidade || 1,
+          dataEvento: dataEvento,
+        }));
+
+        console.log("📦 Produtos para salvar diretamente:", produtosParaSalvar);
+
+        await ContratoProduto.bulkCreate(produtosParaSalvar, {
+          transaction: t,
+        });
+
+        console.log(
+          "✅ Produtos salvos diretamente na tabela contrato_produtos"
+        );
       }
-
+      // Contas a receber
       await gerarContasReceberContrato(
         contrato,
         {
@@ -134,7 +173,10 @@ module.exports = {
       const contratoCompleto = await Contrato.findByPk(contrato.id, {
         include: [
           { model: Cliente, attributes: ["id", "nome"] },
-          { model: Produto, through: { attributes: ["quantidade"] } },
+          {
+            model: Produto,
+            through: { attributes: ["quantidade", "dataEvento"] },
+          },
         ],
       });
 
@@ -146,31 +188,47 @@ module.exports = {
     }
   },
 
-  atualizar: async (req, res) => {
+  async atualizar(req, res) {
     const t = await sequelize.transaction();
     try {
-      const id = req.params.id;
-      const {
-        clienteId,
-        dataEvento,
-        horarioInicio,
-        horarioTermino,
-        enderecoEvento,
-        nomeBuffet,
-        corTema,
-        produtosSelecionados,
-        valorTotal,
-        descontoValor,
-        descontoPercentual,
-        valorEntrada,
-        valorRestante,
-        parcelasRestante,
-        dataContrato,
-      } = req.body;
+      const { id } = req.params;
+      const dados = limparCamposVazios(req.body);
 
       const contrato = await Contrato.findByPk(id);
-      if (!contrato)
+      if (!contrato) {
         return res.status(404).json({ error: "Contrato não encontrado" });
+      }
+
+      await contrato.update(dados, { transaction: t });
+
+      // Atualiza produtos usando setProdutos()
+      if (Array.isArray(dados.produtos) && dados.produtos.length > 0) {
+        const produtosParaSalvar = dados.produtos.map((p) => ({
+          contratoId: contrato.id,
+          produtoId: p.produtoId || p.id,
+          quantidade: p.quantidade || 1,
+          dataEvento: dados.dataEvento,
+        }));
+
+        console.log(
+          "📦 Produtos para atualizar diretamente:",
+          produtosParaSalvar
+        );
+
+        await ContratoProduto.bulkCreate(produtosParaSalvar, {
+          transaction: t,
+        });
+
+        console.log(
+          "✅ Produtos atualizados diretamente na tabela contrato_produtos"
+        );
+      }
+
+      // Limpa e recria contas a receber
+      await ContaReceber.destroy({
+        where: { contratoId: id },
+        transaction: t,
+      });
 
       const [centroContrato] = await CentroCusto.findOrCreate({
         where: { descricao: "Contratos" },
@@ -178,65 +236,15 @@ module.exports = {
         transaction: t,
       });
 
-      await contrato.update(
-        {
-          clienteId,
-          dataEvento,
-          horarioInicio,
-          horarioTermino,
-          localEvento: enderecoEvento,
-          nomeBuffet,
-          temaFesta: corTema,
-          valorTotal,
-          descontoValor,
-          descontoPercentual,
-          valorEntrada,
-          valorRestante,
-          parcelasRestante,
-          dataContrato,
-          statusPagamento:
-            valorEntrada >= valorTotal
-              ? "Totalmente Pago"
-              : valorEntrada > 0
-              ? "Parcialmente Pago"
-              : "Aberto",
-        },
-        { transaction: t }
-      );
-
-      await ContratoProduto.destroy({
-        where: { contratoId: id },
-        transaction: t,
-      });
-
-      if (
-        Array.isArray(produtosSelecionados) &&
-        produtosSelecionados.length > 0
-      ) {
-        for (const p of produtosSelecionados) {
-          await ContratoProduto.create(
-            {
-              contratoId: contrato.id,
-              produtoId: p.produtoId,
-              quantidade: p.quantidade || 1,
-              dataEvento,
-            },
-            { transaction: t }
-          );
-        }
-      }
-
-      await ContaReceber.destroy({ where: { contratoId: id }, transaction: t });
-
       await gerarContasReceberContrato(
         contrato,
         {
-          clienteId,
+          clienteId: dados.clienteId,
           centroCustoId: centroContrato.id,
-          valorEntrada,
-          dataContrato,
-          valorRestante,
-          parcelasRestante,
+          valorEntrada: dados.valorEntrada,
+          dataContrato: dados.dataContrato,
+          valorRestante: dados.valorRestante,
+          parcelasRestante: dados.parcelasRestante,
         },
         t
       );
@@ -246,7 +254,10 @@ module.exports = {
       const contratoAtualizado = await Contrato.findByPk(contrato.id, {
         include: [
           { model: Cliente, attributes: ["id", "nome"] },
-          { model: Produto, through: { attributes: ["quantidade"] } },
+          {
+            model: Produto,
+            through: { attributes: ["quantidade", "dataEvento"] },
+          },
         ],
       });
 
@@ -258,50 +269,34 @@ module.exports = {
     }
   },
 
-  excluir: async (req, res) => {
+  async excluir(req, res) {
     const t = await sequelize.transaction();
     try {
-      const id = req.params.id;
-      const contrato = await Contrato.findByPk(id);
-      if (!contrato)
-        return res.status(404).json({ error: "Contrato não encontrado" });
+      const { id } = req.params;
 
+      const contrato = await Contrato.findByPk(id);
+      if (!contrato) {
+        return res.status(404).json({ error: "Contrato não encontrado" });
+      }
+
+      await ContaReceber.destroy({
+        where: { contratoId: id },
+        transaction: t,
+      });
       await ContratoProduto.destroy({
         where: { contratoId: id },
         transaction: t,
       });
-
-      await ContaReceber.destroy({ where: { contratoId: id }, transaction: t });
-
       await contrato.destroy({ transaction: t });
 
       await t.commit();
-      res.json({ message: "Contrato excluído com sucesso" });
+      res.json({ message: "Contrato e dependências excluídos com sucesso" });
     } catch (err) {
       await t.rollback();
       console.error(err);
       res.status(500).json({ error: "Erro ao excluir contrato" });
     }
   },
-
-  buscarPorId: async (req, res) => {
-    try {
-      const id = req.params.id;
-      const contrato = await Contrato.findByPk(id, {
-        include: [
-          { model: Cliente, attributes: ["id", "nome"] },
-          { model: Produto, through: { attributes: ["quantidade"] } },
-          { model: ContaReceber, as: "contasReceber" },
-        ],
-      });
-
-      if (!contrato)
-        return res.status(404).json({ error: "Contrato não encontrado" });
-
-      res.json(contrato);
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Erro ao buscar contrato" });
-    }
-  },
 };
+
+module.exports = contratoController;

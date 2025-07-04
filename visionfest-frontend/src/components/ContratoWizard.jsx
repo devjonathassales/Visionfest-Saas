@@ -10,7 +10,7 @@ export default function ContratoWizard({
   const [contratoSalvo, setContratoSalvo] = useState(null);
   const [modalAberto, setModalAberto] = useState(true);
 
-  // Se for edição, já entra com o contrato existente e pula para a etapa financeira
+  // Quando for edição, pula direto para etapa financeira
   useEffect(() => {
     if (contratoExistente) {
       setContratoSalvo(contratoExistente);
@@ -22,7 +22,7 @@ export default function ContratoWizard({
     setModalAberto(false);
     setEtapa("cadastro");
     setContratoSalvo(null);
-    if (onFinalizar) onFinalizar(); // callback para atualizar lista
+    if (onFinalizar) onFinalizar(); // atualiza lista
   };
 
   const handleContratoSalvo = (contrato) => {
@@ -43,7 +43,7 @@ export default function ContratoWizard({
     <>
       {modalAberto && etapa === "cadastro" && (
         <ContratoForm
-          contrato={contratoExistente} // preenche os campos se estiver editando
+          contrato={contratoExistente} // para preencher campos se estiver editando
           onClose={fecharTudo}
           onContratoSalvo={handleContratoSalvo}
         />

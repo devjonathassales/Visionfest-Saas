@@ -1,59 +1,152 @@
 import React from "react";
 
 export default function ContratoVisualiza({ contrato, onClose }) {
+  const formatarValor = (valor) => {
+    const numero = parseFloat(valor);
+    return isNaN(numero) ? "0.00" : numero.toFixed(2);
+  };
+
+  const produtos =
+    contrato.produtosSelecionados ||
+    contrato.produtos?.map((p) => ({
+      nome: p.nome,
+      valor: p.valor,
+      quantidade: p.ContratoProduto?.quantidade || 1,
+      dataEvento: p.ContratoProduto?.dataEvento,
+    })) ||
+    [];
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center items-start pt-20 z-50 overflow-auto">
-      <div className="bg-white rounded-lg shadow-lg max-w-3xl w-full p-6 overflow-auto max-h-[90vh]">
-        <h2 className="text-2xl font-bold text-[#7ED957] mb-6">
-          Contrato - {contrato.cliente}
-        </h2>
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-start pt-16 z-50 overflow-auto">
+      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 md:p-8 overflow-auto max-h-[90vh]">
+        {/* Título */}
+        <div className="flex justify-between items-center border-b pb-4 mb-6">
+          <h2 className="text-2xl font-bold text-[#7ED957]">
+            Contrato - {contrato.cliente?.nome || "Cliente não informado"}
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-red-500 text-xl font-bold"
+          >
+            ×
+          </button>
+        </div>
 
-        <div className="space-y-3 text-sm md:text-base">
-          <p><strong>Data do Evento:</strong> {contrato.dataEvento}</p>
-          <p><strong>Horário Início:</strong> {contrato.horarioInicio}</p>
-          {contrato.horarioTermino && <p><strong>Horário Término:</strong> {contrato.horarioTermino}</p>}
-          <p><strong>Local:</strong> {contrato.local} - {contrato.bairro}</p>
-          <p><strong>Status:</strong> {contrato.status}</p>
-          <p><strong>Valor Total:</strong> R$ {contrato.valorTotal?.toFixed(2)}</p>
+        {/* Informações principais */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm md:text-base">
+          <div>
+            <p>
+              <span className="font-semibold">Data do Evento:</span>{" "}
+              {contrato.dataEvento || "Não informado"}
+            </p>
+            <p>
+              <span className="font-semibold">Horário Início:</span>{" "}
+              {contrato.horarioInicio || "Não informado"}
+            </p>
+            {contrato.horarioTermino && (
+              <p>
+                <span className="font-semibold">Horário Término:</span>{" "}
+                {contrato.horarioTermino}
+              </p>
+            )}
+            <p>
+              <span className="font-semibold">Local:</span>{" "}
+              {contrato.localEvento || "Não informado"}
+            </p>
+            <p>
+              <span className="font-semibold">Status:</span>{" "}
+              {contrato.statusPagamento || "Não informado"}
+            </p>
+            <p>
+              <span className="font-semibold">Cor/Tema da Festa:</span>{" "}
+              {contrato.temaFesta || "Não informado"}
+            </p>
+          </div>
 
-          <h3 className="font-semibold mt-6">Produtos / Serviços</h3>
-          <ul className="list-disc list-inside">
-            {contrato.produtosSelecionados?.map((p) => (
-              <li key={p.produtoId}>
-                {p.nome} - Qtd: {p.quantidade} - Valor Unit: R$ {p.valor.toFixed(2)}
-              </li>
-            ))}
-          </ul>
+          <div>
+            <p>
+              <span className="font-semibold">Valor Total:</span> R${" "}
+              {formatarValor(contrato.valorTotal)}
+            </p>
+            <p>
+              <span className="font-semibold">Valor Entrada:</span> R${" "}
+              {formatarValor(contrato.valorEntrada)}
+            </p>
+            <p>
+              <span className="font-semibold">Valor Restante:</span> R${" "}
+              {formatarValor(contrato.valorRestante)}
+            </p>
+            <p>
+              <span className="font-semibold">Forma Pagamento Entrada:</span>{" "}
+              {contrato.formaPagamentoEntradaNome ||
+                contrato.formaPagamentoEntradaId ||
+                "Não informado"}
+            </p>
+          </div>
+        </div>
 
-          <p className="mt-6"><strong>Cor/Tema da Festa:</strong> {contrato.corTema || "Não informado"}</p>
-          <p><strong>Endereço do Evento:</strong> {contrato.enderecoEvento || "Não informado"}</p>
-          <p><strong>Nome do Buffet/Bairro:</strong> {contrato.nomeBuffet}</p>
-          <p><strong>Valor Entrada:</strong> R$ {contrato.valorEntrada?.toFixed(2) || "0.00"}</p>
-          <p><strong>Forma Pagamento Entrada:</strong> {contrato.formaPagamentoEntradaNome || contrato.formaPagamentoEntradaId || "-"}</p>
-          <p><strong>Valor Restante:</strong> R$ {contrato.valorRestante?.toFixed(2) || "0.00"}</p>
-
-          {contrato.parcelas?.length > 0 && (
-            <>
-              <h3 className="font-semibold mt-6">Parcelas</h3>
-              <ul className="list-disc list-inside">
-                {contrato.parcelas.map((p, i) => (
-                  <li key={i}>
-                    R$ {Number(p.valor).toFixed(2)} - Vencimento: {p.vencimento}
-                  </li>
-                ))}
-              </ul>
-            </>
+        {/* Produtos / Serviços */}
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold text-gray-700 mb-2">
+            Produtos / Serviços Contratados
+          </h3>
+          {produtos.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {produtos.map((p, index) => (
+                <div
+                  key={index}
+                  className="border rounded-lg p-3 shadow-sm bg-gray-50"
+                >
+                  <p className="font-semibold text-[#7ED957]">
+                    {p.nome || "Produto sem nome"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Quantidade:</span>{" "}
+                    {p.quantidade}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Valor Unitário:</span> R${" "}
+                    {formatarValor(p.valor)}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Data do Evento:</span>{" "}
+                    {p.dataEvento || "Não informado"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="italic text-red-500">
+              ⚠ Nenhum produto encontrado neste contrato.
+            </p>
           )}
         </div>
 
-        <div className="flex justify-end mt-6 gap-4">
-          <button
-            onClick={onClose}
-            className="px-6 py-2 rounded border border-gray-300 hover:bg-gray-100"
-          >
-            Fechar
-          </button>
-        </div>
+        {/* Parcelas */}
+        {contrato.parcelas?.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-lg font-semibold text-gray-700 mb-2">
+              Parcelas
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {contrato.parcelas.map((p, i) => (
+                <div
+                  key={i}
+                  className="border rounded-lg p-3 shadow-sm bg-gray-50"
+                >
+                  <p>
+                    <span className="font-semibold">Valor:</span> R${" "}
+                    {formatarValor(p.valor)}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Vencimento:</span>{" "}
+                    {p.vencimento || "Sem data"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

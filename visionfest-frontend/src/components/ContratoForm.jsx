@@ -7,9 +7,8 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
 
-  // Estado para controle do produto selecionado e quantidade temporária antes de adicionar
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
-  const [quantidadeProduto, setQuantidadeProduto] = useState(1);
+  const [quantidadeProduto, setQuantidadeProduto] = useState("");
 
   const [form, setForm] = useState({
     clienteId: "",
@@ -24,7 +23,6 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     valorTotal: 0,
   });
 
-  // Carregar clientes e produtos
   useEffect(() => {
     async function carregarDados() {
       const [resClientes, resProdutos] = await Promise.all([
@@ -41,7 +39,6 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     carregarDados();
   }, []);
 
-  // Preenche os campos se estiver editando
   useEffect(() => {
     if (contrato) {
       setForm({
@@ -61,12 +58,11 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
         nomeBuffet: contrato.nomeBuffet || "",
         dataContrato:
           contrato.dataContrato || new Date().toISOString().slice(0, 10),
-        valorTotal: 0, // Será recalculado
+        valorTotal: 0,
       });
     }
   }, [contrato]);
 
-  // Recalcular valor total sempre que produtosSelecionados mudar
   useEffect(() => {
     const total = form.produtosSelecionados.reduce(
       (acc, p) => acc + p.valor * p.quantidade,
@@ -75,14 +71,10 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     setForm((f) => ({ ...f, valorTotal: total }));
   }, [form.produtosSelecionados]);
 
-  // Função para adicionar produto selecionado com a quantidade informada
   const adicionarProduto = () => {
-    if (!produtoSelecionado) {
-      alert("Selecione um produto para adicionar.");
-      return;
-    }
-    if (!quantidadeProduto || quantidadeProduto < 1) {
-      alert("Informe uma quantidade válida (mínimo 1).");
+    const quantidade = parseInt(quantidadeProduto);
+    if (!produtoSelecionado || isNaN(quantidade) || quantidade < 1) {
+      alert("Selecione um produto e quantidade válida.");
       return;
     }
 
@@ -92,18 +84,16 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
       );
 
       if (existente) {
-        // Atualiza a quantidade somando
         return {
           ...f,
           produtosSelecionados: f.produtosSelecionados.map((p) =>
             p.produtoId === produtoSelecionado.value
-              ? { ...p, quantidade: p.quantidade + quantidadeProduto }
+              ? { ...p, quantidade: p.quantidade + quantidade }
               : p
           ),
         };
       }
 
-      // Adiciona novo produto
       return {
         ...f,
         produtosSelecionados: [
@@ -114,29 +104,27 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
             valor:
               produtos.find((p) => p.id === produtoSelecionado.value)?.valor ||
               0,
-            quantidade: quantidadeProduto,
+            quantidade,
           },
         ],
       };
     });
 
-    // Reseta seleção e quantidade
     setProdutoSelecionado(null);
-    setQuantidadeProduto(1);
+    setQuantidadeProduto("");
   };
 
-  // Alterar quantidade do produto na lista
   const alterarQuantidadeProduto = (produtoId, novaQuantidade) => {
-    if (novaQuantidade < 1) return;
+    const qtd = parseInt(novaQuantidade);
+    if (isNaN(qtd) || qtd < 1) return;
     setForm((f) => ({
       ...f,
       produtosSelecionados: f.produtosSelecionados.map((p) =>
-        p.produtoId === produtoId ? { ...p, quantidade: novaQuantidade } : p
+        p.produtoId === produtoId ? { ...p, quantidade: qtd } : p
       ),
     }));
   };
 
-  // Remover produto da lista
   const removerProduto = (produtoId) => {
     setForm((f) => ({
       ...f,
@@ -146,14 +134,13 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     }));
   };
 
-  // Validação simples antes do submit
   const validarFormulario = () => {
     if (!form.clienteId) {
       alert("Selecione um cliente.");
       return false;
     }
     if (form.produtosSelecionados.length === 0) {
-      alert("Adicione pelo menos um produto/serviço.");
+      alert("Adicione pelo menos um produto.");
       return false;
     }
     if (!form.nomeBuffet.trim()) {
@@ -169,13 +156,7 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (!validarFormulario()) return;
-
-    const produtosPayload = form.produtosSelecionados.map((p) => ({
-      produtoId: p.produtoId,
-      quantidade: p.quantidade,
-    }));
 
     const payload = {
       clienteId: form.clienteId,
@@ -186,7 +167,10 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
       enderecoEvento: form.enderecoEvento,
       nomeBuffet: form.nomeBuffet,
       dataContrato: form.dataContrato,
-      produtos: produtosPayload,
+      produtos: form.produtosSelecionados.map((p) => ({
+        produtoId: p.produtoId,
+        quantidade: p.quantidade,
+      })),
       valorTotal: form.valorTotal,
     };
 
@@ -194,7 +178,6 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
       const url = contrato
         ? `${API_BASE}/contratos/${contrato.id}`
         : `${API_BASE}/contratos`;
-
       const method = contrato ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -203,8 +186,7 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) throw new Error("Falha ao salvar contrato.");
-
+      if (!res.ok) throw new Error("Erro ao salvar contrato.");
       const data = await res.json();
       onContratoSalvo(data);
     } catch (err) {
@@ -214,35 +196,49 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-30 flex justify-center pt-20 z-50">
+    <div className="fixed inset-0 z-50 flex justify-center items-start pt-10 bg-black bg-opacity-30 overflow-y-auto">
       <form
         onSubmit={handleSubmit}
-        className="bg-white rounded p-6 max-w-3xl w-full space-y-4 shadow-lg"
+        className="bg-white rounded-lg shadow-lg p-4 w-full max-w-4xl mx-2 space-y-4"
       >
-        <h2 className="text-xl font-bold text-[#7ED957]">
+        <h2 className="text-lg md:text-xl font-bold text-[#7ED957]">
           {contrato ? "Editar Contrato" : "Novo Contrato"}
         </h2>
 
-        <div>
-          <label className="block font-semibold mb-1">Cliente *</label>
-          <Select
-            options={clientes.map((c) => ({ value: c.id, label: c.nome }))}
-            value={
-              clientes
-                .map((c) => ({ value: c.id, label: c.nome }))
-                .find((op) => op.value === form.clienteId) || null
-            }
-            onChange={(op) =>
-              setForm((f) => ({ ...f, clienteId: op?.value || "" }))
-            }
-            placeholder="Selecione um cliente"
-            isClearable
-          />
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-semibold">Cliente *</label>
+            <Select
+              options={clientes.map((c) => ({ value: c.id, label: c.nome }))}
+              value={
+                clientes
+                  .map((c) => ({ value: c.id, label: c.nome }))
+                  .find((op) => op.value === form.clienteId) || null
+              }
+              onChange={(op) =>
+                setForm((f) => ({ ...f, clienteId: op?.value || "" }))
+              }
+              isClearable
+              placeholder="Selecione um Cliente"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold">Cor/Tema</label>
+            <input
+              type="text"
+              value={form.corTema}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, corTema: e.target.value }))
+              }
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 items-end">
+        <div className="grid md:grid-cols-3 gap-4 items-end">
           <div>
-            <label className="block font-semibold mb-1">Adicionar Produto</label>
+            <label className="block text-sm font-semibold">Produto</label>
             <Select
               options={produtos.map((p) => ({
                 value: p.id,
@@ -250,63 +246,54 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
               }))}
               value={produtoSelecionado}
               onChange={setProdutoSelecionado}
-              placeholder="Selecione um produto"
               isClearable
+              placeholder="Selecione um Produto"
             />
           </div>
           <div>
-            <label className="block font-semibold mb-1">Quantidade</label>
+            <label className="block text-sm font-semibold">Quantidade</label>
             <input
               type="number"
               min="1"
               value={quantidadeProduto}
-              onChange={(e) =>
-                setQuantidadeProduto(parseInt(e.target.value) || 1)
-              }
-              className="border rounded px-2 py-1 w-full"
+              onChange={(e) => setQuantidadeProduto(e.target.value)}
+              className="w-full border rounded px-2 py-1"
             />
           </div>
-          <div>
-            <button
-              type="button"
-              onClick={adicionarProduto}
-              className="bg-[#7ED957] text-white px-4 py-2 rounded"
-            >
-              Adicionar
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={adicionarProduto}
+            className="bg-[#7ED957] text-white rounded px-4 py-2"
+          >
+            Adicionar
+          </button>
         </div>
 
         {form.produtosSelecionados.length > 0 && (
-          <div>
-            <h4 className="font-semibold mb-2">Produtos Selecionados</h4>
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-gray-300">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-100">
+                <tr>
                   <th className="text-left p-2">Produto</th>
-                  <th className="text-left p-2">Valor Unit.</th>
-                  <th className="text-left p-2">Quantidade</th>
+                  <th className="text-left p-2">Valor</th>
+                  <th className="text-left p-2">Qtd</th>
                   <th className="text-left p-2">Subtotal</th>
                   <th className="text-left p-2">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {form.produtosSelecionados.map((p) => (
-                  <tr key={p.produtoId} className="border-b border-gray-200">
+                  <tr key={p.produtoId} className="border-b">
                     <td className="p-2">{p.nome}</td>
                     <td className="p-2">R$ {p.valor.toFixed(2)}</td>
                     <td className="p-2">
                       <input
                         type="number"
-                        min="1"
                         value={p.quantidade}
                         onChange={(e) =>
-                          alterarQuantidadeProduto(
-                            p.produtoId,
-                            parseInt(e.target.value) || 1
-                          )
+                          alterarQuantidadeProduto(p.produtoId, e.target.value)
                         }
-                        className="border rounded px-1 py-0.5 w-16"
+                        className="w-16 border rounded px-1 py-0.5"
                       />
                     </td>
                     <td className="p-2">
@@ -317,7 +304,6 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
                         type="button"
                         onClick={() => removerProduto(p.produtoId)}
                         className="text-red-600 font-bold"
-                        title="Remover produto"
                       >
                         ✕
                       </button>
@@ -328,62 +314,52 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
             </table>
           </div>
         )}
-
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid md:grid-cols-3 gap-4">
           <div>
-            <label className="block font-semibold">Cor/Tema</label>
+            <label className="block text-sm font-semibold">
+              Data do Evento *
+            </label>
             <input
-              type="text"
-              value={form.corTema}
+              type="date"
+              value={form.dataEvento}
               onChange={(e) =>
-                setForm((f) => ({ ...f, corTema: e.target.value }))
+                setForm((f) => ({ ...f, dataEvento: e.target.value }))
               }
               className="w-full border rounded px-2 py-1"
             />
           </div>
           <div>
-            <label className="block font-semibold">Nome do Buffet *</label>
+            <label className="block text-sm font-semibold">
+              Horário de Início
+            </label>
             <input
-              type="text"
-              required
-              value={form.nomeBuffet}
+              type="time"
+              value={form.horarioInicio}
               onChange={(e) =>
-                setForm((f) => ({ ...f, nomeBuffet: e.target.value }))
+                setForm((f) => ({ ...f, horarioInicio: e.target.value }))
               }
               className="w-full border rounded px-2 py-1"
             />
           </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
-          <input
-            type="date"
-            value={form.dataEvento}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, dataEvento: e.target.value }))
-            }
-            className="border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={form.horarioInicio}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, horarioInicio: e.target.value }))
-            }
-            className="border rounded px-2 py-1"
-          />
-          <input
-            type="time"
-            value={form.horarioTermino}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, horarioTermino: e.target.value }))
-            }
-            className="border rounded px-2 py-1"
-          />
+          <div>
+            <label className="block text-sm font-semibold">
+              Horário de Término
+            </label>
+            <input
+              type="time"
+              value={form.horarioTermino}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, horarioTermino: e.target.value }))
+              }
+              className="w-full border rounded px-2 py-1"
+            />
+          </div>
         </div>
 
         <div>
-          <label className="block font-semibold">Endereço do Evento</label>
+          <label className="block text-sm font-semibold">
+            Endereço do Evento
+          </label>
           <input
             type="text"
             value={form.enderecoEvento}
@@ -395,25 +371,40 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
         </div>
 
         <div>
-          <label className="block font-semibold">Data do Contrato</label>
+          <label className="block text-sm font-semibold">
+            Nome do Buffet *
+          </label>
           <input
-            type="date"
-            value={form.dataContrato}
+            type="text"
+            value={form.nomeBuffet}
+            required
             onChange={(e) =>
-              setForm((f) => ({ ...f, dataContrato: e.target.value }))
+              setForm((f) => ({ ...f, nomeBuffet: e.target.value }))
             }
-            className="border rounded px-2 py-1"
+            className="w-full border rounded px-2 py-1"
           />
         </div>
 
-        <div>
-          <label className="font-bold">Valor Total</label>
-          <div className="text-lg font-semibold">
-            R$ {form.valorTotal.toFixed(2)}
+        <div className="flex flex-col md:flex-row justify-between gap-4">
+          <div>
+            <label className="block text-sm font-semibold">
+              Data do Contrato
+            </label>
+            <input
+              type="date"
+              value={form.dataContrato}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, dataContrato: e.target.value }))
+              }
+              className="border rounded px-2 py-1 w-full md:w-auto"
+            />
+          </div>
+          <div className="text-lg font-semibold mt-2 md:mt-0">
+            Valor Total: R$ {form.valorTotal.toFixed(2)}
           </div>
         </div>
 
-        <div className="flex justify-end gap-4 pt-4">
+        <div className="flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}

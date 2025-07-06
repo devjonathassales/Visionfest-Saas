@@ -6,23 +6,13 @@ export default function ContratoVisualiza({ contrato, onClose }) {
     return isNaN(numero) ? "0.00" : numero.toFixed(2);
   };
 
-  const produtos =
-    contrato.produtosSelecionados ||
-    contrato.produtos?.map((p) => ({
-      nome: p.nome,
-      valor: p.valor,
-      quantidade: p.ContratoProduto?.quantidade || 1,
-      dataEvento: p.ContratoProduto?.dataEvento,
-    })) ||
-    [];
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex justify-center items-start pt-16 z-50 overflow-auto">
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full p-6 md:p-8 overflow-auto max-h-[90vh]">
         {/* Título */}
         <div className="flex justify-between items-center border-b pb-4 mb-6">
           <h2 className="text-2xl font-bold text-[#7ED957]">
-            Contrato - {contrato.cliente?.nome || "Cliente não informado"}
+            Contrato - {contrato.Cliente?.nome || "Cliente não informado"}
           </h2>
           <button
             onClick={onClose}
@@ -76,12 +66,6 @@ export default function ContratoVisualiza({ contrato, onClose }) {
               <span className="font-semibold">Valor Restante:</span> R${" "}
               {formatarValor(contrato.valorRestante)}
             </p>
-            <p>
-              <span className="font-semibold">Forma Pagamento Entrada:</span>{" "}
-              {contrato.formaPagamentoEntradaNome ||
-                contrato.formaPagamentoEntradaId ||
-                "Não informado"}
-            </p>
           </div>
         </div>
 
@@ -90,9 +74,9 @@ export default function ContratoVisualiza({ contrato, onClose }) {
           <h3 className="text-lg font-semibold text-gray-700 mb-2">
             Produtos / Serviços Contratados
           </h3>
-          {produtos.length > 0 ? (
+          {contrato.Produtos?.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {produtos.map((p, index) => (
+              {contrato.Produtos.map((p, index) => (
                 <div
                   key={index}
                   className="border rounded-lg p-3 shadow-sm bg-gray-50"
@@ -102,7 +86,7 @@ export default function ContratoVisualiza({ contrato, onClose }) {
                   </p>
                   <p>
                     <span className="font-semibold">Quantidade:</span>{" "}
-                    {p.quantidade}
+                    {p.ContratoProduto?.quantidade}
                   </p>
                   <p>
                     <span className="font-semibold">Valor Unitário:</span> R${" "}
@@ -110,7 +94,7 @@ export default function ContratoVisualiza({ contrato, onClose }) {
                   </p>
                   <p>
                     <span className="font-semibold">Data do Evento:</span>{" "}
-                    {p.dataEvento || "Não informado"}
+                    {p.ContratoProduto?.dataEvento || "Não informado"}
                   </p>
                 </div>
               ))}
@@ -122,25 +106,37 @@ export default function ContratoVisualiza({ contrato, onClose }) {
           )}
         </div>
 
-        {/* Parcelas */}
-        {contrato.parcelas?.length > 0 && (
+        {/* Contas a Receber */}
+        {contrato.contasReceber?.length > 0 && (
           <div className="mt-6">
             <h3 className="text-lg font-semibold text-gray-700 mb-2">
-              Parcelas
+              Contas a Receber
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {contrato.parcelas.map((p, i) => (
+              {contrato.contasReceber.map((cr, i) => (
                 <div
                   key={i}
                   className="border rounded-lg p-3 shadow-sm bg-gray-50"
                 >
                   <p>
                     <span className="font-semibold">Valor:</span> R${" "}
-                    {formatarValor(p.valor)}
+                    {formatarValor(cr.valor)}
                   </p>
                   <p>
                     <span className="font-semibold">Vencimento:</span>{" "}
-                    {p.vencimento || "Sem data"}
+                    {cr.vencimento || "Sem data"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Forma Pagamento:</span>{" "}
+                    {cr.formaPagamento || "Não informado"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Tipo de Crédito:</span>{" "}
+                    {cr.tipoCredito || "Não informado"}
+                  </p>
+                  <p>
+                    <span className="font-semibold">Parcelas:</span>{" "}
+                    {cr.parcelas || "1"}
                   </p>
                 </div>
               ))}

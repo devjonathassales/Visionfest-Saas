@@ -42,6 +42,7 @@ const contratoController = {
           { model: Cliente, attributes: ["id", "nome"] },
           {
             model: Produto,
+            attributes: ["id", "nome", "valor"],
             through: { attributes: ["quantidade", "dataEvento"] },
           },
         ],
@@ -58,22 +59,63 @@ const contratoController = {
   async buscarPorId(req, res) {
     try {
       const { id } = req.params;
+
       const contrato = await Contrato.findByPk(id, {
         include: [
-          { model: Cliente, attributes: ["id", "nome"] },
+          {
+            model: Cliente,
+            attributes: ["id", "nome"],
+          },
           {
             model: Produto,
+            attributes: ["id", "nome", "valor"],
             through: { attributes: ["quantidade", "dataEvento"] },
           },
-          { model: ContaReceber, as: "contasReceber" },
+          {
+            model: ContaReceber,
+            as: "contasReceber",
+            attributes: [
+              "id",
+              "valor",
+              "vencimento",
+              "formaPagamento",
+              "tipoCredito",
+              "parcelas",
+            ],
+          },
         ],
       });
+
       if (!contrato) {
         return res.status(404).json({ error: "Contrato não encontrado" });
       }
-      res.json(contrato);
+
+      // Mapeia produtos com dados da pivot table
+      const produtosDetalhados = contrato.Produtos.map((p) => ({
+        id: p.id,
+        nome: p.nome,
+        valor: p.valor,
+        quantidade: p.ContratoProduto?.quantidade,
+        dataEvento: p.ContratoProduto?.dataEvento,
+      }));
+
+      // Mapeia contas a receber com forma de pagamento como texto
+      const contasReceberDetalhadas = contrato.contasReceber.map((c) => ({
+        id: c.id,
+        valor: c.valor,
+        vencimento: c.vencimento,
+        formaPagamento: c.formaPagamento,
+        tipoCredito: c.tipoCredito,
+        parcelas: c.parcelas,
+      }));
+
+      res.json({
+        ...contrato.toJSON(),
+        produtosDetalhados, // envia ao frontend
+        contasReceberDetalhadas,
+      });
     } catch (err) {
-      console.error(err);
+      console.error("❌ Erro ao buscar contrato:", err);
       res.status(500).json({ error: "Erro ao buscar contrato" });
     }
   },
@@ -135,7 +177,7 @@ const contratoController = {
 
       console.log("🆔 Contrato criado com ID:", contrato.id);
 
-      // ✅ Salvar produtos relacionados usando setProdutos()
+      // Salvar produtos relacionados
       if (Array.isArray(produtos) && produtos.length > 0) {
         const produtosParaSalvar = produtos.map((p) => ({
           contratoId: contrato.id,
@@ -144,17 +186,14 @@ const contratoController = {
           dataEvento: dataEvento,
         }));
 
-        console.log("📦 Produtos para salvar diretamente:", produtosParaSalvar);
+        console.log("📦 Produtos para salvar:", produtosParaSalvar);
 
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
           transaction: t,
         });
-
-        console.log(
-          "✅ Produtos salvos diretamente na tabela contrato_produtos"
-        );
       }
-      // Contas a receber
+
+      // Gerar contas a receber
       await gerarContasReceberContrato(
         contrato,
         {
@@ -201,8 +240,13 @@ const contratoController = {
 
       await contrato.update(dados, { transaction: t });
 
-      // Atualiza produtos usando setProdutos()
+      // Atualizar produtos
       if (Array.isArray(dados.produtos) && dados.produtos.length > 0) {
+        await ContratoProduto.destroy({
+          where: { contratoId: contrato.id },
+          transaction: t,
+        });
+
         const produtosParaSalvar = dados.produtos.map((p) => ({
           contratoId: contrato.id,
           produtoId: p.produtoId || p.id,
@@ -210,21 +254,14 @@ const contratoController = {
           dataEvento: dados.dataEvento,
         }));
 
-        console.log(
-          "📦 Produtos para atualizar diretamente:",
-          produtosParaSalvar
-        );
+        console.log("📦 Produtos atualizados:", produtosParaSalvar);
 
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
           transaction: t,
         });
-
-        console.log(
-          "✅ Produtos atualizados diretamente na tabela contrato_produtos"
-        );
       }
 
-      // Limpa e recria contas a receber
+      // Atualizar contas a receber
       await ContaReceber.destroy({
         where: { contratoId: id },
         transaction: t,

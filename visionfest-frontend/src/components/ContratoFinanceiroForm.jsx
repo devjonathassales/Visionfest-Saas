@@ -5,9 +5,9 @@ const API_BASE = "http://localhost:5000/api";
 
 export default function ContratoFinanceiroForm({
   contrato,
+  modoEdicao = false,
   onClose,
   onSalvar,
-  modoEdicao = false, // <- novo parâmetro para saber se é edição
 }) {
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [contasBancarias, setContasBancarias] = useState([]);
@@ -28,14 +28,19 @@ export default function ContratoFinanceiroForm({
 
   useEffect(() => {
     async function carregarDados() {
-      const [resFp, resCb, resCt] = await Promise.all([
-        fetch(`${API_BASE}/contas-receber/formas-pagamento`),
-        fetch(`${API_BASE}/contas-bancarias`),
-        fetch(`${API_BASE}/cartoes-credito`),
-      ]);
-      setFormasPagamento(await resFp.json());
-      setContasBancarias(await resCb.json());
-      setCartoes(await resCt.json());
+      try {
+        const [resFp, resCb, resCt] = await Promise.all([
+          fetch(`${API_BASE}/contas-receber/formas-pagamento`),
+          fetch(`${API_BASE}/contas-bancarias`),
+          fetch(`${API_BASE}/cartoes-credito`),
+        ]);
+        setFormasPagamento(await resFp.json());
+        setContasBancarias(await resCb.json());
+        setCartoes(await resCt.json());
+      } catch (err) {
+        console.error(err);
+        alert("Erro ao carregar dados financeiros.");
+      }
     }
     carregarDados();
   }, []);
@@ -46,13 +51,14 @@ export default function ContratoFinanceiroForm({
       const entrada = contrato.valorEntrada || 0;
       const restante = Math.max(total - entrada, 0);
 
-      setForm({
+      setForm((f) => ({
+        ...f,
         valorTotal: total,
         desconto: {
           tipo: contrato.descontoPercentual ? "percentual" : "valor",
           valor: contrato.descontoPercentual || contrato.descontoValor || "",
         },
-        valorEntrada: entrada,
+        valorEntrada: entrada || "",
         formaPagamentoEntrada: contrato.formaPagamentoEntrada || "",
         contaBancariaId: contrato.contaBancariaId || "",
         cartaoId: contrato.cartaoId || "",
@@ -64,7 +70,7 @@ export default function ContratoFinanceiroForm({
             valor: p.valor,
             vencimento: p.vencimento?.slice(0, 10) || "",
           })) || (restante > 0 ? [{ valor: restante, vencimento: "" }] : []),
-      });
+      }));
     }
   }, [contrato]);
 
@@ -170,7 +176,7 @@ export default function ContratoFinanceiroForm({
     if (!validarFormulario()) return;
 
     const payload = {
-      ...contrato, // mantém os dados principais do contrato
+      ...contrato,
       descontoValor:
         form.desconto.tipo === "valor" ? parseCurrency(form.desconto.valor) : 0,
       descontoPercentual:

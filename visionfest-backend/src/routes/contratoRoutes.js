@@ -5,16 +5,19 @@ const contratoController = require("../controllers/contratoController");
 // Listagem geral
 router.get("/", contratoController.listar);
 
-// Buscar por ID (deve vir antes de outras rotas com parâmetros)
+// Listagem para agenda
+router.get("/agenda", contratoController.listarAgenda);
+
+// Buscar por ID
 router.get("/:id", contratoController.buscarPorId);
 
-// Criar novo contrato
+// Criar contrato
 router.post("/", contratoController.criar);
 
 // Atualizar contrato
 router.put("/:id", contratoController.atualizar);
 
-// Excluir contrato (e dependências em cascata)
+// Excluir contrato
 router.delete("/:id", contratoController.excluir);
 
 module.exports = router;

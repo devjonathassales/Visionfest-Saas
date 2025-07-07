@@ -1,50 +1,46 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import ContratoVisualiza from "../components/ContratoVisualiza";
+import { toast } from "react-toastify";
 
-const contratosMock = [
-  {
-    id: 1,
-    cliente: "Maria Silva",
-    dataEvento: "2025-06-20",
-    horaInicio: "18:00",
-    horaFim: "22:00",
-    tema: "Aniversário",
-    endereco: "Rua A, 123",
-  },
-  {
-    id: 2,
-    cliente: "João Souza",
-    dataEvento: "2025-06-22",
-    horaInicio: "10:00",
-    horaFim: "14:00",
-    tema: "Casamento",
-    endereco: "Buffet Jardim",
-  },
-  {
-    id: 3,
-    cliente: "Ana Paula",
-    dataEvento: "2025-07-01",
-    horaInicio: "19:00",
-    horaFim: "23:00",
-    tema: "Formatura",
-    endereco: "Salão Central",
-  },
-];
+const API_BASE_URL = "http://localhost:5000/api";
 
 export default function AgendaPage() {
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
-  const [popupEvento, setPopupEvento] = useState(null);
+  const [dataInicio, setDataInicio] = useState(() => {
+    const hoje = new Date();
+    return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      .toISOString()
+      .slice(0, 10);
+  });
+
+  const [dataFim, setDataFim] = useState(() => {
+    const hoje = new Date();
+    return new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+      .toISOString()
+      .slice(0, 10);
+  });
+
+  const [eventos, setEventos] = useState([]);
+  const [visualizandoContrato, setVisualizandoContrato] = useState(null);
+
+  const fetchEventos = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ dataInicio, dataFim });
+
+      const res = await fetch(`${API_BASE_URL}/contratos/agenda?${params}`);
+      if (!res.ok) throw new Error("Erro ao buscar eventos");
+
+      const data = await res.json();
+      setEventos(data);
+    } catch (error) {
+      toast.error("Erro ao carregar eventos: " + error.message);
+    }
+  }, [dataInicio, dataFim]);
 
   useEffect(() => {
-    const hoje = new Date();
-    const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-    setDataInicio(primeiroDia.toISOString().slice(0, 10));
-    setDataFim(ultimoDia.toISOString().slice(0, 10));
-  }, []);
+    fetchEventos();
+  }, [fetchEventos]);
 
   const diasDoMes = () => {
-    if (!dataInicio || !dataFim) return [];
     const start = new Date(dataInicio);
     const end = new Date(dataFim);
     const days = [];
@@ -54,52 +50,45 @@ export default function AgendaPage() {
 
     for (let d = new Date(firstDay); d <= lastDay; d.setDate(d.getDate() + 1)) {
       const dataStr = d.toISOString().slice(0, 10);
-      const eventosDoDia = contratosMock.filter(
-        (e) => e.dataEvento === dataStr
-      );
+      const eventosDoDia = eventos.filter((e) => e.dataEvento === dataStr);
       days.push({ data: new Date(d), eventos: eventosDoDia });
     }
 
     return days;
   };
 
-  useEffect(() => {
-    const escFunction = (e) => {
-      if (e.key === "Escape") setPopupEvento(null);
-    };
-    document.addEventListener("keydown", escFunction);
-    return () => document.removeEventListener("keydown", escFunction);
-  }, []);
-
   return (
-    <div className="p-4 sm:p-6 max-w-full sm:max-w-7xl mx-auto">
-      <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">
+    <div className="p-6 max-w-7xl mx-auto font-open">
+      {/* Header */}
+      <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6 text-center">
         Agenda de Eventos
       </h1>
 
-      {/* Filtros de Período */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:flex gap-4 items-end mb-6">
-        <div className="w-full">
-          <label className="text-sm font-semibold block">Data Inicial:</label>
+      {/* Filtros */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6 justify-center">
+        <div className="flex flex-col">
+          <label className="font-semibold mb-1">Data Inicial:</label>
           <input
             type="date"
+            className="border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-[#7ED957]"
             value={dataInicio}
             onChange={(e) => setDataInicio(e.target.value)}
-            className="border p-2 rounded w-full"
+            max={dataFim}
           />
         </div>
-        <div className="w-full">
-          <label className="text-sm font-semibold block">Data Final:</label>
+        <div className="flex flex-col">
+          <label className="font-semibold mb-1">Data Final:</label>
           <input
             type="date"
+            className="border border-gray-300 rounded px-4 py-2 focus:outline-none focus:border-[#7ED957]"
             value={dataFim}
             onChange={(e) => setDataFim(e.target.value)}
-            className="border p-2 rounded w-full"
+            min={dataInicio}
           />
         </div>
       </div>
 
-      {/* Calendário em grid responsivo */}
+      {/* Calendário */}
       <div className="overflow-x-auto">
         <div className="grid grid-cols-7 gap-[2px] min-w-[640px]">
           {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((dia, i) => (
@@ -124,7 +113,18 @@ export default function AgendaPage() {
               {eventos.map((evento, i) => (
                 <div
                   key={i}
-                  onClick={() => setPopupEvento(evento)}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(
+                        `${API_BASE_URL}/contratos/${evento.id}`
+                      );
+                      if (!res.ok) throw new Error("Erro ao buscar contrato");
+                      const contrato = await res.json();
+                      setVisualizandoContrato(contrato);
+                    } catch (err) {
+                      toast.error("Erro ao abrir contrato: " + err.message);
+                    }
+                  }}
                   className="bg-green-500 text-white text-[10px] sm:text-xs rounded px-1 py-[2px] mb-1 cursor-pointer hover:bg-green-600 truncate"
                   title={`${evento.cliente} - ${evento.tema}`}
                 >
@@ -136,34 +136,12 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* Modal de evento */}
-      {popupEvento && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded max-w-md w-full relative shadow-lg">
-            <button
-              onClick={() => setPopupEvento(null)}
-              className="absolute top-3 right-3 text-gray-600 hover:text-red-600 font-bold text-xl"
-            >
-              ×
-            </button>
-            <h3 className="text-xl sm:text-2xl font-bold mb-4 text-green-700">
-              {popupEvento.cliente}
-            </h3>
-            <p>
-              <strong>Tema:</strong> {popupEvento.tema || "Não informado"}
-            </p>
-            <p>
-              <strong>Data:</strong> {popupEvento.dataEvento}
-            </p>
-            <p>
-              <strong>Horário:</strong> {popupEvento.horaInicio} às{" "}
-              {popupEvento.horaFim}
-            </p>
-            <p>
-              <strong>Endereço:</strong> {popupEvento.endereco}
-            </p>
-          </div>
-        </div>
+      {/* Modal de visualização do contrato */}
+      {visualizandoContrato && (
+        <ContratoVisualiza
+          contrato={visualizandoContrato}
+          onClose={() => setVisualizandoContrato(null)}
+        />
       )}
     </div>
   );

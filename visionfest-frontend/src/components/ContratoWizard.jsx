@@ -10,22 +10,23 @@ export default function ContratoWizard({ onFinalizar, contratoId = null }) {
   const [modalAberto, setModalAberto] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const modoEdicao = !!contratoId; // detecta se estamos editando
+  const modoEdicao = !!contratoId;
 
-  // 🔄 Carrega o contrato da API quando contratoId é passado
+  // 🔄 Carrega contrato da API quando contratoId é passado
   useEffect(() => {
     const carregarContrato = async () => {
       if (modoEdicao && contratoId) {
         setLoading(true);
         try {
-          const res = await fetch(`${API_BASE}/contratos/${contratoId}`);
-          if (!res.ok) throw new Error("Erro ao buscar contrato.");
-          const data = await res.json();
+          const response = await fetch(`${API_BASE}/contratos/${contratoId}`);
+          if (!response.ok) throw new Error("Erro ao buscar contrato.");
+          const data = await response.json();
           setContratoCarregado(data);
+          setEtapa("cadastro"); // começa pelo cadastro para permitir ajustes
         } catch (err) {
-          console.error(err);
-          alert("Erro ao carregar contrato.");
-          onFinalizar && onFinalizar();
+          console.error("Erro ao carregar contrato:", err);
+          alert("Não foi possível carregar o contrato para edição.");
+          fecharTudo();
         } finally {
           setLoading(false);
         }
@@ -33,18 +34,19 @@ export default function ContratoWizard({ onFinalizar, contratoId = null }) {
     };
 
     carregarContrato();
-  }, [modoEdicao, contratoId, onFinalizar]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modoEdicao, contratoId]);
 
   const fecharTudo = () => {
     setModalAberto(false);
     setEtapa("cadastro");
     setContratoCarregado(null);
-    if (onFinalizar) onFinalizar(); // Atualiza lista de contratos
+    if (onFinalizar) onFinalizar(); // Atualiza lista
   };
 
   const handleContratoSalvo = (contrato) => {
     if (!contrato?.id) {
-      alert("Erro: contrato salvo não retornou ID válido");
+      alert("Erro: contrato salvo não retornou ID válido.");
       return;
     }
     setContratoCarregado(contrato);
@@ -70,17 +72,15 @@ export default function ContratoWizard({ onFinalizar, contratoId = null }) {
         </div>
       ) : (
         <>
-          {/* Etapa Cadastro */}
           {etapa === "cadastro" && (
             <ContratoForm
-              contrato={contratoCarregado} // passa dados carregados
+              contrato={contratoCarregado}
               modoEdicao={modoEdicao}
               onClose={fecharTudo}
               onContratoSalvo={handleContratoSalvo}
             />
           )}
 
-          {/* Etapa Financeiro */}
           {etapa === "financeiro" && contratoCarregado && (
             <ContratoFinanceiroForm
               contrato={contratoCarregado}

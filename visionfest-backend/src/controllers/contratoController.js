@@ -56,6 +56,46 @@ const contratoController = {
     }
   },
 
+  async listarAgenda(req, res) {
+    try {
+      const { dataInicio, dataFim } = req.query;
+
+      if (!dataInicio || !dataFim) {
+        return res.status(400).json({ error: "Informe dataInicio e dataFim" });
+      }
+
+      const contratos = await Contrato.findAll({
+        where: {
+          dataEvento: {
+            [Op.between]: [dataInicio, dataFim],
+          },
+        },
+        include: [
+          {
+            model: Cliente,
+            attributes: ["id", "nome"],
+          },
+        ],
+        order: [["dataEvento", "ASC"], ["horarioInicio", "ASC"]],
+      });
+
+      const resposta = contratos.map((c) => ({
+        id: c.id,
+        cliente: c.Cliente.nome,
+        dataEvento: c.dataEvento,
+        horaInicio: c.horarioInicio,
+        horaFim: c.horarioTermino,
+        tema: c.temaFesta,
+        endereco: c.localEvento,
+      }));
+
+      res.json(resposta);
+    } catch (err) {
+      console.error("❌ Erro ao listar agenda:", err);
+      res.status(500).json({ error: "Erro ao listar agenda" });
+    }
+  },
+
   async buscarPorId(req, res) {
     try {
       const { id } = req.params;
@@ -74,14 +114,6 @@ const contratoController = {
           {
             model: ContaReceber,
             as: "contasReceber",
-            attributes: [
-              "id",
-              "valor",
-              "vencimento",
-              "formaPagamento",
-              "tipoCredito",
-              "parcelas",
-            ],
           },
         ],
       });
@@ -90,30 +122,7 @@ const contratoController = {
         return res.status(404).json({ error: "Contrato não encontrado" });
       }
 
-      // Mapeia produtos com dados da pivot table
-      const produtosDetalhados = contrato.Produtos.map((p) => ({
-        id: p.id,
-        nome: p.nome,
-        valor: p.valor,
-        quantidade: p.ContratoProduto?.quantidade,
-        dataEvento: p.ContratoProduto?.dataEvento,
-      }));
-
-      // Mapeia contas a receber com forma de pagamento como texto
-      const contasReceberDetalhadas = contrato.contasReceber.map((c) => ({
-        id: c.id,
-        valor: c.valor,
-        vencimento: c.vencimento,
-        formaPagamento: c.formaPagamento,
-        tipoCredito: c.tipoCredito,
-        parcelas: c.parcelas,
-      }));
-
-      res.json({
-        ...contrato.toJSON(),
-        produtosDetalhados, // envia ao frontend
-        contasReceberDetalhadas,
-      });
+      res.json(contrato);
     } catch (err) {
       console.error("❌ Erro ao buscar contrato:", err);
       res.status(500).json({ error: "Erro ao buscar contrato" });
@@ -186,8 +195,6 @@ const contratoController = {
           dataEvento: dataEvento,
         }));
 
-        console.log("📦 Produtos para salvar:", produtosParaSalvar);
-
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
           transaction: t,
         });
@@ -253,8 +260,6 @@ const contratoController = {
           quantidade: p.quantidade || 1,
           dataEvento: dados.dataEvento,
         }));
-
-        console.log("📦 Produtos atualizados:", produtosParaSalvar);
 
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
           transaction: t,

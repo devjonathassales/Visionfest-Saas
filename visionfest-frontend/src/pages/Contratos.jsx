@@ -42,6 +42,7 @@ export default function ContratosPage() {
 
       const formatado = data.map((contrato) => ({
         ...contrato,
+        numeroContrato: contrato.numeroContrato || contrato.id, // adiciona número do contrato
         cliente: contrato.Cliente?.nome || "Cliente não identificado",
         local: contrato.localEvento || contrato.nomeBuffet || "—",
         bairro: contrato.bairro || "—",
@@ -77,6 +78,7 @@ export default function ContratosPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto font-open">
+      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
         <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat">
           Contratos
@@ -93,6 +95,7 @@ export default function ContratosPage() {
         </button>
       </div>
 
+      {/* Filtros */}
       <div className="flex flex-col md:flex-row gap-4 mb-6 flex-wrap">
         <input
           type="text"
@@ -129,10 +132,12 @@ export default function ContratosPage() {
         </div>
       </div>
 
+      {/* Tabela */}
       <div className="overflow-x-auto rounded shadow">
         <table className="w-full table-auto border-collapse text-sm md:text-base">
           <thead>
             <tr className="bg-gray-100 text-left">
+              <th className="border px-4 py-3"># Contrato</th>
               <th className="border px-4 py-3">Cliente</th>
               <th className="border px-4 py-3 text-center">Data</th>
               <th className="border px-4 py-3 text-center">Início</th>
@@ -145,13 +150,14 @@ export default function ContratosPage() {
           <tbody>
             {contratos.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center py-6 text-gray-500">
+                <td colSpan={8} className="text-center py-6 text-gray-500">
                   Nenhum contrato encontrado.
                 </td>
               </tr>
             ) : (
               contratos.map((contrato) => (
                 <tr key={contrato.id} className="hover:bg-gray-50">
+                  <td className="border px-4 py-2">{contrato.numeroContrato}</td>
                   <td className="border px-4 py-2">{contrato.cliente}</td>
                   <td className="border px-4 py-2 text-center">
                     {contrato.dataEvento}
@@ -203,6 +209,7 @@ export default function ContratosPage() {
         </table>
       </div>
 
+      {/* Modais */}
       {mostrarWizard && (
         <ContratoWizard
           contratoId={contratoIdEdicao}

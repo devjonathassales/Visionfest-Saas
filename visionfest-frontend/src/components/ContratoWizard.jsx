@@ -2,27 +2,44 @@ import React, { useState, useEffect } from "react";
 import ContratoForm from "./ContratoForm";
 import ContratoFinanceiroForm from "./ContratoFinanceiroForm";
 
-export default function ContratoWizard({
-  onFinalizar,
-  contratoExistente = null,
-}) {
-  const [etapa, setEtapa] = useState("cadastro"); // 'cadastro' | 'financeiro'
-  const [contratoSalvo, setContratoSalvo] = useState(null);
-  const [modalAberto, setModalAberto] = useState(true);
+const API_BASE = "http://localhost:5000/api";
 
-  // Quando for edição, pula direto para etapa financeira
+export default function ContratoWizard({ onFinalizar, contratoId = null }) {
+  const [etapa, setEtapa] = useState("cadastro"); // 'cadastro' | 'financeiro'
+  const [contratoCarregado, setContratoCarregado] = useState(null);
+  const [modalAberto, setModalAberto] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const modoEdicao = !!contratoId; // detecta se estamos editando
+
+  // 🔄 Carrega o contrato da API quando contratoId é passado
   useEffect(() => {
-    if (contratoExistente) {
-      setContratoSalvo(contratoExistente);
-      setEtapa("financeiro");
-    }
-  }, [contratoExistente]);
+    const carregarContrato = async () => {
+      if (modoEdicao && contratoId) {
+        setLoading(true);
+        try {
+          const res = await fetch(`${API_BASE}/contratos/${contratoId}`);
+          if (!res.ok) throw new Error("Erro ao buscar contrato.");
+          const data = await res.json();
+          setContratoCarregado(data);
+        } catch (err) {
+          console.error(err);
+          alert("Erro ao carregar contrato.");
+          onFinalizar && onFinalizar();
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    carregarContrato();
+  }, [modoEdicao, contratoId, onFinalizar]);
 
   const fecharTudo = () => {
     setModalAberto(false);
     setEtapa("cadastro");
-    setContratoSalvo(null);
-    if (onFinalizar) onFinalizar(); // atualiza lista
+    setContratoCarregado(null);
+    if (onFinalizar) onFinalizar(); // Atualiza lista de contratos
   };
 
   const handleContratoSalvo = (contrato) => {
@@ -30,31 +47,49 @@ export default function ContratoWizard({
       alert("Erro: contrato salvo não retornou ID válido");
       return;
     }
-    setContratoSalvo(contrato);
+    setContratoCarregado(contrato);
     setEtapa("financeiro");
   };
 
   const handleFinanceiroSalvo = () => {
-    alert("Contrato e financeiro salvos com sucesso!");
+    alert(
+      modoEdicao
+        ? "Contrato atualizado com sucesso!"
+        : "Contrato e financeiro salvos com sucesso!"
+    );
     fecharTudo();
   };
 
+  if (!modalAberto) return null;
+
   return (
     <>
-      {modalAberto && etapa === "cadastro" && (
-        <ContratoForm
-          contrato={contratoExistente} // para preencher campos se estiver editando
-          onClose={fecharTudo}
-          onContratoSalvo={handleContratoSalvo}
-        />
-      )}
+      {loading ? (
+        <div className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 text-white text-lg">
+          Carregando contrato...
+        </div>
+      ) : (
+        <>
+          {/* Etapa Cadastro */}
+          {etapa === "cadastro" && (
+            <ContratoForm
+              contrato={contratoCarregado} // passa dados carregados
+              modoEdicao={modoEdicao}
+              onClose={fecharTudo}
+              onContratoSalvo={handleContratoSalvo}
+            />
+          )}
 
-      {modalAberto && etapa === "financeiro" && contratoSalvo && (
-        <ContratoFinanceiroForm
-          contrato={contratoSalvo}
-          onClose={fecharTudo}
-          onSalvar={handleFinanceiroSalvo}
-        />
+          {/* Etapa Financeiro */}
+          {etapa === "financeiro" && contratoCarregado && (
+            <ContratoFinanceiroForm
+              contrato={contratoCarregado}
+              modoEdicao={modoEdicao}
+              onClose={fecharTudo}
+              onSalvar={handleFinanceiroSalvo}
+            />
+          )}
+        </>
       )}
     </>
   );

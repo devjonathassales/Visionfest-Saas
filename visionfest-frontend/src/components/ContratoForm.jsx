@@ -3,7 +3,12 @@ import Select from "react-select";
 
 const API_BASE = "http://localhost:5000/api";
 
-export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
+export default function ContratoForm({
+  onClose,
+  onContratoSalvo,
+  contrato = null, // pode vir nulo inicialmente
+  modoEdicao = false,
+}) {
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
 
@@ -23,26 +28,34 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     valorTotal: 0,
   });
 
+  // Carregar clientes e produtos
   useEffect(() => {
     async function carregarDados() {
-      const [resClientes, resProdutos] = await Promise.all([
-        fetch(`${API_BASE}/clientes`),
-        fetch(`${API_BASE}/produtos`),
-      ]);
-      const [clientesJson, produtosJson] = await Promise.all([
-        resClientes.json(),
-        resProdutos.json(),
-      ]);
-      setClientes(clientesJson);
-      setProdutos(produtosJson);
+      try {
+        const [resClientes, resProdutos] = await Promise.all([
+          fetch(`${API_BASE}/clientes`),
+          fetch(`${API_BASE}/produtos`),
+        ]);
+
+        const [clientesJson, produtosJson] = await Promise.all([
+          resClientes.json(),
+          resProdutos.json(),
+        ]);
+
+        setClientes(clientesJson);
+        setProdutos(produtosJson);
+      } catch (err) {
+        console.error("Erro ao carregar clientes/produtos:", err);
+      }
     }
     carregarDados();
   }, []);
 
+  // Preencher o form se contrato vier da API
   useEffect(() => {
-    if (contrato) {
+    if (contrato && contrato.id) {
       setForm({
-        clienteId: contrato.clienteId,
+        clienteId: contrato.clienteId || "",
         produtosSelecionados:
           contrato.Produtos?.map((p) => ({
             produtoId: p.id,
@@ -58,11 +71,17 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
         nomeBuffet: contrato.nomeBuffet || "",
         dataContrato:
           contrato.dataContrato || new Date().toISOString().slice(0, 10),
-        valorTotal: 0,
+        valorTotal:
+          contrato.Produtos?.reduce(
+            (acc, p) =>
+              acc + (p.valor || 0) * (p.ContratoProduto?.quantidade || 1),
+            0
+          ) || 0,
       });
     }
   }, [contrato]);
 
+  // Recalcular valor total ao alterar produtos
   useEffect(() => {
     const total = form.produtosSelecionados.reduce(
       (acc, p) => acc + p.valor * p.quantidade,
@@ -175,10 +194,10 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
     };
 
     try {
-      const url = contrato
+      const url = modoEdicao
         ? `${API_BASE}/contratos/${contrato.id}`
         : `${API_BASE}/contratos`;
-      const method = contrato ? "PUT" : "POST";
+      const method = modoEdicao ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -194,7 +213,6 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
       alert("Erro ao salvar contrato.");
     }
   };
-
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-start pt-10 bg-black bg-opacity-30 overflow-y-auto">
       <form
@@ -202,7 +220,7 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
         className="bg-white rounded-lg shadow-lg p-4 w-full max-w-4xl mx-2 space-y-4"
       >
         <h2 className="text-lg md:text-xl font-bold text-[#7ED957]">
-          {contrato ? "Editar Contrato" : "Novo Contrato"}
+          {modoEdicao ? "Editar Contrato" : "Novo Contrato"}
         </h2>
 
         <div className="grid md:grid-cols-2 gap-4">
@@ -220,6 +238,7 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
               }
               isClearable
               placeholder="Selecione um Cliente"
+              isDisabled={modoEdicao} // 🔒 cliente bloqueado em edição
             />
           </div>
 
@@ -416,7 +435,7 @@ export default function ContratoForm({ onClose, onContratoSalvo, contrato }) {
             type="submit"
             className="px-4 py-2 bg-[#7ED957] text-white rounded"
           >
-            {contrato ? "Atualizar Contrato" : "Salvar Contrato"}
+            {modoEdicao ? "Atualizar Contrato" : "Salvar Contrato"}
           </button>
         </div>
       </form>

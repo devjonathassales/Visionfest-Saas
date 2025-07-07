@@ -8,6 +8,7 @@ const API_BASE_URL = "http://localhost:5000/api";
 
 export default function ContratosPage() {
   const [mostrarWizard, setMostrarWizard] = useState(false);
+  const [contratoIdEdicao, setContratoIdEdicao] = useState(null);
   const [visualizandoContrato, setVisualizandoContrato] = useState(null);
   const [contratos, setContratos] = useState([]);
   const [filtroCliente, setFiltroCliente] = useState("");
@@ -82,7 +83,10 @@ export default function ContratosPage() {
         </h1>
 
         <button
-          onClick={() => setMostrarWizard(true)}
+          onClick={() => {
+            setContratoIdEdicao(null);
+            setMostrarWizard(true);
+          }}
           className="bg-[#7ED957] text-white px-5 py-2 rounded hover:bg-green-700 transition"
         >
           Novo Contrato
@@ -175,8 +179,8 @@ export default function ContratosPage() {
                       </button>
                       <button
                         onClick={() => {
+                          setContratoIdEdicao(contrato.id);
                           setMostrarWizard(true);
-                          setVisualizandoContrato(contrato);
                         }}
                         className="text-blue-500 hover:underline"
                         title="Editar"
@@ -201,9 +205,10 @@ export default function ContratosPage() {
 
       {mostrarWizard && (
         <ContratoWizard
-          contrato={visualizandoContrato}
+          contratoId={contratoIdEdicao}
           onFinalizar={() => {
             setMostrarWizard(false);
+            setContratoIdEdicao(null);
             setVisualizandoContrato(null);
             fetchContratos();
           }}

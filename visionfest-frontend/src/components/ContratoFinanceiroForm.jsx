@@ -7,6 +7,7 @@ export default function ContratoFinanceiroForm({
   contrato,
   onClose,
   onSalvar,
+  modoEdicao = false, // <- novo parâmetro para saber se é edição
 }) {
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [contasBancarias, setContasBancarias] = useState([]);
@@ -45,14 +46,13 @@ export default function ContratoFinanceiroForm({
       const entrada = contrato.valorEntrada || 0;
       const restante = Math.max(total - entrada, 0);
 
-      setForm((f) => ({
-        ...f,
+      setForm({
         valorTotal: total,
         desconto: {
           tipo: contrato.descontoPercentual ? "percentual" : "valor",
           valor: contrato.descontoPercentual || contrato.descontoValor || "",
         },
-        valorEntrada: entrada || "",
+        valorEntrada: entrada,
         formaPagamentoEntrada: contrato.formaPagamentoEntrada || "",
         contaBancariaId: contrato.contaBancariaId || "",
         cartaoId: contrato.cartaoId || "",
@@ -64,7 +64,7 @@ export default function ContratoFinanceiroForm({
             valor: p.valor,
             vencimento: p.vencimento?.slice(0, 10) || "",
           })) || (restante > 0 ? [{ valor: restante, vencimento: "" }] : []),
-      }));
+      });
     }
   }, [contrato]);
 
@@ -170,15 +170,7 @@ export default function ContratoFinanceiroForm({
     if (!validarFormulario()) return;
 
     const payload = {
-      clienteId: contrato.clienteId,
-      dataEvento: contrato.dataEvento,
-      horarioInicio: contrato.horarioInicio,
-      horarioTermino: contrato.horarioTermino,
-      localEvento: contrato.localEvento,
-      nomeBuffet: contrato.nomeBuffet,
-      temaFesta: contrato.temaFesta,
-      produtos: contrato.produtosSelecionados || [],
-      valorTotal: form.valorTotal,
+      ...contrato, // mantém os dados principais do contrato
       descontoValor:
         form.desconto.tipo === "valor" ? parseCurrency(form.desconto.valor) : 0,
       descontoPercentual:
@@ -188,7 +180,6 @@ export default function ContratoFinanceiroForm({
       valorEntrada,
       valorRestante,
       parcelasRestante: form.parcelas,
-      dataContrato: contrato.dataContrato,
       formaPagamentoEntrada: form.formaPagamentoEntrada,
       contaBancariaId: form.contaBancariaId,
       cartaoId: form.cartaoId,
@@ -217,9 +208,10 @@ export default function ContratoFinanceiroForm({
     <div className="fixed inset-0 bg-black bg-opacity-40 overflow-auto z-50">
       <div className="bg-white rounded p-6 max-w-3xl w-full mx-auto mt-10 mb-10 shadow-xl space-y-4">
         <h2 className="text-xl font-bold text-[#7ED957]">
-          Financeiro do Contrato
+          {modoEdicao ? "Editar Financeiro" : "Financeiro do Contrato"}
         </h2>
 
+        {/* Campos de desconto e entrada */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="font-semibold">Tipo de Desconto</label>
@@ -245,10 +237,7 @@ export default function ContratoFinanceiroForm({
               onChange={(e) =>
                 setForm((f) => ({
                   ...f,
-                  desconto: {
-                    ...f.desconto,
-                    valor: e.target.value,
-                  },
+                  desconto: { ...f.desconto, valor: e.target.value },
                 }))
               }
               className="border rounded w-full p-1"
@@ -280,6 +269,7 @@ export default function ContratoFinanceiroForm({
           />
         )}
 
+        {/* Parcelas */}
         <div>
           <h4 className="font-semibold">
             Parcelas (Restante: R$ {valorRestante.toFixed(2)} / Somado: R${" "}
@@ -329,6 +319,7 @@ export default function ContratoFinanceiroForm({
           </button>
         </div>
 
+        {/* Botões */}
         <div className="flex justify-end gap-4 pt-4">
           <button onClick={onClose} className="px-4 py-2 border rounded">
             Cancelar
@@ -337,7 +328,7 @@ export default function ContratoFinanceiroForm({
             onClick={handleSalvar}
             className="px-4 py-2 bg-[#7ED957] text-white rounded"
           >
-            Salvar Financeiro
+            {modoEdicao ? "Atualizar Financeiro" : "Salvar Financeiro"}
           </button>
         </div>
       </div>

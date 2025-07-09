@@ -1,0 +1,4 @@
+Assim já deixamos pronto para o login do superadmin no painel com as credenciais:
+
+📧 admin@visionfest.com
+🔑 senhaSuperSecreta123

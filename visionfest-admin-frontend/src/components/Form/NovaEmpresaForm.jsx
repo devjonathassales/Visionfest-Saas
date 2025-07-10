@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import IMask from "imask";
 import { X } from "lucide-react";
 import api from "../../utils/api";
@@ -17,10 +17,24 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess }) {
     email: "",
     senhaSuperAdmin: "",
     logo: null,
-    plano: "",
+    planoId: "", // mudou para planoId (numérico)
     usuarioSuperAdmin: "",
   });
+  const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    // Buscar planos do backend para popular select
+    async function fetchPlanos() {
+      try {
+        const res = await api.get("/planos");
+        setPlanos(res.data);
+      } catch {
+        alert("Erro ao carregar planos");
+      }
+    }
+    fetchPlanos();
+  }, []);
 
   function aplicarMascaraCPF_CNPJ(e) {
     const el = e.target;
@@ -68,7 +82,7 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess }) {
   async function onSubmit(e) {
     e.preventDefault();
 
-    if (!form.nome || !form.cpfCnpj || !form.email || !form.whatsapp) {
+    if (!form.nome || !form.cpfCnpj || !form.email || !form.whatsapp || !form.planoId) {
       alert("Preencha os campos obrigatórios");
       return;
     }
@@ -100,9 +114,7 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess }) {
     <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-screen overflow-y-auto">
       {/* Header fixo */}
       <div className="flex justify-between items-center px-6 py-4 border-b sticky top-0 bg-white z-10">
-        <h2 className="text-xl font-semibold text-gray-800">
-          Nova Empresa
-        </h2>
+        <h2 className="text-xl font-semibold text-gray-800">Nova Empresa</h2>
         <button
           onClick={onClose}
           className="text-gray-500 hover:text-gray-800 p-2"
@@ -159,16 +171,18 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess }) {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Plano *</label>
           <select
-            name="plano"
-            value={form.plano}
+            name="planoId"
+            value={form.planoId}
             onChange={onChange}
             className="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-2 focus:ring-green-500 focus:outline-none"
             required
           >
             <option value="">Selecione o plano</option>
-            <option value="basic">Básico</option>
-            <option value="pro">Pro</option>
-            <option value="enterprise">Enterprise</option>
+            {planos.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
+            ))}
           </select>
         </div>
 

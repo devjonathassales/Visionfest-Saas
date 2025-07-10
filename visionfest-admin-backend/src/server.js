@@ -1,38 +1,29 @@
-// src/server.js
-const express = require('express');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const { sequelize } = require('./models'); // Ajuste o caminho conforme seu projeto
-const authRoutes = require('./routes/authRoutes'); // Confirme se o arquivo está em src/routes/authRoutes.js
-const empresaRoutes = require('./routes/empresaRoutes'); // idem para empresaRoutes
-const adminRoutes = require("./routes/adminRoutes");
-const dashboardRoutes = require("./routes/dashboardRoutes");
+require("dotenv").config();
+const app = require("./app");
+const db = require("./models");
 
-dotenv.config();
-
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
-// Rotas
-app.use('/api/auth', authRoutes);
-app.use('/api/empresas', empresaRoutes);
-app.use("/api/admin", adminRoutes);
-app.use("/api/admin", dashboardRoutes);
-
-// Sincronizar banco e iniciar servidor
 const PORT = process.env.PORT || 5001;
 
-sequelize.sync({ alter: true }) // cria ou atualiza as tabelas
-  .then(() => {
-    console.log('✅ Tabelas sincronizadas');
-    app.listen(PORT, () => {
-      console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('❌ Erro ao sincronizar tabelas', err);
-  });
+async function start() {
+  try {
+    console.log("DATABASE_URL:", process.env.DATABASE_URL);
 
-module.exports = app;
+    await db.sequelize.authenticate();
+    console.log("Banco conectado com sucesso");
+
+    // Em desenvolvimento aplica alterações automaticamente
+    if (process.env.NODE_ENV !== "production") {
+      await db.sequelize.sync({ alter: true });
+      console.log("Banco sincronizado (alterações aplicadas)");
+    }
+
+    app.listen(PORT, () => {
+      console.log(`Servidor rodando na porta ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Erro ao conectar banco:", error);
+    process.exit(1);
+  }
+}
+
+start();

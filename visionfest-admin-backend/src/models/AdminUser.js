@@ -14,14 +14,20 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
     },
     role: {
-      type: DataTypes.ENUM('superadmin', 'admin', 'funcionario'),
+      type: DataTypes.ENUM("superadmin", "admin", "funcionario"),
       allowNull: false,
-      defaultValue: 'funcionario',
-    }
+      defaultValue: "funcionario",
+    },
   }, {
     tableName: "admin_users",
     underscored: true,
   });
+
+  // Se precisar de relacionamentos no futuro
+  AdminUser.associate = (models) => {
+    // Exemplo:
+    // AdminUser.hasMany(models.Empresa, { foreignKey: "adminUserId" });
+  };
 
   return AdminUser;
 };

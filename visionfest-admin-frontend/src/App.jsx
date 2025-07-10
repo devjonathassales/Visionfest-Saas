@@ -1,4 +1,3 @@
-// src/App.jsx (unificado com rotas)
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
@@ -6,7 +5,6 @@ import AdminLayout from "./components/layout/AdminLayout";
 
 // Páginas já criadas
 import DashboardPage from "./pages/DashboardPage";
-
 import EmpresasPage from "./pages/Cadastros/EmpresasPage";
 import PlanosPage from "./pages/Cadastros/PlanosPage";
 import UsuariosPage from "./pages/Cadastros/UsuariosPage";
@@ -18,7 +16,6 @@ import CaixaPage from "./pages/Financeiro/CaixaPage";
 import ContasBancariasPage from "./pages/Financeiro/ContasBancariasPage";
 
 import RelatoriosGeraisPage from "./pages/Relatorios/RelatoriosGeraisPage";
-
 import BackupEGatewayPage from "./pages/Configuracoes/BackupEGatewayPage";
 
 import MelhoriaPage from "./pages/OrdensServico/MelhoriaPage";
@@ -26,6 +23,7 @@ import AjustePage from "./pages/OrdensServico/AjustePage";
 import SuportePage from "./pages/OrdensServico/SuportePage";
 
 import LoginPage from "./pages/LoginPage";
+import CadastroSaaSPage from "./pages/CadastroSaaSPage"; // <-- importado aqui
 
 export default function App() {
   return (
@@ -33,6 +31,7 @@ export default function App() {
       <Routes>
         {/* Rota pública */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/cadastro" element={<CadastroSaaSPage />} /> {/* <-- nova rota */}
 
         {/* Redireciona root para dashboard */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

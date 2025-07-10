@@ -33,7 +33,16 @@ module.exports = (sequelize, DataTypes) => {
       instagram: DataTypes.STRING,
       email: DataTypes.STRING,
       logoUrl: DataTypes.STRING,
-      plano: DataTypes.STRING,
+      planoId: {
+        type: DataTypes.INTEGER,
+        references: {
+          model: "planos",
+          key: "id",
+        },
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+        allowNull: false,
+      },
       usuarioSuperAdmin: DataTypes.STRING,
     },
     {
@@ -41,6 +50,10 @@ module.exports = (sequelize, DataTypes) => {
       underscored: true,
     }
   );
+
+   Empresa.associate = (models) => {
+    Empresa.belongsTo(models.Plano, { foreignKey: "planoId" });
+  };
 
   return Empresa;
 };

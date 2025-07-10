@@ -1,26 +1,28 @@
-const Sequelize = require('sequelize');
-const config = require('../config/database');
+const { Sequelize } = require("sequelize");
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
 
-const sequelize = new Sequelize(
-  config.database,
-  config.username,
-  config.password,
-  {
-    host: config.host,
-    dialect: config.dialect,
-    port: config.port,
-    logging: config.logging,
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: "postgres",
+  logging: false, // colocar true se quiser ver os SQLs
+});
+
+const db = { sequelize, Sequelize };
+
+// Carrega todos os models
+fs.readdirSync(__dirname)
+  .filter((file) => file !== "index.js" && file.endsWith(".js"))
+  .forEach((file) => {
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+    db[model.name] = model;
+  });
+
+// Executa associate se existir
+Object.values(db).forEach((model) => {
+  if (typeof model.associate === "function") {
+    model.associate(db);
   }
-);
+});
 
-// Models
-const AdminUser = require('./AdminUser')(sequelize, Sequelize.DataTypes);
-const Empresa = require('./Empresa')(sequelize, Sequelize.DataTypes);
-
-// Exportar tudo
-module.exports = {
-  sequelize,
-  Sequelize,
-  AdminUser,
-  Empresa,
-};
+module.exports = db;

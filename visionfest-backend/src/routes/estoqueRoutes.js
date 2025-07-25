@@ -1,8 +1,10 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const estoqueController = require('../controllers/estoqueController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/estoque', estoqueController.listarEstoque);
-router.post('/estoque/movimentar', estoqueController.registrarMovimentacao);
+// ESTOQUE
+const estoqueController = require("../controllers/estoqueController");
+router.get("/estoque", authEmpresa, estoqueController.listarEstoque);
+router.post("/estoque/movimentar", authEmpresa, estoqueController.registrarMovimentacao);
 
 module.exports = router;

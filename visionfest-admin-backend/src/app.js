@@ -12,7 +12,8 @@ const contasPagarRoutes = require("./routes/contasPagarRoutes");
 const contaReceberRoutes = require('./routes/contaReceberRoutes');
 const caixaRoutes = require('./routes/caixaRoutes');
 const planoRoutes = require("./routes/planoRoutes");
-
+const permissaoRoutes = require("./routes/permissaoRoutes");
+const usuarioRoutes = require("./routes/usuarioRoutes");
 const app = express();
 
 app.use(cors());
@@ -29,5 +30,7 @@ app.use("/api/contas-pagar", contasPagarRoutes);
 app.use('/api/contas-receber', contaReceberRoutes);
 app.use('/api/caixa', caixaRoutes);
 app.use("/api/planos", planoRoutes);
+app.use("/api/permissoes", permissaoRoutes);
+app.use("/api/usuarios", usuarioRoutes);
 
 module.exports = app;

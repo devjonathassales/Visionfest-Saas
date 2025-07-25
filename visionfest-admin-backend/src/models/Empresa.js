@@ -17,8 +17,8 @@ module.exports = (sequelize, DataTypes) => {
         unique: true,
       },
       status: {
-        type: DataTypes.ENUM("ativo", "bloqueado"),
-        defaultValue: "ativo",
+        type: DataTypes.ENUM("ativo", "bloqueado", "aguardando_pagamento"),
+        defaultValue: "aguardando_pagamento",
       },
       bancoDados: {
         type: DataTypes.STRING,
@@ -26,13 +26,13 @@ module.exports = (sequelize, DataTypes) => {
       },
       cep: DataTypes.STRING,
       endereco: DataTypes.STRING,
+      numero: DataTypes.STRING, // ✅ Novo campo adicionado
       bairro: DataTypes.STRING,
       cidade: DataTypes.STRING,
       uf: DataTypes.STRING,
       whatsapp: DataTypes.STRING,
       instagram: DataTypes.STRING,
       email: DataTypes.STRING,
-      logoUrl: DataTypes.STRING,
       planoId: {
         type: DataTypes.INTEGER,
         references: {
@@ -51,7 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     }
   );
 
-   Empresa.associate = (models) => {
+  Empresa.associate = (models) => {
     Empresa.belongsTo(models.Plano, { foreignKey: "planoId" });
   };
 

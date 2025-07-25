@@ -1,14 +1,15 @@
-// controllers/fornecedorController.js
-const { Fornecedor } = require('../models');
+const { Fornecedor } = require("../models");
 
 module.exports = {
   async listar(req, res) {
     try {
-      const fornecedores = await Fornecedor.findAll({ order: [['nome', 'ASC']] });
+      const fornecedores = await Fornecedor.findAll({
+        order: [["nome", "ASC"]],
+      });
       res.json(fornecedores);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Erro ao listar fornecedores.' });
+      console.error("Erro ao listar fornecedores:", err);
+      res.status(500).json({ message: "Erro ao listar fornecedores." });
     }
   },
 
@@ -16,11 +17,12 @@ module.exports = {
     try {
       const { id } = req.params;
       const fornecedor = await Fornecedor.findByPk(id);
-      if (!fornecedor) return res.status(404).json({ message: 'Fornecedor não encontrado.' });
+      if (!fornecedor)
+        return res.status(404).json({ message: "Fornecedor não encontrado." });
       res.json(fornecedor);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Erro ao buscar fornecedor.' });
+      console.error("Erro ao buscar fornecedor:", err);
+      res.status(500).json({ message: "Erro ao buscar fornecedor." });
     }
   },
 
@@ -28,15 +30,22 @@ module.exports = {
     try {
       const { nome, cpfCnpj, endereco, whatsapp, email } = req.body;
 
-      // Verifica se cpfCnpj já existe
+      // Verifica duplicidade
       const existente = await Fornecedor.findOne({ where: { cpfCnpj } });
-      if (existente) return res.status(400).json({ message: 'CPF/CNPJ já cadastrado.' });
+      if (existente)
+        return res.status(400).json({ message: "CPF/CNPJ já cadastrado." });
 
-      const fornecedor = await Fornecedor.create({ nome, cpfCnpj, endereco, whatsapp, email });
+      const fornecedor = await Fornecedor.create({
+        nome,
+        cpfCnpj,
+        endereco,
+        whatsapp,
+        email,
+      });
       res.status(201).json(fornecedor);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Erro ao criar fornecedor.' });
+      console.error("Erro ao criar fornecedor:", err);
+      res.status(500).json({ message: "Erro ao criar fornecedor." });
     }
   },
 
@@ -46,17 +55,23 @@ module.exports = {
       const { nome, cpfCnpj, endereco, whatsapp, email } = req.body;
 
       const fornecedor = await Fornecedor.findByPk(id);
-      if (!fornecedor) return res.status(404).json({ message: 'Fornecedor não encontrado.' });
+      if (!fornecedor)
+        return res.status(404).json({ message: "Fornecedor não encontrado." });
 
-      // Verifica se cpfCnpj já existe em outro registro
-      const existente = await Fornecedor.findOne({ where: { cpfCnpj, id: { $ne: id } } });
-      if (existente) return res.status(400).json({ message: 'CPF/CNPJ já cadastrado em outro fornecedor.' });
+      // Verifica duplicidade em outro registro
+      const duplicado = await Fornecedor.findOne({
+        where: { cpfCnpj, id: { [Op.ne]: id } },
+      });
+      if (duplicado)
+        return res
+          .status(400)
+          .json({ message: "CPF/CNPJ já cadastrado em outro fornecedor." });
 
       await fornecedor.update({ nome, cpfCnpj, endereco, whatsapp, email });
       res.json(fornecedor);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Erro ao atualizar fornecedor.' });
+      console.error("Erro ao atualizar fornecedor:", err);
+      res.status(500).json({ message: "Erro ao atualizar fornecedor." });
     }
   },
 
@@ -64,13 +79,14 @@ module.exports = {
     try {
       const { id } = req.params;
       const fornecedor = await Fornecedor.findByPk(id);
-      if (!fornecedor) return res.status(404).json({ message: 'Fornecedor não encontrado.' });
+      if (!fornecedor)
+        return res.status(404).json({ message: "Fornecedor não encontrado." });
 
       await fornecedor.destroy();
-      res.json({ message: 'Fornecedor excluído com sucesso.' });
+      res.json({ message: "Fornecedor excluído com sucesso." });
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: 'Erro ao excluir fornecedor.' });
+      console.error("Erro ao excluir fornecedor:", err);
+      res.status(500).json({ message: "Erro ao excluir fornecedor." });
     }
   },
 };

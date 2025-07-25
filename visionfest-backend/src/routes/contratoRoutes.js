@@ -1,23 +1,14 @@
 const express = require("express");
 const router = express.Router();
+const authEmpresa = require("../middlewares/authEmpresa");
+
+// CONTRATOS
 const contratoController = require("../controllers/contratoController");
-
-// Listagem geral
-router.get("/", contratoController.listar);
-
-// Listagem para agenda
-router.get("/agenda", contratoController.listarAgenda);
-
-// Buscar por ID
-router.get("/:id", contratoController.buscarPorId);
-
-// Criar contrato
-router.post("/", contratoController.criar);
-
-// Atualizar contrato
-router.put("/:id", contratoController.atualizar);
-
-// Excluir contrato
-router.delete("/:id", contratoController.excluir);
+router.get("/contratos", authEmpresa, contratoController.listar);
+router.get("/contratos/agenda", authEmpresa, contratoController.listarAgenda);
+router.get("/contratos/:id", authEmpresa, contratoController.buscarPorId);
+router.post("/contratos", authEmpresa, contratoController.criar);
+router.put("/contratos/:id", authEmpresa, contratoController.atualizar);
+router.delete("/contratos/:id", authEmpresa, contratoController.excluir);
 
 module.exports = router;

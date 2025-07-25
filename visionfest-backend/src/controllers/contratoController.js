@@ -1,14 +1,6 @@
-const {
-  Contrato,
-  Cliente,
-  Produto,
-  ContratoProduto,
-  ContaReceber,
-  CentroCusto,
-  sequelize,
-} = require("../models");
 const { Op } = require("sequelize");
 const { gerarContasReceberContrato } = require("../utils/financeiro");
+const { getDbCliente } = require("../utils/multiTenant"); // 📌 IMPORTA O MULTI-TENANT
 
 function limparCamposVazios(obj) {
   const novoObj = {};
@@ -21,12 +13,19 @@ function limparCamposVazios(obj) {
 const contratoController = {
   async listar(req, res) {
     try {
+      // 📌 pega o banco certo da empresa logada
+      const db = await getDbCliente(req.bancoCliente);
+      const { Contrato, Cliente, Produto } = db.models;
+
       const { cliente, dataInicio, dataFim } = req.query;
-      const where = {};
+      const where = { empresaId: req.empresaId }; // 📌 aplica filtro multi-tenant
 
       if (cliente) {
         const clientes = await Cliente.findAll({
-          where: { nome: { [Op.iLike]: `%${cliente}%` } },
+          where: {
+            nome: { [Op.iLike]: `%${cliente}%` },
+            empresaId: req.empresaId, // 📌 aplica aqui também
+          },
           attributes: ["id"],
         });
         where.clienteId = { [Op.in]: clientes.map((c) => c.id) };
@@ -58,6 +57,9 @@ const contratoController = {
 
   async listarAgenda(req, res) {
     try {
+      const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+      const { Contrato, Cliente } = db.models;
+
       const { dataInicio, dataFim } = req.query;
 
       if (!dataInicio || !dataFim) {
@@ -66,16 +68,10 @@ const contratoController = {
 
       const contratos = await Contrato.findAll({
         where: {
-          dataEvento: {
-            [Op.between]: [dataInicio, dataFim],
-          },
+          dataEvento: { [Op.between]: [dataInicio, dataFim] },
+          empresaId: req.empresaId, // 📌 filtro multi-tenant
         },
-        include: [
-          {
-            model: Cliente,
-            attributes: ["id", "nome"],
-          },
-        ],
+        include: [{ model: Cliente, attributes: ["id", "nome"] }],
         order: [["dataEvento", "ASC"], ["horarioInicio", "ASC"]],
       });
 
@@ -98,23 +94,20 @@ const contratoController = {
 
   async buscarPorId(req, res) {
     try {
+      const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+      const { Contrato, Cliente, Produto, ContaReceber } = db.models;
       const { id } = req.params;
 
-      const contrato = await Contrato.findByPk(id, {
+      const contrato = await Contrato.findOne({
+        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
         include: [
-          {
-            model: Cliente,
-            attributes: ["id", "nome"],
-          },
+          { model: Cliente, attributes: ["id", "nome"] },
           {
             model: Produto,
             attributes: ["id", "nome", "valor"],
             through: { attributes: ["quantidade", "dataEvento"] },
           },
-          {
-            model: ContaReceber,
-            as: "contasReceber",
-          },
+          { model: ContaReceber, as: "contasReceber" },
         ],
       });
 
@@ -130,54 +123,29 @@ const contratoController = {
   },
 
   async criar(req, res) {
+    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+    const {
+      Contrato,
+      Cliente,
+      Produto,
+      ContratoProduto,
+      ContaReceber,
+      CentroCusto,
+      sequelize,
+    } = db.models;
+
     const t = await sequelize.transaction();
     try {
       const dados = limparCamposVazios(req.body);
 
-      const {
-        clienteId,
-        dataEvento,
-        horarioInicio,
-        horarioTermino,
-        enderecoEvento,
-        nomeBuffet,
-        corTema,
-        produtos,
-        valorTotal,
-        descontoValor,
-        descontoPercentual,
-        valorEntrada,
-        valorRestante,
-        parcelasRestante,
-        dataContrato,
-      } = dados;
-
-      const [centroContrato] = await CentroCusto.findOrCreate({
-        where: { descricao: "Contratos" },
-        defaults: { tipo: "Receita" },
-        transaction: t,
-      });
-
       const contrato = await Contrato.create(
         {
-          clienteId,
-          dataEvento,
-          horarioInicio,
-          horarioTermino,
-          localEvento: enderecoEvento,
-          nomeBuffet,
-          temaFesta: corTema,
-          valorTotal,
-          descontoValor,
-          descontoPercentual,
-          valorEntrada,
-          valorRestante,
-          parcelasRestante,
-          dataContrato,
+          ...dados,
+          empresaId: req.empresaId, // 📌 define empresaId ao criar
           statusPagamento:
-            valorEntrada >= valorTotal
+            dados.valorEntrada >= dados.valorTotal
               ? "Totalmente Pago"
-              : valorEntrada > 0
+              : dados.valorEntrada > 0
               ? "Parcialmente Pago"
               : "Aberto",
         },
@@ -186,13 +154,13 @@ const contratoController = {
 
       console.log("🆔 Contrato criado com ID:", contrato.id);
 
-      // Salvar produtos relacionados
-      if (Array.isArray(produtos) && produtos.length > 0) {
-        const produtosParaSalvar = produtos.map((p) => ({
+      // Salvar produtos
+      if (Array.isArray(dados.produtos) && dados.produtos.length > 0) {
+        const produtosParaSalvar = dados.produtos.map((p) => ({
           contratoId: contrato.id,
           produtoId: p.produtoId || p.id,
           quantidade: p.quantidade || 1,
-          dataEvento: dataEvento,
+          dataEvento: dados.dataEvento,
         }));
 
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
@@ -201,15 +169,21 @@ const contratoController = {
       }
 
       // Gerar contas a receber
+      const [centroContrato] = await CentroCusto.findOrCreate({
+        where: { descricao: "Contratos", empresaId: req.empresaId }, // 📌 filtro aqui também
+        defaults: { tipo: "Receita" },
+        transaction: t,
+      });
+
       await gerarContasReceberContrato(
         contrato,
         {
-          clienteId,
+          clienteId: dados.clienteId,
           centroCustoId: centroContrato.id,
-          valorEntrada,
-          dataContrato,
-          valorRestante,
-          parcelasRestante,
+          valorEntrada: dados.valorEntrada,
+          dataContrato: dados.dataContrato,
+          valorRestante: dados.valorRestante,
+          parcelasRestante: dados.parcelasRestante,
         },
         t
       );
@@ -235,45 +209,54 @@ const contratoController = {
   },
 
   async atualizar(req, res) {
+    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+    const {
+      Contrato,
+      ContratoProduto,
+      ContaReceber,
+      CentroCusto,
+      sequelize,
+    } = db.models;
+
     const t = await sequelize.transaction();
     try {
       const { id } = req.params;
       const dados = limparCamposVazios(req.body);
 
-      const contrato = await Contrato.findByPk(id);
+      const contrato = await Contrato.findOne({
+        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
+      });
+
       if (!contrato) {
         return res.status(404).json({ error: "Contrato não encontrado" });
       }
 
       await contrato.update(dados, { transaction: t });
 
-      // Atualizar produtos
-      if (Array.isArray(dados.produtos) && dados.produtos.length > 0) {
-        await ContratoProduto.destroy({
-          where: { contratoId: contrato.id },
-          transaction: t,
-        });
+      // Atualiza produtos e contas a receber (igual antes)
+      await ContratoProduto.destroy({
+        where: { contratoId: contrato.id },
+        transaction: t,
+      });
 
-        const produtosParaSalvar = dados.produtos.map((p) => ({
-          contratoId: contrato.id,
-          produtoId: p.produtoId || p.id,
-          quantidade: p.quantidade || 1,
-          dataEvento: dados.dataEvento,
-        }));
+      const produtosParaSalvar = dados.produtos.map((p) => ({
+        contratoId: contrato.id,
+        produtoId: p.produtoId || p.id,
+        quantidade: p.quantidade || 1,
+        dataEvento: dados.dataEvento,
+      }));
 
-        await ContratoProduto.bulkCreate(produtosParaSalvar, {
-          transaction: t,
-        });
-      }
+      await ContratoProduto.bulkCreate(produtosParaSalvar, {
+        transaction: t,
+      });
 
-      // Atualizar contas a receber
       await ContaReceber.destroy({
-        where: { contratoId: id },
+        where: { contratoId: contrato.id },
         transaction: t,
       });
 
       const [centroContrato] = await CentroCusto.findOrCreate({
-        where: { descricao: "Contratos" },
+        where: { descricao: "Contratos", empresaId: req.empresaId }, // 📌
         defaults: { tipo: "Receita" },
         transaction: t,
       });
@@ -295,9 +278,9 @@ const contratoController = {
 
       const contratoAtualizado = await Contrato.findByPk(contrato.id, {
         include: [
-          { model: Cliente, attributes: ["id", "nome"] },
+          { model: db.models.Cliente, attributes: ["id", "nome"] },
           {
-            model: Produto,
+            model: db.models.Produto,
             through: { attributes: ["quantidade", "dataEvento"] },
           },
         ],
@@ -312,11 +295,17 @@ const contratoController = {
   },
 
   async excluir(req, res) {
+    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+    const { Contrato, ContratoProduto, ContaReceber, sequelize } = db.models;
+
     const t = await sequelize.transaction();
     try {
       const { id } = req.params;
 
-      const contrato = await Contrato.findByPk(id);
+      const contrato = await Contrato.findOne({
+        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
+      });
+
       if (!contrato) {
         return res.status(404).json({ error: "Contrato não encontrado" });
       }
@@ -325,10 +314,12 @@ const contratoController = {
         where: { contratoId: id },
         transaction: t,
       });
+
       await ContratoProduto.destroy({
         where: { contratoId: id },
         transaction: t,
       });
+
       await contrato.destroy({ transaction: t });
 
       await t.commit();

@@ -1,16 +1,18 @@
-const {
-  ContaReceber,
-  CentroCusto,
-  ContaBancaria,
-  Cliente,
-  Contrato,
-} = require("../models");
-
+const { getDbCliente } = require("../utils/multiTenant");
 const { atualizarStatusContratoSePago } = require("../utils/financeiro");
 
 exports.listar = async (req, res) => {
   try {
+    const db = getDbCliente(req.bancoCliente);
+    const {
+      ContaReceber,
+      CentroCusto,
+      ContaBancaria,
+      Cliente,
+    } = db.models;
+
     const contas = await ContaReceber.findAll({
+      where: { empresaId: req.empresaId },
       include: [
         { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
         {
@@ -30,14 +32,14 @@ exports.listar = async (req, res) => {
 };
 
 exports.obterPorId = async (req, res) => {
-  const { id } = req.params;
-
-  if (isNaN(Number(id))) {
-    return res.status(400).json({ error: "ID inválido." });
-  }
-
   try {
-    const conta = await ContaReceber.findByPk(id, {
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber, CentroCusto, ContaBancaria, Cliente } = db.models;
+
+    const { id } = req.params;
+
+    const conta = await ContaReceber.findOne({
+      where: { id, empresaId: req.empresaId },
       include: [
         { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
         {
@@ -58,7 +60,13 @@ exports.obterPorId = async (req, res) => {
 
 exports.criar = async (req, res) => {
   try {
-    const nova = await ContaReceber.create(req.body);
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber } = db.models;
+
+    const nova = await ContaReceber.create({
+      ...req.body,
+      empresaId: req.empresaId,
+    });
     res.status(201).json(nova);
   } catch (e) {
     console.error(e);
@@ -68,7 +76,12 @@ exports.criar = async (req, res) => {
 
 exports.atualizar = async (req, res) => {
   try {
-    const conta = await ContaReceber.findByPk(req.params.id);
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber } = db.models;
+
+    const conta = await ContaReceber.findOne({
+      where: { id: req.params.id, empresaId: req.empresaId },
+    });
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     await conta.update(req.body);
@@ -81,6 +94,14 @@ exports.atualizar = async (req, res) => {
 
 exports.receber = async (req, res) => {
   try {
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber } = db.models;
+
+    const conta = await ContaReceber.findOne({
+      where: { id: req.params.id, empresaId: req.empresaId },
+    });
+    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+
     const {
       dataRecebimento,
       formaPagamento,
@@ -92,9 +113,6 @@ exports.receber = async (req, res) => {
       cartaoId,
       taxaRepassada,
     } = req.body;
-
-    const conta = await ContaReceber.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     const valorRecebidoNum = parseFloat(valorRecebido || 0);
     const valorTotalNum = parseFloat(conta.valorTotal || 0);
@@ -126,12 +144,12 @@ exports.receber = async (req, res) => {
         contratoId: conta.contratoId || null,
         status: "aberto",
         referenciaId: conta.id,
+        empresaId: req.empresaId,
       });
     }
 
-    // ✅ Atualiza status do contrato se todas as contas estiverem pagas
     if (conta.contratoId) {
-      await atualizarStatusContratoSePago(conta.contratoId);
+      await atualizarStatusContratoSePago(conta.contratoId, req);
     }
 
     res.json(conta);
@@ -143,7 +161,12 @@ exports.receber = async (req, res) => {
 
 exports.estornar = async (req, res) => {
   try {
-    const conta = await ContaReceber.findByPk(req.params.id);
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber } = db.models;
+
+    const conta = await ContaReceber.findOne({
+      where: { id: req.params.id, empresaId: req.empresaId },
+    });
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status !== "pago") {
@@ -173,7 +196,12 @@ exports.estornar = async (req, res) => {
 
 exports.excluir = async (req, res) => {
   try {
-    const conta = await ContaReceber.findByPk(req.params.id);
+    const db = getDbCliente(req.bancoCliente);
+    const { ContaReceber } = db.models;
+
+    const conta = await ContaReceber.findOne({
+      where: { id: req.params.id, empresaId: req.empresaId },
+    });
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status === "pago") {

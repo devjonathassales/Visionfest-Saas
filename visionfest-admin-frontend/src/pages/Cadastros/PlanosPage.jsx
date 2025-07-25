@@ -63,7 +63,8 @@ export default function Planos() {
             <tr>
               <th className="border border-gray-300 p-2 text-left">Nome</th>
               <th className="border border-gray-300 p-2 text-left">Duração</th>
-              <th className="border border-gray-300 p-2 text-left">Valor</th>
+              <th className="border border-gray-300 p-2 text-left">Valor Total</th>
+              <th className="border border-gray-300 p-2 text-left">Valor Mensal</th>
               <th className="border border-gray-300 p-2 text-left">Renovação Automática</th>
               <th className="border border-gray-300 p-2 text-left">Atraso/Bloqueio</th>
               <th className="border border-gray-300 p-2 text-left">Ações</th>
@@ -74,12 +75,17 @@ export default function Planos() {
               <tr key={plano.id} className="hover:bg-gray-50">
                 <td className="border border-gray-300 p-2">{plano.nome}</td>
                 <td className="border border-gray-300 p-2">{plano.duracao} meses</td>
-                <td className="border border-gray-300 p-2">R$ {plano.valor.toFixed(2)}</td>
+                <td className="border border-gray-300 p-2">
+                  R$ {Number(plano.valorTotal || plano.valor).toFixed(2)}
+                </td>
+                <td className="border border-gray-300 p-2">
+                  R$ {Number(plano.valorMensal || (plano.valor / plano.duracao)).toFixed(2)}
+                </td>
                 <td className="border border-gray-300 p-2">
                   {plano.renovacaoAutomatica ? "Sim" : "Não"}
                 </td>
                 <td className="border border-gray-300 p-2">
-                  Bloqueia após {plano.diasAtraso} dias / Inativa com {plano.parcelasAbertas} parcelas
+                  Bloqueia após {plano.diasAtraso || 0} dias / Inativa com {plano.parcelasAbertas || 0} parcelas
                 </td>
                 <td className="border border-gray-300 p-2 flex gap-2">
                   <button

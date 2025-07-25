@@ -1,15 +1,15 @@
 const express = require("express");
 const router = express.Router();
+const authEmpresa = require("../middlewares/authEmpresa");
+
+// CAIXA
 const caixaController = require("../controllers/caixaController");
-
-router.post("/abrir", caixaController.abrirCaixa);
-router.post("/fechar", caixaController.fecharCaixa);
-router.get("/atual", caixaController.getCaixaAtual);
-
-router.post("/entrada-manual", caixaController.addEntradaManual);
-router.post("/saida-manual", caixaController.addSaidaManual);
-
-router.get("/entradas", caixaController.listarEntradas);
-router.get("/saidas", caixaController.listarSaidas);
+router.post("/caixa/abrir", authEmpresa, caixaController.abrirCaixa);
+router.post("/caixa/fechar", authEmpresa, caixaController.fecharCaixa);
+router.get("/caixa/atual", authEmpresa, caixaController.getCaixaAtual);
+router.post("/caixa/entrada-manual", authEmpresa, caixaController.addEntradaManual);
+router.post("/caixa/saida-manual", authEmpresa, caixaController.addSaidaManual);
+router.get("/caixa/entradas", authEmpresa, caixaController.listarEntradas);
+router.get("/caixa/saidas", authEmpresa, caixaController.listarSaidas);
 
 module.exports = router;

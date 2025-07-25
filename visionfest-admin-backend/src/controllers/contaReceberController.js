@@ -2,7 +2,11 @@ const {
   ContaReceber,
   CentroCusto,
   ContaBancaria,
- } = require("../models");
+  Empresa,
+  Sequelize,
+} = require("../models");
+
+const { Op } = Sequelize;
 
 exports.listar = async (req, res) => {
   try {
@@ -14,7 +18,7 @@ exports.listar = async (req, res) => {
           as: "contaBancaria",
           attributes: ["banco", "agencia", "conta", "id"],
         },
-              ],
+      ],
       order: [["vencimento", "ASC"]],
     });
     res.json(contas);
@@ -40,7 +44,6 @@ exports.obterPorId = async (req, res) => {
           as: "contaBancaria",
           attributes: ["banco", "agencia", "conta", "id"],
         },
-        { model: Cliente, as: "cliente", attributes: ["id", "nome"] },
       ],
     });
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
@@ -53,8 +56,31 @@ exports.obterPorId = async (req, res) => {
 
 exports.criar = async (req, res) => {
   try {
-    const nova = await ContaReceber.create(req.body);
-    res.status(201).json(nova);
+    let { centroCustoDescricao, ...dadosConta } = req.body;
+
+    // Se houver descrição de centro de custo, buscar ou criar automaticamente
+    let centroReceita = null;
+    if (centroCustoDescricao) {
+      centroReceita = await CentroCusto.findOne({
+        where: {
+          descricao: centroCustoDescricao,
+          tipo: { [Op.in]: ["Receita", "Ambos"] },
+        },
+      });
+
+      if (!centroReceita) {
+        centroReceita = await CentroCusto.create({
+          descricao: centroCustoDescricao,
+          tipo: "Receita",
+        });
+      }
+
+      dadosConta.centroReceitaId = centroReceita.id;
+    }
+
+    const novaConta = await ContaReceber.create(dadosConta);
+
+    res.status(201).json(novaConta);
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao criar conta a receber." });
@@ -80,55 +106,56 @@ exports.receber = async (req, res) => {
       dataRecebimento,
       formaPagamento,
       contaBancariaId,
-      tipoCredito,
-      parcelas,
       valorRecebido,
-      novaDataVencimento,
-      taxaRepassada,
+      centroCustoDescricao = "Recebimentos Diversos",
     } = req.body;
 
     const conta = await ContaReceber.findByPk(req.params.id);
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
-    const valorRecebidoNum = parseFloat(valorRecebido || 0);
-    const valorTotalNum = parseFloat(conta.valorTotal || 0);
+    let centroReceita = await CentroCusto.findOne({
+      where: {
+        descricao: centroCustoDescricao,
+        tipo: { [Op.in]: ["Receita", "Ambos"] },
+      },
+    });
+
+    if (!centroReceita) {
+      centroReceita = await CentroCusto.create({
+        descricao: centroCustoDescricao,
+        tipo: "Receita",
+      });
+    }
 
     await conta.update({
       dataRecebimento: dataRecebimento || new Date(),
       formaPagamento,
       contaBancariaId: contaBancariaId || null,
-      valorRecebido: valorRecebidoNum,
-      tipoCredito: tipoCredito || null,
-      parcelas: parcelas || null,
-      taxaRepassada: taxaRepassada || false,
+      valorRecebido: parseFloat(valorRecebido || 0),
       status: "pago",
+      centroReceitaId: centroReceita.id,
     });
 
-    if (valorRecebidoNum < valorTotalNum && novaDataVencimento) {
-      const valorRestante = (valorTotalNum - valorRecebidoNum).toFixed(2);
-
-      await ContaReceber.create({
-        descricao: `${conta.descricao} (Parcial - Restante)`,
-        valor: valorRestante,
-        desconto: 0,
-        tipoDesconto: "valor",
-        valorTotal: valorRestante,
-        vencimento: novaDataVencimento,
-        centroCustoId: conta.centroCustoId,
-        clienteId: conta.clienteId,
-        contratoId: conta.contratoId || null,
-        status: "aberto",
-        referenciaId: conta.id,
+    if (conta.empresaId) {
+      const abertas = await ContaReceber.count({
+        where: {
+          empresaId: conta.empresaId,
+          status: { [Op.ne]: "pago" },
+        },
       });
+
+      if (abertas === 0) {
+        const empresa = await Empresa.findByPk(conta.empresaId);
+        if (empresa.status !== "ativo") {
+          await empresa.update({ status: "ativo" });
+          console.log(`✅ Empresa ${empresa.nome} ativada automaticamente.`);
+        }
+      }
     }
 
-    if (conta.contratoId) {
-      await atualizarStatusContratoSePago(conta.contratoId);
-    }
-
-    res.json(conta);
+    res.json({ mensagem: "Pagamento registrado com sucesso.", conta });
   } catch (e) {
-    console.error(e);
+    console.error("❌ Erro ao receber conta:", e);
     res.status(500).json({ error: "Erro ao receber conta." });
   }
 };
@@ -139,9 +166,7 @@ exports.estornar = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status !== "pago") {
-      return res
-        .status(400)
-        .json({ error: "Só é possível estornar uma conta paga." });
+      return res.status(400).json({ error: "Só é possível estornar uma conta paga." });
     }
 
     await conta.update({
@@ -149,13 +174,10 @@ exports.estornar = async (req, res) => {
       formaPagamento: null,
       contaBancariaId: null,
       valorRecebido: null,
-      tipoCredito: null,
-      parcelas: null,
-      taxaRepassada: false,
       status: "aberto",
     });
 
-    res.json({ message: "Estornado com sucesso." });
+    res.json({ mensagem: "Estorno realizado com sucesso.", conta });
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: "Erro ao estornar conta." });
@@ -168,9 +190,7 @@ exports.excluir = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status === "pago") {
-      return res
-        .status(400)
-        .json({ error: "Não é possível excluir uma conta já paga." });
+      return res.status(400).json({ error: "Não é possível excluir uma conta já paga." });
     }
 
     await conta.destroy();
@@ -181,7 +201,7 @@ exports.excluir = async (req, res) => {
   }
 };
 
-exports.getFormasPagamento = (req, res) => {
+exports.getFormasPagamento = (_req, res) => {
   try {
     const formasPagamento = [
       { id: 1, nome: "Dinheiro" },

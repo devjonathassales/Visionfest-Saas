@@ -19,6 +19,8 @@ const usuarioRoutes = require('./routes/usuarioRoutes');
 const permissoesRoutes = require('./routes/permissoesRoutes');
 const contratosRouter = require("./routes/contratoRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const clienteAuthRoutes = require("./routes/clienteAuthRoutes");
+
 
 
 const app = express();
@@ -46,5 +48,6 @@ app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/permissoes', permissoesRoutes);
 app.use("/api/contratos", contratosRouter);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/cliente", clienteAuthRoutes);
 
 module.exports = app;

@@ -161,18 +161,18 @@ export default function UsuarioModal({ usuario, onClose, onSuccess, permissoesDi
           <fieldset className="border border-gray-300 rounded p-3 max-h-48 overflow-auto">
             <legend className="font-semibold mb-2 text-gray-700">Permissões</legend>
             <div className="grid grid-cols-2 gap-2 max-h-40 overflow-auto">
-              {permissoesDisponiveis.map(({ key, label }) => (
-                <div key={key} className="flex items-center gap-2">
+              {permissoesDisponiveis.map(({ chave, rotulo }) => (
+                <div key={chave} className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    id={`perm_${key}`}
-                    name={`perm_${key}`}
-                    checked={!!form.permissoes[key]}
+                    id={`perm_${chave}`}
+                    name={`perm_${chave}`}
+                    checked={!!form.permissoes[chave]}
                     onChange={onChange}
                     className="w-4 h-4"
                   />
-                  <label htmlFor={`perm_${key}`} className="select-none text-gray-700">
-                    {label}
+                  <label htmlFor={`perm_${chave}`} className="select-none text-gray-700">
+                    {rotulo}
                   </label>
                 </div>
               ))}

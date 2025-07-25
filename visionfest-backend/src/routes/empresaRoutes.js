@@ -1,29 +1,13 @@
 const express = require("express");
 const router = express.Router();
+const authEmpresa = require("../middlewares/authEmpresa");
+
+// EMPRESAS
 const empresaController = require("../controllers/empresaController");
-const multer = require("multer");
-const path = require("path");
-
-// Configuração Multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, "../uploads"));
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const nome = Date.now() + ext;
-    cb(null, nome);
-  },
-});
-const upload = multer({ storage });
-
-// Rotas
-router.get("/todas", empresaController.listarTodas); // ✅ Listar todas
-router.get("/:id", empresaController.buscar);        // Buscar por ID
-router.get("/", empresaController.buscar);           // Buscar uma empresa (fallback)
-
-router.post("/", upload.single("logo"), empresaController.criarOuAtualizar);        // Criar
-router.put("/:id", upload.single("logo"), empresaController.criarOuAtualizar);      // Atualizar
-router.delete("/:id", empresaController.deletar);                                    // Excluir
+router.get("/empresas/todas", authEmpresa, empresaController.listarTodas);
+router.get("/empresas/:id", authEmpresa, empresaController.buscar);
+router.post("/empresas", authEmpresa, empresaController.criarOuAtualizar);
+router.put("/empresas/:id", authEmpresa, empresaController.criarOuAtualizar);
+router.delete("/empresas/:id", authEmpresa, empresaController.deletar);
 
 module.exports = router;

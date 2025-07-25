@@ -1,52 +1,50 @@
 const { Permissao } = require("../models");
 
-exports.buscarPermissoes = async (req, res) => {
-  try {
-    const permissoes = await Permissao.findAll({
-      where: { usuarioId: req.params.id },
-    });
+module.exports = {
+  async buscarPermissoes(req, res) {
+    try {
+      const permissoes = await Permissao.findAll({
+        where: { usuarioId: req.params.id },
+      });
 
-    const permissoesFormatadas = {};
-    permissoes.forEach((p) => {
-      permissoesFormatadas[p.modulo] = {
-        visualizar: p.visualizar,
-        criarEditar: p.criarEditar,
-        excluir: p.excluir,
-      };
-    });
+      const formatadas = {};
+      permissoes.forEach((p) => {
+        formatadas[p.modulo] = {
+          visualizar: p.visualizar,
+          criarEditar: p.criarEditar,
+          excluir: p.excluir,
+        };
+      });
 
-    res.json({ permissoes: permissoesFormatadas });
-  } catch (error) {
-    console.error("Erro ao buscar permissões:", error);
-    res.status(500).json({ error: "Erro ao buscar permissões." });
-  }
-};
+      res.json({ permissoes: formatadas });
+    } catch (err) {
+      console.error("Erro ao buscar permissões:", err);
+      res.status(500).json({ error: "Erro ao buscar permissões." });
+    }
+  },
 
-exports.salvarPermissoes = async (req, res) => {
-  const usuarioId = req.params.id;
-  const permissoes = req.body.permissoes;
+  async salvarPermissoes(req, res) {
+    try {
+      const usuarioId = req.params.id;
+      const permissoes = req.body.permissoes;
 
-  try {
-    // Remove permissões antigas
-    await Permissao.destroy({ where: { usuarioId } });
+      // Remove permissões antigas
+      await Permissao.destroy({ where: { usuarioId } });
 
-    // Formata para bulkCreate
-    const permissoesFormatadas = Object.entries(permissoes).map(
-      ([modulo, valores]) => ({
+      // Insere novas permissões
+      const dados = Object.entries(permissoes).map(([modulo, p]) => ({
         usuarioId,
         modulo,
-        visualizar: !!valores.visualizar,
-        criarEditar: !!valores.criarEditar,
-        excluir: !!valores.excluir,
-      })
-    );
+        visualizar: !!p.visualizar,
+        criarEditar: !!p.criarEditar,
+        excluir: !!p.excluir,
+      }));
+      await Permissao.bulkCreate(dados);
 
-    // Salva no banco
-    await Permissao.bulkCreate(permissoesFormatadas);
-
-    res.json({ message: "Permissões salvas com sucesso." });
-  } catch (error) {
-    console.error("Erro ao salvar permissões:", error);
-    res.status(500).json({ error: "Erro ao salvar permissões." });
-  }
+      res.json({ message: "Permissões salvas com sucesso." });
+    } catch (err) {
+      console.error("Erro ao salvar permissões:", err);
+      res.status(500).json({ error: "Erro ao salvar permissões." });
+    }
+  },
 };

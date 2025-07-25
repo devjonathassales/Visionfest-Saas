@@ -1,10 +1,22 @@
 const express = require("express");
 const router = express.Router();
 const empresaController = require("../controllers/empresaController");
-const verificarToken = require("../middlewares/authMiddleware");
+const authMiddleware = require("../middlewares/authMiddleware");
+const verificarPermissao = require("../middlewares/verificarPermissao");
 
-router.post("/", verificarToken, empresaController.criarEmpresa);
-router.get("/", verificarToken, empresaController.listarEmpresas);
-router.patch("/:id/bloquear", verificarToken, empresaController.bloquearEmpresa);
+// ✅ Rota PÚBLICA (Wizard)
+router.post("/wizard", empresaController.criarEmpresaViaWizard);
+
+// Protege todas as rotas abaixo
+router.use(authMiddleware);
+
+// CRUD de empresa
+router.post("/", verificarPermissao("editarEmpresas"), empresaController.criarEmpresa);
+router.get("/", verificarPermissao("visualizarEmpresas"), empresaController.listarEmpresas);
+router.patch("/:id/ativar", verificarPermissao("editarEmpresas"), empresaController.ativarEmpresa);
+router.patch("/:id/bloquear", verificarPermissao("editarEmpresas"), empresaController.bloquearDesbloquear);
+router.patch("/:id/upgrade", verificarPermissao("editarEmpresas"), empresaController.upgradePlanoEmpresa);
+router.put("/:id", verificarPermissao("editarEmpresas"), empresaController.editarEmpresa);
+router.delete("/:id", verificarPermissao("editarEmpresas"), empresaController.excluirEmpresa);
 
 module.exports = router;

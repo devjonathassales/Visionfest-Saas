@@ -1,76 +1,82 @@
-const db = require('../models');
-const { CentroCusto } = db;
-const { Op } = require('sequelize'); // importante!
+const { getDbCliente } = require("../utils/multiTenant");
 
-exports.listar = async (req, res) => {
-  try {
-    const centros = await CentroCusto.findAll();
-    res.json(centros);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao listar centros de custo' });
-  }
-};
+module.exports = {
+  async listar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { CentroCusto } = db.models;
 
-exports.listarCusto = async (req, res) => {
-  try {
-    const centros = await CentroCusto.findAll({
-      where: {
-        tipo: {
-          [Op.or]: ['Custo', 'Ambos'], // se quiser considerar também "Ambos"
-        },
-      },
-      order: [['descricao', 'ASC']],
-    });
+      const centros = await CentroCusto.findAll({
+        where: { empresaId: req.empresaId },
+        order: [["descricao", "ASC"]],
+      });
+      res.json(centros);
+    } catch (error) {
+      console.error("Erro ao listar centros de custo:", error);
+      res.status(500).json({ error: "Erro ao listar centros de custo." });
+    }
+  },
 
-    res.json(centros);
-  } catch (error) {
-    console.error('Erro ao buscar centros de custo do tipo Custo:', error);
-    res.status(500).json({ error: 'Erro ao buscar centros de custo do tipo Custo' });
-  }
-};
+  async criar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { CentroCusto } = db.models;
 
-exports.criar = async (req, res) => {
-  const { descricao, tipo } = req.body;
-  if (!descricao || !tipo) {
-    return res.status(400).json({ error: 'Descrição e tipo são obrigatórios' });
-  }
+      const { descricao, tipo } = req.body;
+      if (!descricao || !tipo) {
+        return res.status(400).json({ error: "Descrição e tipo são obrigatórios." });
+      }
 
-  try {
-    const novoCentro = await CentroCusto.create({ descricao, tipo });
-    res.status(201).json(novoCentro);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao criar centro de custo' });
-  }
-};
+      const novo = await CentroCusto.create({
+        descricao,
+        tipo,
+        empresaId: req.empresaId,
+      });
+      res.status(201).json(novo);
+    } catch (error) {
+      console.error("Erro ao criar centro de custo:", error);
+      res.status(500).json({ error: "Erro ao criar centro de custo." });
+    }
+  },
 
-exports.atualizar = async (req, res) => {
-  const { id } = req.params;
-  const { descricao, tipo } = req.body;
+  async atualizar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { CentroCusto } = db.models;
 
-  try {
-    const centro = await CentroCusto.findByPk(id);
-    if (!centro) return res.status(404).json({ error: 'Centro não encontrado' });
+      const { id } = req.params;
+      const centro = await CentroCusto.findOne({
+        where: { id, empresaId: req.empresaId },
+      });
 
-    centro.descricao = descricao ?? centro.descricao;
-    centro.tipo = tipo ?? centro.tipo;
-    await centro.save();
+      if (!centro) return res.status(404).json({ error: "Centro de custo não encontrado." });
 
-    res.json(centro);
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao atualizar centro de custo' });
-  }
-};
+      const { descricao, tipo } = req.body;
+      await centro.update({ descricao, tipo });
+      res.json(centro);
+    } catch (error) {
+      console.error("Erro ao atualizar centro de custo:", error);
+      res.status(500).json({ error: "Erro ao atualizar centro de custo." });
+    }
+  },
 
-exports.deletar = async (req, res) => {
-  const { id } = req.params;
+  async excluir(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { CentroCusto } = db.models;
 
-  try {
-    const centro = await CentroCusto.findByPk(id);
-    if (!centro) return res.status(404).json({ error: 'Centro não encontrado' });
+      const { id } = req.params;
+      const centro = await CentroCusto.findOne({
+        where: { id, empresaId: req.empresaId },
+      });
 
-    await centro.destroy();
-    res.status(204).end();
-  } catch (error) {
-    res.status(500).json({ error: 'Erro ao deletar centro de custo' });
-  }
+      if (!centro) return res.status(404).json({ error: "Centro de custo não encontrado." });
+
+      await centro.destroy();
+      res.json({ mensagem: "Centro de custo excluído com sucesso." });
+    } catch (error) {
+      console.error("Erro ao excluir centro de custo:", error);
+      res.status(500).json({ error: "Erro ao excluir centro de custo." });
+    }
+  },
 };

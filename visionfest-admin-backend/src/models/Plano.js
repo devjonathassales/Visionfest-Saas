@@ -8,12 +8,18 @@ module.exports = (sequelize, DataTypes) => {
         unique: true,
       },
       duracao: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.INTEGER, // duração em meses (ex: 12)
         allowNull: false,
       },
-      valor: {
+      valorTotal: {
         type: DataTypes.DECIMAL(10, 2),
         allowNull: false,
+        comment: "Valor total do plano (anual)",
+      },
+      valorMensal: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true, // ✅ permitir nulo inicialmente
+        comment: "Valor mensal calculado automaticamente",
       },
       renovacaoAutomatica: {
         type: DataTypes.BOOLEAN,

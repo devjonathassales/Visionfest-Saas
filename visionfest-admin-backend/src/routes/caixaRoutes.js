@@ -1,15 +1,19 @@
 const express = require("express");
 const router = express.Router();
 const caixaController = require("../controllers/caixaController");
+const authMiddleware = require("../middlewares/authMiddleware");
+const verificarPermissao = require("../middlewares/verificarPermissao");
 
-router.post("/abrir", caixaController.abrirCaixa);
-router.post("/fechar", caixaController.fecharCaixa);
-router.get("/atual", caixaController.getCaixaAtual);
+router.use(authMiddleware);
 
-router.post("/entrada-manual", caixaController.addEntradaManual);
-router.post("/saida-manual", caixaController.addSaidaManual);
+router.post("/abrir", verificarPermissao("acessarFinanceiro"), caixaController.abrirCaixa);
+router.post("/fechar", verificarPermissao("acessarFinanceiro"), caixaController.fecharCaixa);
+router.get("/atual", verificarPermissao("acessarFinanceiro"), caixaController.getCaixaAtual);
 
-router.get("/entradas", caixaController.listarEntradas);
-router.get("/saidas", caixaController.listarSaidas);
+router.post("/entrada-manual", verificarPermissao("acessarFinanceiro"), caixaController.addEntradaManual);
+router.post("/saida-manual", verificarPermissao("acessarFinanceiro"), caixaController.addSaidaManual);
+
+router.get("/entradas", verificarPermissao("acessarFinanceiro"), caixaController.listarEntradas);
+router.get("/saidas", verificarPermissao("acessarFinanceiro"), caixaController.listarSaidas);
 
 module.exports = router;

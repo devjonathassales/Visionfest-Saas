@@ -1,11 +1,13 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const fornecedorController = require('../controllers/fornecedorController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/', fornecedorController.listar);
-router.get('/:id', fornecedorController.buscarPorId);
-router.post('/', fornecedorController.criar);
-router.put('/:id', fornecedorController.atualizar);
-router.delete('/:id', fornecedorController.deletar);
+// FORNECEDORES
+const fornecedorController = require("../controllers/fornecedorController");
+router.get("/fornecedores", authEmpresa, fornecedorController.listar);
+router.get("/fornecedores/:id", authEmpresa, fornecedorController.buscarPorId);
+router.post("/fornecedores", authEmpresa, fornecedorController.criar);
+router.put("/fornecedores/:id", authEmpresa, fornecedorController.atualizar);
+router.delete("/fornecedores/:id", authEmpresa, fornecedorController.deletar);
 
 module.exports = router;

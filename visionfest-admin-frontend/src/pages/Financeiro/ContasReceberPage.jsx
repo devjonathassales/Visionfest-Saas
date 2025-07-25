@@ -24,6 +24,9 @@ export default function ContasReceber() {
   const [contaSel, setContaSel] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // NOVO: conta para editar
+  const [editandoConta, setEditandoConta] = useState(null);
+
   const atualizarPeriodo = (tipo) => {
     const hoje = new Date();
     if (tipo === "mensal") {
@@ -122,7 +125,9 @@ export default function ContasReceber() {
       return venc >= dataInicial && venc <= dataFinal;
     })
     .filter((c) =>
-      pesquisa ? c.descricao.toLowerCase().includes(pesquisa.toLowerCase()) : true
+      pesquisa
+        ? c.descricao.toLowerCase().includes(pesquisa.toLowerCase())
+        : true
     )
     .sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
 
@@ -167,7 +172,10 @@ export default function ContasReceber() {
           disabled={loading}
         />
         <button
-          onClick={() => setMostrarForm(true)}
+          onClick={() => {
+            setEditandoConta(null); // Limpa edição ao criar nova conta
+            setMostrarForm(true);
+          }}
           className="btn bg-[#7ED957] text-white font-bold h-[42px] min-w-[160px] px-6 ml-auto flex items-center justify-center gap-2"
           disabled={loading}
         >
@@ -202,8 +210,12 @@ export default function ContasReceber() {
                   className="border-t hover:bg-gray-50 transition-colors duration-150"
                 >
                   <td className="px-3 py-2">{c.descricao}</td>
-                  <td className="px-3 py-2">R$ {parseFloat(c.valorTotal).toFixed(2)}</td>
-                  <td className="px-3 py-2">{format(new Date(c.vencimento), "dd/MM/yyyy")}</td>
+                  <td className="px-3 py-2">
+                    R$ {parseFloat(c.valorTotal).toFixed(2)}
+                  </td>
+                  <td className="px-3 py-2">
+                    {format(new Date(c.vencimento), "dd/MM/yyyy")}
+                  </td>
                   <td className="px-3 py-2 capitalize">{c.status}</td>
                   <td className="px-3 py-2">
                     {c.status === "pago"
@@ -213,6 +225,16 @@ export default function ContasReceber() {
                   <td className="px-3 py-2 flex justify-center gap-3">
                     {c.status === "aberto" ? (
                       <>
+                        <button
+                          onClick={() => {
+                            setEditandoConta(c);
+                            setMostrarForm(true);
+                          }}
+                          title="Editar"
+                          className="text-blue-600 hover:text-blue-800 transition"
+                        >
+                          ✏️
+                        </button>
                         <button
                           onClick={() => abrirReceber(c)}
                           title="Receber"
@@ -257,15 +279,27 @@ export default function ContasReceber() {
       {/* Formulário criar/editar */}
       {mostrarForm && (
         <ContaReceberForm
-          onClose={() => setMostrarForm(false)}
-          onSave={loadContas}
+          conta={editandoConta}
+          onClose={() => {
+            setMostrarForm(false);
+            setEditandoConta(null);
+          }}
+          onSave={() => {
+            loadContas();
+            setMostrarForm(false);
+            setEditandoConta(null);
+          }}
           loading={loading}
         />
       )}
 
       {/* Formulário receber */}
       {mostrarReceberForm && contaSel && (
-        <ReceberForm conta={contaSel} onClose={fecharReceber} onBaixa={handleReceber} />
+        <ReceberForm
+          conta={contaSel}
+          onClose={fecharReceber}
+          onBaixa={handleReceber}
+        />
       )}
 
       {/* Modal detalhes */}
@@ -289,7 +323,9 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Vencimento:</span>
-                <span>{format(new Date(contaSel.vencimento), "dd/MM/yyyy")}</span>
+                <span>
+                  {format(new Date(contaSel.vencimento), "dd/MM/yyyy")}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Recebido em:</span>
@@ -301,15 +337,21 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Forma de Pagamento:</span>
-                <span className="capitalize">{contaSel.formaPagamento || "-"}</span>
+                <span className="capitalize">
+                  {contaSel.formaPagamento || "-"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Valor Recebido:</span>
-                <span>R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}</span>
+                <span>
+                  R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}
+                </span>
               </div>
 
               {/* Dados bancários */}
-              {["pix", "debito", "transferencia"].includes(contaSel.formaPagamento) &&
+              {["pix", "debito", "transferencia"].includes(
+                contaSel.formaPagamento
+              ) &&
                 contaSel.contaBancaria && (
                   <>
                     <div className="border-t border-gray-200 pt-2 mt-4 font-medium text-[#7ED957]">

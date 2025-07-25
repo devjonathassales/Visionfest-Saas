@@ -1,17 +1,16 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const controller = require('../controllers/contaReceberController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-// ⚠️ ROTAS FIXAS PRIMEIRO
-router.get('/formas-pagamento', controller.getFormasPagamento);
-
-// ROTAS COM PARÂMETROS
-router.get('/', controller.listar);
-router.get('/:id', controller.obterPorId);
-router.post('/', controller.criar);
-router.put('/:id', controller.atualizar);
-router.put('/:id/receber', controller.receber);
-router.put('/:id/estorno', controller.estornar);
-router.delete('/:id', controller.excluir);
+// CONTAS RECEBER
+const contaReceberController = require("../controllers/contaReceberController");
+router.get("/contas-receber/formas-pagamento", authEmpresa, contaReceberController.getFormasPagamento);
+router.get("/contas-receber", authEmpresa, contaReceberController.listar);
+router.get("/contas-receber/:id", authEmpresa, contaReceberController.obterPorId);
+router.post("/contas-receber", authEmpresa, contaReceberController.criar);
+router.put("/contas-receber/:id", authEmpresa, contaReceberController.atualizar);
+router.put("/contas-receber/:id/receber", authEmpresa, contaReceberController.receber);
+router.put("/contas-receber/:id/estorno", authEmpresa, contaReceberController.estornar);
+router.delete("/contas-receber/:id", authEmpresa, contaReceberController.excluir);
 
 module.exports = router;

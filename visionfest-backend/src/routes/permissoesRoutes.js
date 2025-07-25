@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const permissaoController = require("../controllers/permissaoController");
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get("/:id", permissaoController.buscarPermissoes);
-router.put("/:id", permissaoController.salvarPermissoes);
+// PERMISSÕES
+const permissaoController = require("../controllers/permissaoController");
+router.get("/permissoes/:id", authEmpresa, permissaoController.buscarPermissoes);
+router.put("/permissoes/:id", authEmpresa, permissaoController.salvarPermissoes);
 
 module.exports = router;

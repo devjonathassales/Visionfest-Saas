@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const planoController = require("../controllers/planoController");
-const verificarToken = require("../middlewares/authMiddleware");
+const authMiddleware = require("../middlewares/authMiddleware");
+const verificarPermissao = require("../middlewares/verificarPermissao");
 
-router.get("/", verificarToken, planoController.listarPlanos);
-router.post("/", verificarToken, planoController.criarPlano);
-router.put("/:id", verificarToken, planoController.editarPlano);
-router.delete("/:id", verificarToken, planoController.excluirPlano);
+router.use(authMiddleware);
+
+router.get("/", verificarPermissao("gerenciarPlanos"), planoController.listarPlanos);
+router.post("/", verificarPermissao("gerenciarPlanos"), planoController.criarPlano);
+router.put("/:id", verificarPermissao("gerenciarPlanos"), planoController.editarPlano);
+router.delete("/:id", verificarPermissao("gerenciarPlanos"), planoController.excluirPlano);
 
 module.exports = router;

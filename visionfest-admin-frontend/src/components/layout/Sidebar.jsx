@@ -16,40 +16,50 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../../contexts/AuthContext";
 
 const modules = [
   {
     title: "Cadastros",
+    permissionKey: "visualizarEmpresas",
     links: [
-      { to: "/cadastros/empresas", label: "Empresas", icon: <Building2 size={18} /> },
-      { to: "/cadastros/usuarios", label: "Usuários", icon: <Users size={18} /> },
-      { to: "/cadastros/planos", label: "Planos", icon: <Layers size={18} /> },
+      { to: "/cadastros/empresas", label: "Empresas", permission: "visualizarEmpresas", icon: <Building2 size={18} /> },
+      { to: "/cadastros/usuarios", label: "Usuários", permission: "visualizarUsuarios", icon: <Users size={18} /> },
+      { to: "/cadastros/planos", label: "Planos", permission: "gerenciarPlanos", icon: <Layers size={18} /> },
     ],
   },
   {
     title: "Financeiro",
+    permissionKey: "acessarFinanceiro",
     links: [
-      { to: "/financeiro/caixa", label: "Caixa", icon: <DollarSign size={18} /> },
-      { to: "/financeiro/contas-pagar", label: "Contas a Pagar", icon: <CreditCard size={18} /> },
-      { to: "/financeiro/contas-receber", label: "Contas a Receber", icon: <CreditCard size={18} /> },
-      { to: "/financeiro/centro-custo", label: "Centro de Custo", icon: <Archive size={18} /> },
-      { to: "/financeiro/contas-bancarias", label: "Contas Bancárias", icon: <Archive size={18} /> },
+      { to: "/financeiro/caixa", label: "Caixa", permission: "abrirCaixa", icon: <DollarSign size={18} /> },
+      { to: "/financeiro/contas-pagar", label: "Contas a Pagar", permission: "acessarFinanceiro", icon: <CreditCard size={18} /> },
+      { to: "/financeiro/contas-receber", label: "Contas a Receber", permission: "acessarFinanceiro", icon: <CreditCard size={18} /> },
+      { to: "/financeiro/centro-custo", label: "acessarFinanceiro", permission: "acessarFinanceiro", icon: <Archive size={18} /> },
+      { to: "/financeiro/contas-bancarias", label: "Contas Bancárias", permission: "acessarFinanceiro", icon: <Archive size={18} /> },
     ],
   },
   {
     title: "Relatórios",
-    links: [{ to: "/relatorios", label: "Relatórios Gerais", icon: <FileText size={18} /> }],
+    permissionKey: "visualizarRelatorios",
+    links: [
+      { to: "/relatorios", label: "Relatórios Gerais", permission: "visualizarRelatorios", icon: <FileText size={18} /> }
+    ],
   },
   {
     title: "Configurações",
-    links: [{ to: "/configuracoes", label: "Backup e Gateway", icon: <Settings size={18} /> }],
+    permissionKey: "configurarSistema",
+    links: [
+      { to: "/configuracoes", label: "Backup e Gateway", permission: "configurarSistema", icon: <Settings size={18} /> }
+    ],
   },
   {
     title: "Ordens de Serviço",
+    permissionKey: "visualizarRelatorios",
     links: [
-      { to: "/ordens/melhoria", label: "Solicitações de Melhoria", icon: <ClipboardList size={18} /> },
-      { to: "/ordens/ajuste", label: "Solicitações de Ajuste", icon: <ClipboardList size={18} /> },
-      { to: "/ordens/suporte", label: "Pedidos de Suporte", icon: <ClipboardList size={18} /> },
+      { to: "/ordens/melhoria", label: "Solicitações de Melhoria", permission: "visualizarRelatorios", icon: <ClipboardList size={18} /> },
+      { to: "/ordens/ajuste", label: "Solicitações de Ajuste", permission: "visualizarRelatorios", icon: <ClipboardList size={18} /> },
+      { to: "/ordens/suporte", label: "Pedidos de Suporte", permission: "visualizarRelatorios", icon: <ClipboardList size={18} /> },
     ],
   },
 ];
@@ -58,6 +68,7 @@ export default function Sidebar() {
   const location = useLocation();
   const [isOpen, setIsOpen] = useState(false); // mobile menu open/close
   const [openModules, setOpenModules] = useState({}); // modules accordion state
+  const { user } = useAuth();
 
   function toggleModule(title) {
     setOpenModules((prev) => ({
@@ -94,24 +105,30 @@ export default function Sidebar() {
           md:translate-x-0 md:static md:flex md:flex-col md:h-screen`}
       >
         {/* Link direto para dashboard */}
-        <nav className="mb-6 px-4">
-          <Link
-            to="/dashboard"
-            className={`flex items-center gap-3 px-4 py-2 rounded-md text-lg font-semibold
+        {user?.permissoes?.acessarDashboard && (
+          <nav className="mb-6 px-4">
+            <Link
+              to="/dashboard"
+              className={`flex items-center gap-3 px-4 py-2 rounded-md text-lg font-semibold
               ${
                 location.pathname === "/dashboard"
                   ? "bg-green-500 text-white"
                   : "hover:bg-gray-700 text-gray-300"
               }`}
-            onClick={() => setIsOpen(false)}
-          >
-            <Home size={20} />
-            Dashboard
-          </Link>
-        </nav>
+              onClick={() => setIsOpen(false)}
+            >
+              <Home size={20} />
+              Dashboard
+            </Link>
+          </nav>
+        )}
 
         {/* Demais módulos */}
         {modules.map(({ title, links }) => {
+          // Esconde módulo se nenhuma permissão
+          const hasPermission = links.some(link => user?.permissoes?.[link.permission]);
+          if (!hasPermission) return null;
+
           const isModuleOpen = openModules[title] || false;
 
           return (
@@ -125,7 +142,8 @@ export default function Sidebar() {
               </button>
               {isModuleOpen && (
                 <ul className="mt-2 space-y-1">
-                  {links.map(({ to, label, icon }) => {
+                  {links.map(({ to, label, icon, permission }) => {
+                    if (!user?.permissoes?.[permission]) return null;
                     const isActive = location.pathname === to;
                     return (
                       <li key={to}>

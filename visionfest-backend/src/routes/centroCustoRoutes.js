@@ -1,11 +1,14 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const centroCustoController = require('../controllers/centroCustoController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/', centroCustoController.listar);
-router.get('/tipo/custo', centroCustoController.listarCusto);
-router.post('/', centroCustoController.criar);
-router.put('/:id', centroCustoController.atualizar);
-router.delete('/:id', centroCustoController.deletar);
+// CENTRO CUSTO
+const centroCustoController = require("../controllers/centroCustoController");
+router.get("/centro-custo", authEmpresa, centroCustoController.listar);
+router.post("/centro-custo", authEmpresa, centroCustoController.criar);
+router.put("/centro-custo/:id", authEmpresa, centroCustoController.atualizar);
+router.delete("/centro-custo/:id", authEmpresa, centroCustoController.excluir);
+
+
 
 module.exports = router;

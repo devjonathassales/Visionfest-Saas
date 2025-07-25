@@ -13,9 +13,7 @@ module.exports = {
         return res.status(400).json({ error: "Senhas não coincidem." });
       }
       if (senha.length < 6) {
-        return res
-          .status(400)
-          .json({ error: "Senha deve ter no mínimo 6 caracteres." });
+        return res.status(400).json({ error: "Senha deve ter no mínimo 6 caracteres." });
       }
 
       const existente = await Usuario.findOne({ where: { email } });
@@ -24,17 +22,13 @@ module.exports = {
       }
 
       const senhaHash = await bcrypt.hash(senha, 10);
-      const novo = await Usuario.create({
-        nome,
-        email,
-        senhaHash,
-        ativo: true,
-      });
-      const { senhaHash: _, ...rest } = novo.toJSON();
-      return res.status(201).json(rest);
+      const usuario = await Usuario.create({ nome, email, senhaHash, ativo: true });
+      const { senhaHash: _, ...rest } = usuario.toJSON();
+
+      res.status(201).json(rest);
     } catch (err) {
-      console.error("Erro criar usuário:", err);
-      return res.status(500).json({ error: "Erro interno do servidor." });
+      console.error("Erro ao criar usuário:", err);
+      res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
@@ -43,10 +37,10 @@ module.exports = {
       const usuarios = await Usuario.findAll({
         attributes: ["id", "nome", "email", "ativo", "createdAt"],
       });
-      return res.json(usuarios);
+      res.json(usuarios);
     } catch (err) {
-      console.error("Erro listar usuários:", err);
-      return res.status(500).json({ error: "Erro interno do servidor." });
+      console.error("Erro ao listar usuários:", err);
+      res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
@@ -54,18 +48,19 @@ module.exports = {
     try {
       const { id } = req.params;
       const { nome, email, senha, confirmarSenha } = req.body;
+
       const usuario = await Usuario.findByPk(id);
       if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
       }
 
       if (senha || confirmarSenha) {
-        if (senha !== confirmarSenha)
+        if (senha !== confirmarSenha) {
           return res.status(400).json({ error: "Senhas não coincidem." });
-        if (senha.length < 6)
-          return res
-            .status(400)
-            .json({ error: "Senha deve ter no mínimo 6 caracteres." });
+        }
+        if (senha.length < 6) {
+          return res.status(400).json({ error: "Senha deve ter no mínimo 6 caracteres." });
+        }
         usuario.senhaHash = await bcrypt.hash(senha, 10);
       }
 
@@ -74,10 +69,10 @@ module.exports = {
       await usuario.save();
 
       const { senhaHash: _, ...rest } = usuario.toJSON();
-      return res.json(rest);
+      res.json(rest);
     } catch (err) {
-      console.error("Erro atualizar usuário:", err);
-      return res.status(500).json({ error: "Erro interno do servidor." });
+      console.error("Erro ao atualizar usuário:", err);
+      res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
@@ -85,18 +80,20 @@ module.exports = {
     try {
       const { id } = req.params;
       const { ativo } = req.body;
+
       const usuario = await Usuario.findByPk(id);
-      if (!usuario)
+      if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
+      }
 
       usuario.ativo = ativo;
       await usuario.save();
 
       const { senhaHash: _, ...rest } = usuario.toJSON();
-      return res.json(rest);
+      res.json(rest);
     } catch (err) {
-      console.error("Erro alterar ativo:", err);
-      return res.status(500).json({ error: "Erro interno do servidor." });
+      console.error("Erro ao alterar ativo:", err);
+      res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
@@ -104,13 +101,15 @@ module.exports = {
     try {
       const { id } = req.params;
       const usuario = await Usuario.findByPk(id);
-      if (!usuario)
+      if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
       await usuario.destroy();
-      return res.json({ message: "Usuário excluído." });
+      res.json({ message: "Usuário excluído com sucesso." });
     } catch (err) {
-      console.error("Erro excluir usuário:", err);
-      return res.status(500).json({ error: "Erro interno do servidor." });
+      console.error("Erro ao excluir usuário:", err);
+      res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 };

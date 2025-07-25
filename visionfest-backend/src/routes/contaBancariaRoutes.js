@@ -1,10 +1,13 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const controller = require('../controllers/contaBancariaController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/', controller.listar);
-router.post('/', controller.criar);
-router.put('/:id', controller.atualizar);
-router.delete('/:id', controller.excluir);
+// CONTAS BANCÁRIAS
+const contaBancariaController = require("../controllers/contaBancariaController");
+router.get("/contas-bancarias", authEmpresa, contaBancariaController.listar);
+router.post("/contas-bancarias", authEmpresa, contaBancariaController.criar);
+router.put("/contas-bancarias/:id", authEmpresa, contaBancariaController.atualizar);
+router.delete("/contas-bancarias/:id", authEmpresa, contaBancariaController.excluir);
+
 
 module.exports = router;

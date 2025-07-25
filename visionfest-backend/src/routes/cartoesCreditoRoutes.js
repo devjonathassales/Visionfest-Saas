@@ -1,10 +1,13 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const controller = require('../controllers/cartoesCreditoController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/', controller.listar);
-router.post('/', controller.criar);
-router.put('/:id', controller.atualizar);
-router.delete('/:id', controller.excluir);
+// CARTOES CREDITO
+const cartoesCreditoController = require("../controllers/cartoesCreditoController");
+router.get("/cartoes-credito", authEmpresa, cartoesCreditoController.listar);
+router.post("/cartoes-credito", authEmpresa, cartoesCreditoController.criar);
+router.put("/cartoes-credito/:id", authEmpresa, cartoesCreditoController.atualizar);
+router.delete("/cartoes-credito/:id", authEmpresa, cartoesCreditoController.excluir);
+
 
 module.exports = router;

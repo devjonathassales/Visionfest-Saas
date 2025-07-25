@@ -1,220 +1,178 @@
-const {
-  ContaPagar,
-  CentroCusto,
-  ContaBancaria,
-  Fornecedor,
-} = require("../models");
+const { getDbCliente } = require("../utils/multiTenant");
 
-// Listar todas as contas a pagar com dados relacionados
-exports.listar = async (req, res) => {
-  try {
-    const contas = await ContaPagar.findAll({
-      include: [
-        {
-          model: CentroCusto,
-          as: "centroCusto",
-          attributes: ["descricao"],
-        },
-        {
-          model: ContaBancaria,
-          as: "contaBancaria",
-          attributes: ["banco", "agencia", "conta", "id"],
-        },
-        {
-          model: Fornecedor,
-          as: "fornecedor",
-          attributes: [
-            "id",
-            "nome",
-            "cpfCnpj",
-            "endereco",
-            "whatsapp",
-            "email",
-          ],
-        },
-      ],
-      order: [["vencimento", "ASC"]],
-    });
-    res.json(contas);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao listar contas." });
-  }
-};
+module.exports = {
+  async listar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
 
-// Obter uma conta a pagar por ID
-exports.obterPorId = async (req, res) => {
-  try {
-    const conta = await ContaPagar.findByPk(req.params.id, {
-      include: [
-        {
-          model: CentroCusto,
-          as: "centroCusto",
-          attributes: ["descricao"],
-        },
-        {
-          model: ContaBancaria,
-          as: "contaBancaria",
-          attributes: ["banco", "agencia", "conta", "id"],
-        },
-        {
-          model: Fornecedor,
-          as: "fornecedor",
-          attributes: [
-            "id",
-            "nome",
-            "cpfCnpj",
-            "endereco",
-            "whatsapp",
-            "email",
-          ],
-        },
-      ],
-    });
-
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-
-    res.json(conta);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar conta." });
-  }
-};
-
-// Criar conta
-exports.criar = async (req, res) => {
-  try {
-    if (!req.body.fornecedorId)
-      return res.status(400).json({ error: "Fornecedor é obrigatório." });
-
-    const nova = await ContaPagar.create(req.body);
-    res.status(201).json(nova);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao criar conta." });
-  }
-};
-
-// Atualizar conta
-exports.atualizar = async (req, res) => {
-  try {
-    const conta = await ContaPagar.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-
-    if (!req.body.fornecedorId)
-      return res.status(400).json({ error: "Fornecedor é obrigatório." });
-
-    await conta.update(req.body);
-    res.json(conta);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao atualizar conta." });
-  }
-};
-
-// Baixar conta com lógica de pagamento parcial
-exports.baixar = async (req, res) => {
-  try {
-    const {
-      dataPagamento,
-      formaPagamento,
-      contaBancaria,
-      valorPago,
-      troco,
-      tipoCredito,
-      parcelas,
-      novaDataVencimento,
-    } = req.body;
-
-    const conta = await ContaPagar.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-
-    const valorPagoNum = parseFloat(valorPago || 0);
-    const valorTotalNum = parseFloat(conta.valorTotal || 0);
-
-    await conta.update({
-      dataPagamento,
-      formaPagamento,
-      contaBancariaId:
-        formaPagamento === "pix" || formaPagamento === "debito"
-          ? contaBancaria?.id
-          : null,
-      valorPago: valorPagoNum,
-      troco,
-      tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
-      parcelas:
-        formaPagamento === "credito" && tipoCredito === "parcelado"
-          ? parcelas
-          : null,
-      status: "pago",
-    });
-
-    if (valorPagoNum < valorTotalNum && novaDataVencimento) {
-      const valorRestante = (valorTotalNum - valorPagoNum).toFixed(2);
-
-      await ContaPagar.create({
-        descricao: `${conta.descricao} (Restante)`,
-        valor: valorRestante,
-        desconto: 0,
-        tipoDesconto: "valor",
-        valorTotal: valorRestante,
-        vencimento: novaDataVencimento,
-        centroCustoId: conta.centroCustoId,
-        fornecedorId: conta.fornecedorId,
-        status: "aberto",
-        referenciaId: conta.id,
+      const contas = await ContaPagar.findAll({
+        where: { empresaId: req.empresaId },
+        order: [["vencimento", "ASC"]],
       });
+
+      res.json(contas);
+    } catch (error) {
+      console.error("Erro ao listar contas a pagar:", error);
+      res.status(500).json({ error: "Erro ao listar contas a pagar." });
     }
+  },
 
-    res.json({ message: "Pagamento realizado com sucesso." });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao processar pagamento." });
-  }
-};
+  async obterPorId(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
 
-// Estornar
-exports.estornar = async (req, res) => {
-  try {
-    const conta = await ContaPagar.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+      const conta = await ContaPagar.findOne({
+        where: { id: req.params.id, empresaId: req.empresaId },
+      });
 
-    if (conta.status !== "pago")
-      return res.status(400).json({ error: "A conta não está paga." });
+      if (!conta) {
+        return res.status(404).json({ error: "Conta a pagar não encontrada." });
+      }
 
-    await conta.update({
-      dataPagamento: null,
-      formaPagamento: null,
-      contaBancariaId: null,
-      valorPago: null,
-      troco: null,
-      tipoCredito: null,
-      parcelas: null,
-      status: "aberto",
-    });
+      res.json(conta);
+    } catch (error) {
+      console.error("Erro ao buscar conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao buscar conta a pagar." });
+    }
+  },
 
-    res.json({ message: "Conta estornada com sucesso." });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao estornar conta." });
-  }
-};
+  async criar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
 
-// Excluir
-exports.excluir = async (req, res) => {
-  try {
-    const conta = await ContaPagar.findByPk(req.params.id);
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+      const { descricao, valor, vencimento, fornecedorId, centroCustoId } = req.body;
 
-    if (conta.status === "pago")
-      return res
-        .status(400)
-        .json({ error: "Não é possível excluir conta paga." });
+      const novaConta = await ContaPagar.create({
+        descricao,
+        valor,
+        vencimento,
+        fornecedorId,
+        centroCustoId,
+        status: "aberto",
+        empresaId: req.empresaId,
+      });
 
-    await conta.destroy();
-    res.sendStatus(204);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao excluir conta." });
-  }
+      res.status(201).json(novaConta);
+    } catch (error) {
+      console.error("Erro ao criar conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao criar conta a pagar." });
+    }
+  },
+
+  async atualizar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
+
+      const conta = await ContaPagar.findOne({
+        where: { id: req.params.id, empresaId: req.empresaId },
+      });
+
+      if (!conta) {
+        return res.status(404).json({ error: "Conta a pagar não encontrada." });
+      }
+
+      const { descricao, valor, vencimento, fornecedorId, centroCustoId } = req.body;
+
+      await conta.update({
+        descricao,
+        valor,
+        vencimento,
+        fornecedorId,
+        centroCustoId,
+      });
+
+      res.json(conta);
+    } catch (error) {
+      console.error("Erro ao atualizar conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao atualizar conta a pagar." });
+    }
+  },
+
+  async baixar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
+
+      const conta = await ContaPagar.findOne({
+        where: { id: req.params.id, empresaId: req.empresaId },
+      });
+
+      if (!conta) {
+        return res.status(404).json({ error: "Conta a pagar não encontrada." });
+      }
+
+      if (conta.status === "pago") {
+        return res.status(400).json({ error: "Conta já está paga." });
+      }
+
+      await conta.update({
+        status: "pago",
+        dataPagamento: new Date(),
+      });
+
+      res.json({ message: "Conta baixada com sucesso.", conta });
+    } catch (error) {
+      console.error("Erro ao baixar conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao baixar conta a pagar." });
+    }
+  },
+
+  async estornar(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
+
+      const conta = await ContaPagar.findOne({
+        where: { id: req.params.id, empresaId: req.empresaId },
+      });
+
+      if (!conta) {
+        return res.status(404).json({ error: "Conta a pagar não encontrada." });
+      }
+
+      if (conta.status !== "pago") {
+        return res.status(400).json({ error: "Conta não está paga para estornar." });
+      }
+
+      await conta.update({
+        status: "aberto",
+        dataPagamento: null,
+      });
+
+      res.json({ message: "Estorno realizado com sucesso.", conta });
+    } catch (error) {
+      console.error("Erro ao estornar conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao estornar conta a pagar." });
+    }
+  },
+
+  async excluir(req, res) {
+    try {
+      const db = getDbCliente(req.bancoCliente);
+      const { ContaPagar } = db.models;
+
+      const conta = await ContaPagar.findOne({
+        where: { id: req.params.id, empresaId: req.empresaId },
+      });
+
+      if (!conta) {
+        return res.status(404).json({ error: "Conta a pagar não encontrada." });
+      }
+
+      if (conta.status === "pago") {
+        return res.status(400).json({ error: "Não é possível excluir uma conta paga." });
+      }
+
+      await conta.destroy();
+
+      res.json({ message: "Conta a pagar excluída com sucesso." });
+    } catch (error) {
+      console.error("Erro ao excluir conta a pagar:", error);
+      res.status(500).json({ error: "Erro ao excluir conta a pagar." });
+    }
+  },
 };

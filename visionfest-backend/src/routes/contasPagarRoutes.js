@@ -1,13 +1,15 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const controller = require('../controllers/contaPagarController');
+const authEmpresa = require("../middlewares/authEmpresa");
 
-router.get('/', controller.listar);
-router.get('/:id', controller.obterPorId);
-router.post('/', controller.criar);
-router.put('/:id', controller.atualizar);
-router.put('/:id/baixa', controller.baixar);
-router.put('/:id/estorno', controller.estornar);
-router.delete('/:id', controller.excluir);
+// CONTAS PAGAR
+const contaPagarController = require("../controllers/contaPagarController");
+router.get("/contas-pagar", authEmpresa, contaPagarController.listar);
+router.get("/contas-pagar/:id", authEmpresa, contaPagarController.obterPorId);
+router.post("/contas-pagar", authEmpresa, contaPagarController.criar);
+router.put("/contas-pagar/:id", authEmpresa, contaPagarController.atualizar);
+router.put("/contas-pagar/:id/baixa", authEmpresa, contaPagarController.baixar);
+router.put("/contas-pagar/:id/estorno", authEmpresa, contaPagarController.estornar);
+router.delete("/contas-pagar/:id", authEmpresa, contaPagarController.excluir);
 
 module.exports = router;

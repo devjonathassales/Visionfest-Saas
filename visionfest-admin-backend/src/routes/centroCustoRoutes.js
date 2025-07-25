@@ -1,17 +1,14 @@
 const express = require("express");
 const router = express.Router();
 const centroCustoController = require("../controllers/centroCustoController");
+const authMiddleware = require("../middlewares/authMiddleware");
+const verificarPermissao = require("../middlewares/verificarPermissao");
 
-// GET /centros-custo
-router.get("/", centroCustoController.listar);
+router.use(authMiddleware);
 
-// POST /centros-custo
-router.post("/", centroCustoController.criar);
-
-// PUT /centros-custo/:id
-router.put("/:id", centroCustoController.atualizar);
-
-// DELETE /centros-custo/:id
-router.delete("/:id", centroCustoController.excluir);
+router.get("/", verificarPermissao("visualizarCentrosCusto"), centroCustoController.listar);
+router.post("/", verificarPermissao("editarCentrosCusto"), centroCustoController.criar);
+router.put("/:id", verificarPermissao("editarCentrosCusto"), centroCustoController.atualizar);
+router.delete("/:id", verificarPermissao("excluirCentrosCusto"), centroCustoController.excluir);
 
 module.exports = router;

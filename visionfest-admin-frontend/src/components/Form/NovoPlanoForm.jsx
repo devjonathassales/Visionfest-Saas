@@ -6,7 +6,8 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
   const [form, setForm] = useState({
     nome: "",
     duracao: "",
-    valor: "",
+    valorTotal: "",
+    valorMensal: "",
     renovacaoAutomatica: false,
     diasBloqueio: "",
     parcelasInativar: "",
@@ -18,7 +19,12 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
       setForm({
         nome: plano.nome,
         duracao: plano.duracao,
-        valor: plano.valor,
+        valorTotal: plano.valorTotal || plano.valor || "", // compatibilidade
+        valorMensal:
+          plano.valorMensal ||
+          (plano.valor && plano.duracao
+            ? (plano.valor / plano.duracao).toFixed(2)
+            : ""),
         renovacaoAutomatica: plano.renovacaoAutomatica,
         diasBloqueio: plano.diasBloqueio,
         parcelasInativar: plano.parcelasInativar,
@@ -28,27 +34,53 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
 
   function onChange(e) {
     const { name, value, type, checked } = e.target;
-    setForm((f) => ({
-      ...f,
-      [name]: type === "checkbox" ? checked : value,
-    }));
+
+    setForm((f) => {
+      const updated = {
+        ...f,
+        [name]: type === "checkbox" ? checked : value,
+      };
+
+      // Atualiza valorMensal automaticamente se valorTotal e duracao existirem
+      if (
+        (name === "valorTotal" || name === "duracao") &&
+        updated.valorTotal &&
+        updated.duracao
+      ) {
+        const mensal =
+          parseFloat(updated.valorTotal) / parseInt(updated.duracao);
+        updated.valorMensal = mensal.toFixed(2);
+      }
+
+      return updated;
+    });
   }
 
   async function onSubmit(e) {
     e.preventDefault();
 
+    const payload = {
+      ...form,
+      valorTotal: parseFloat(form.valorTotal),
+      valorMensal: parseFloat(form.valorMensal),
+      duracao: parseInt(form.duracao),
+      diasBloqueio: parseInt(form.diasBloqueio) || 0,
+      parcelasInativar: parseInt(form.parcelasInativar) || 0,
+    };
+
     try {
       setLoading(true);
       if (plano) {
-        await api.put(`/planos/${plano.id}`, form);
+        await api.put(`/planos/${plano.id}`, payload);
         alert("Plano atualizado com sucesso!");
       } else {
-        await api.post("/planos", form);
+        await api.post("/planos", payload);
         alert("Plano criado com sucesso!");
       }
       onSuccess();
       onClose();
     } catch (err) {
+      console.error(err);
       alert("Erro ao salvar plano");
     } finally {
       setLoading(false);
@@ -62,11 +94,18 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
           <h2 className="text-lg font-bold text-gray-800">
             {plano ? "Editar Plano" : "Novo Plano"}
           </h2>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-800">
+          <button
+            onClick={onClose}
+            className="text-gray-600 hover:text-gray-800"
+          >
             <X size={20} />
           </button>
         </div>
-        <form onSubmit={onSubmit} className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <form
+          onSubmit={onSubmit}
+          className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4"
+        >
+          {/* Nome */}
           <div>
             <label className="block text-sm mb-1">Nome *</label>
             <input
@@ -77,6 +116,8 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
               required
             />
           </div>
+
+          {/* Duração */}
           <div>
             <label className="block text-sm mb-1">Duração (meses) *</label>
             <input
@@ -84,22 +125,43 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
               value={form.duracao}
               onChange={onChange}
               type="number"
+              min="1"
               className="w-full border border-gray-300 rounded px-3 py-2"
               required
             />
           </div>
+
+          {/* Valor Total */}
           <div>
-            <label className="block text-sm mb-1">Valor (R$) *</label>
+            <label className="block text-sm mb-1">Valor Total (R$) *</label>
             <input
-              name="valor"
-              value={form.valor}
+              name="valorTotal"
+              value={form.valorTotal}
               onChange={onChange}
               type="number"
+              min="0"
               step="0.01"
               className="w-full border border-gray-300 rounded px-3 py-2"
               required
             />
           </div>
+
+          {/* Valor Mensal (calculado) */}
+          <div>
+            <label className="block text-sm mb-1">Valor Mensal (R$)</label>
+            <input
+              name="valorMensal"
+              value={form.valorMensal}
+              onChange={onChange}
+              type="number"
+              min="0"
+              step="0.01"
+              className="w-full border border-gray-300 rounded px-3 py-2"
+              readOnly
+            />
+          </div>
+
+          {/* Renovação Automática */}
           <div className="flex items-center gap-2 mt-2">
             <input
               name="renovacaoAutomatica"
@@ -109,27 +171,38 @@ export default function NovoPlanoModal({ plano, onClose, onSuccess }) {
             />
             <label className="text-sm">Permite Renovação Automática</label>
           </div>
+
+          {/* Bloqueio */}
           <div>
-            <label className="block text-sm mb-1">Bloquear após (dias atraso)</label>
+            <label className="block text-sm mb-1">
+              Bloquear após (dias atraso)
+            </label>
             <input
               name="diasBloqueio"
               value={form.diasBloqueio}
               onChange={onChange}
               type="number"
+              min="0"
               className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
+
+          {/* Inativação */}
           <div>
-            <label className="block text-sm mb-1">Inativar com (parcelas em aberto)</label>
+            <label className="block text-sm mb-1">
+              Inativar com (parcelas em aberto)
+            </label>
             <input
               name="parcelasInativar"
               value={form.parcelasInativar}
               onChange={onChange}
               type="number"
+              min="0"
               className="w-full border border-gray-300 rounded px-3 py-2"
             />
           </div>
 
+          {/* Botões */}
           <div className="sm:col-span-2 flex justify-end gap-3 mt-4">
             <button
               type="button"

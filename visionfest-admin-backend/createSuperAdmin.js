@@ -1,36 +1,20 @@
-import { sequelize, AdminUser } from "./src/models/index.js";
-import bcrypt from "bcrypt";
+const { sequelize, AdminUser } = require("./src/models");
+const bcrypt = require("bcrypt");
 
 async function createSuperAdmin() {
   try {
-    // ✅ Sincronizar o banco antes de tudo
-    await sequelize.sync({ alter: true }); // cria/atualiza as tabelas se não existirem
-    console.log("✔️ Tabelas sincronizadas com sucesso!");
+    const hashedPassword = await bcrypt.hash("123456", 10);
 
-    // Verificar se já existe
-    const existingAdmin = await AdminUser.findOne({
-      where: { email: "admin@visionfest.com" },
-    });
-
-    if (existingAdmin) {
-      console.log("⚠️ Usuário superadmin já existe!");
-      return;
-    }
-
-    // Criar hash da senha
-    const hashedPassword = await bcrypt.hash("senhaSuperSecreta123", 10);
-
-    // Criar o superadmin
-    await AdminUser.create({
-      nome: "Jonathas Sales",
+    const admin = await AdminUser.create({
+      nome: "Super Admin",
       email: "admin@visionfest.com",
       senha: hashedPassword,
-      role: "superadmin", // ✅ já adiciona role
+      role: "super_admin"
     });
 
-    console.log("✅ Superadmin criado com sucesso!");
-  } catch (error) {
-    console.error("❌ Erro ao criar superadmin:", error);
+    console.log("Super admin criado:", admin.email);
+  } catch (err) {
+    console.error("Erro ao criar super admin:", err);
   } finally {
     await sequelize.close();
   }

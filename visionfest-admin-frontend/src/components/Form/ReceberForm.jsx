@@ -25,10 +25,12 @@ export default function ReceberForm({ conta, empresa, onClose, onBaixa }) {
   // Se empresa foi passada mas conta não, buscar conta pendente da empresa
   useEffect(() => {
     async function buscarContaPorEmpresa() {
-      if (empresa && !conta) {
+      if (empresa?.id && !conta) {
         try {
           const res = await api.get(`/empresas/${empresa.id}/contas-receber`);
-          const pendente = res.data.find((c) => c.status === "aberto" || c.status === "pendente");
+          const pendente = res.data.find(
+            (c) => c.status === "aberto" || c.status === "pendente"
+          );
           if (pendente) {
             setCurrentConta(pendente);
             setValorRecebido(parseFloat(pendente.valorTotal).toFixed(2));
@@ -88,7 +90,7 @@ export default function ReceberForm({ conta, empresa, onClose, onBaixa }) {
 
     try {
       setLoading(true);
-      const { data } = await api.put(
+      const { data } = await api.patch(
         `/contas-receber/${currentConta.id}/receber`,
         payload
       );

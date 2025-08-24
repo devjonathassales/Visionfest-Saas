@@ -59,6 +59,16 @@ module.exports = (sequelize, DataTypes) => {
         },
         field: "referencia_id",
       },
+      empresaId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: "empresas",
+          key: "id",
+        },
+        onDelete: "CASCADE",
+        field: "empresa_id",
+      },
     },
     {
       tableName: "contas_receber",
@@ -67,6 +77,14 @@ module.exports = (sequelize, DataTypes) => {
   );
 
   ContaReceber.associate = (models) => {
+    ContaReceber.belongsTo(models.Empresa, {
+      as: "empresa",
+      foreignKey: {
+        name: "empresaId",
+        allowNull: false,
+      },
+    });
+
     ContaReceber.belongsTo(models.CentroCusto, {
       as: "centroReceita",
       foreignKey: { name: "centroCustoId", allowNull: false },
@@ -81,7 +99,6 @@ module.exports = (sequelize, DataTypes) => {
       as: "referencia",
       foreignKey: "referenciaId",
     });
-
   };
 
   return ContaReceber;

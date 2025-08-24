@@ -1,63 +1,111 @@
+// src/middlewares/multiTenantMiddleware.js
+require("dotenv").config();
 const { Sequelize } = require("sequelize");
-const fs = require("fs");
-const path = require("path");
 const jwt = require("jsonwebtoken");
 
-const tenants = {}; // cache das conexões por empresa
+// IMPORTAÇÃO ÚNICA do banco do painel (schema public)
+const { sequelize: adminSequelize, Empresa } = require("../lib/adminDb");
 
-async function getTenantConnection(empresaId) {
-  if (tenants[empresaId]) return tenants[empresaId]; // já existe
+// Função de inicialização dos models do APP do cliente (seu index exporta uma função)
+const initModels = require("../models"); // seu src/models/index.js que recebe (sequelize, schema)
 
-  const config = {
-    host: process.env.DB_HOST,
-    username: process.env.DB_USER,
-    password: process.env.DB_PASS,
-    dialect: "postgres",
-    logging: false,
-  };
+const tenantsCache = new Map();
 
-  const dbName = `visionfest_${empresaId}`; // banco separado por empresa
-  const sequelize = new Sequelize(dbName, config.username, config.password, config);
+/**
+ * Extrai o tenant (domínio) do host ou do header x-tenant.
+ */
+function getTenantFromRequest(req) {
+  // 1) Header tem prioridade
+  const explicit = req.headers["x-tenant"];
+  if (explicit && typeof explicit === "string" && explicit.trim()) {
+    return explicit.trim().toLowerCase();
+  }
 
-  const db = { sequelize, Sequelize };
+  // 2) Host/subdomínio: cliente.exemplo.com -> "cliente"
+  const host = req.headers.host || "";
+  const [subdomain] = host.split(":")[0].split(".");
+  if (subdomain && subdomain.toLowerCase() !== "localhost") {
+    return subdomain.toLowerCase();
+  }
 
-  // Carrega models
-  const modelsPath = path.resolve(__dirname, "../models");
-  fs.readdirSync(modelsPath)
-    .filter((file) => file.endsWith(".js") && file !== "index.js")
-    .forEach((file) => {
-      const model = require(path.join(modelsPath, file))(sequelize, Sequelize.DataTypes);
-      db[model.name] = model;
-    });
+  // 3) Fallback (opcional): usar variável de ambiente
+  if (process.env.DEFAULT_TENANT) {
+    return process.env.DEFAULT_TENANT.toLowerCase();
+  }
 
-  // Executa associate
-  Object.values(db).forEach((model) => {
-    if (typeof model.associate === "function") {
-      model.associate(db);
-    }
-  });
-
-  await sequelize.authenticate();
-  console.log(`✅ Banco carregado para empresa ${empresaId}`);
-
-  tenants[empresaId] = db;
-  return db;
+  return null;
 }
 
-module.exports = async function multiTenant(req, res, next) {
+/**
+ * Busca/Cria conexão do tenant por domínio (tabela empresas no PUBLIC).
+ */
+async function getTenantDbByDomain(dominio) {
+  if (!dominio) throw new Error("Domínio do tenant não informado.");
+
+  // Cache por domínio
+  if (tenantsCache.has(dominio)) {
+    return tenantsCache.get(dominio);
+  }
+
+  // Garante conexão com o banco admin (public)
+  await adminSequelize.authenticate();
+
+  // Busca a empresa pelo domínio
+  const empresa = await Empresa.findOne({ where: { dominio: dominio } });
+  if (!empresa || !empresa.bancoDados) {
+    throw new Error("Empresa não encontrada ou bancoDados ausente.");
+  }
+
+  const schemaName = empresa.bancoDados; // ex: "cliente_visionware"
+
+  // Cria nova conexão para o schema do cliente
+  const tenantSequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: "postgres",
+    logging: false,
+    define: { schema: schemaName }, // define default schema
+  });
+
+  // Inicializa os models do cliente nesse schema
+  const db = await initModels(tenantSequelize, schemaName);
+  await tenantSequelize.authenticate();
+
+  const tenantObj = { sequelize: tenantSequelize, db, schema: schemaName, empresa };
+  tenantsCache.set(dominio, tenantObj);
+  return tenantObj;
+}
+
+/**
+ * Middleware multi-tenant:
+ * - Descobre o domínio do tenant (x-tenant ou subdomínio)
+ * - Valida token se a rota for protegida (opcional: você pode manter outro middleware de auth)
+ * - Injeta req.tenant e req.db (models do cliente)
+ */
+module.exports = async function multiTenantMiddleware(req, res, next) {
   try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Token não fornecido." });
+    const dominio = getTenantFromRequest(req);
+    if (!dominio) {
+      return res.status(400).json({ error: "Domínio do tenant não identificado (use host ou header x-tenant)." });
+    }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const empresaId = decoded.empresaId;
-    if (!empresaId) return res.status(401).json({ error: "Empresa inválida." });
+    // Se a sua API exigir token aqui, você pode validar:
+    // const token = req.headers.authorization?.split(" ")[1];
+    // if (!token) return res.status(401).json({ error: "Token não fornecido." });
+    // const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    req.db = await getTenantConnection(empresaId);
-    req.empresaId = empresaId;
-    next();
+    const tenant = await getTenantDbByDomain(dominio);
+
+    // Anexa no request
+    req.tenant = {
+      dominio,
+      schema: tenant.schema,
+      empresa: tenant.empresa,
+      sequelize: tenant.sequelize,
+    };
+    req.db = tenant.db; // seus models do cliente (Cliente, Usuario, etc.)
+
+    return next();
   } catch (err) {
-    console.error("Erro multi-tenant:", err);
-    res.status(401).json({ error: "Acesso não autorizado." });
+    console.error("Erro no multiTenantMiddleware:", err.message);
+    return res.status(401).json({ error: "Acesso não autorizado ao tenant." });
   }
 };

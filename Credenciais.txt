@@ -1,4 +1,15 @@
 Assim já deixamos pronto para o login do superadmin no painel com as credenciais:
 
 📧 admin@visionfest.com
-🔑 senhaSuperSecreta123
+🔑 visionfest123
+
+
+INSERT INTO public.admin_users (nome, email, senha, role, created_at, updated_at)
+VALUES (
+  'Super Admin',
+  'admin@visionfest.com',
+  '$2b$10$YrpK/PJMpREaDtpC5F1H7.of0vCXDECXwNQfTBe8QUkiooK6NknKm',
+  'superadmin',
+  NOW(),
+  NOW()
+);

@@ -26,7 +26,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       cep: DataTypes.STRING,
       endereco: DataTypes.STRING,
-      numero: DataTypes.STRING, // ✅ Novo campo adicionado
+      numero: DataTypes.STRING,
       bairro: DataTypes.STRING,
       cidade: DataTypes.STRING,
       uf: DataTypes.STRING,
@@ -53,6 +53,11 @@ module.exports = (sequelize, DataTypes) => {
 
   Empresa.associate = (models) => {
     Empresa.belongsTo(models.Plano, { foreignKey: "planoId" });
+
+    Empresa.hasMany(models.ContaReceber, {
+      as: "contasReceber",
+      foreignKey: "empresaId",
+    });
   };
 
   return Empresa;

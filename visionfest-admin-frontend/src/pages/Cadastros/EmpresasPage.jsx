@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../utils/api";
-import NovaEmpresaModalForm from "../../components/Form/NovaEmpresaModalForm";
+import NovaEmpresaModalForm from "../../components/Form/NovaEmpresaForm";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
@@ -49,7 +49,7 @@ export default function EmpresasPage() {
 
   async function ativarEmpresa(id) {
     try {
-      const res = await api.post(`/empresas/${id}/ativar`);
+      const res = await api.pa(`/empresas/${id}/ativar`);
       toast.success(res.data.mensagem);
       carregarEmpresas();
     } catch (err) {

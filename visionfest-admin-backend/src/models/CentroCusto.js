@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       tableName: "centros_custo",
       underscored: true,
+      timestamps: true, // mantém createdAt e updatedAt
     }
   );
 

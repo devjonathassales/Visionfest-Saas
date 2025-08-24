@@ -1,64 +1,63 @@
-// middlewares/multiTenant.js
-const { Sequelize } = require("sequelize");
-const fs = require("fs");
-const path = require("path");
+// src/utils/tenant.js
 const jwt = require("jsonwebtoken");
+const { Sequelize } = require("sequelize");
+const { sequelize: adminSequelize, Empresa } = require("../lib/adminDb");
+const initModels = require("../models");
 
-const tenants = {}; // cache de conexões
+const tenantsCache = new Map();
 
-async function getTenantConnection(empresaId) {
-  if (tenants[empresaId]) return tenants[empresaId]; // já existe
+function extractSubdomain(host) {
+  if (!host) return null;
+  const h = host.split(":")[0];
+  const parts = h.split(".");
+  if (parts.length <= 1) return null;
+  return parts[0];
+}
 
-  const config = {
-    host: process.env.DB_HOST,
-    username: process.env.DB_USER,
-    password: process.env.DB_PASS,
+async function resolveEmpresaFromReq(req) {
+  const idHeader = req.headers["x-empresa-id"];
+  if (idHeader) {
+    const e = await Empresa.findByPk(idHeader);
+    if (e) return e;
+  }
+  const tenantHeader = req.headers["x-tenant"];
+  if (tenantHeader) {
+    const e = await Empresa.findOne({ where: { dominio: tenantHeader } });
+    if (e) return e;
+  }
+  const sub = extractSubdomain(req.headers.host);
+  if (sub) {
+    const e = await Empresa.findOne({ where: { dominio: sub } });
+    if (e) return e;
+  }
+  const auth = req.headers.authorization;
+  if (auth && auth.startsWith("Bearer ")) {
+    try {
+      const token = auth.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || "visionfest_secret");
+      if (decoded?.empresaId) {
+        const e = await Empresa.findByPk(decoded.empresaId);
+        if (e) return e;
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+async function getTenantDb(schemaName) {
+  if (tenantsCache.has(schemaName)) return tenantsCache.get(schemaName);
+  const sequelize = new Sequelize(process.env.DATABASE_URL, {
     dialect: "postgres",
     logging: false,
-  };
-
-  const dbName = `visionfest_${empresaId}`; // banco da empresa
-  const sequelize = new Sequelize(dbName, config.username, config.password, config);
-
-  const db = { sequelize, Sequelize };
-
-  // Carrega models
-  const modelsPath = path.resolve(__dirname, "../models");
-  fs.readdirSync(modelsPath)
-    .filter((file) => file !== "index.js" && file.endsWith(".js"))
-    .forEach((file) => {
-      const model = require(path.join(modelsPath, file))(sequelize, Sequelize.DataTypes);
-      db[model.name] = model;
-    });
-
-  // Executa associate
-  Object.values(db).forEach((model) => {
-    if (typeof model.associate === "function") {
-      model.associate(db);
-    }
+    define: { schema: schemaName },
   });
-
   await sequelize.authenticate();
-  tenants[empresaId] = db;
-
-  console.log(`✅ Banco carregado para empresa ${empresaId}`);
+  const db = await initModels(sequelize, schemaName);
+  tenantsCache.set(schemaName, db);
   return db;
 }
 
-module.exports = async function multiTenant(req, res, next) {
-  try {
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ error: "Token não fornecido." });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const empresaId = decoded.empresaId;
-    if (!empresaId) return res.status(401).json({ error: "Empresa inválida." });
-
-    req.db = await getTenantConnection(empresaId);
-    req.empresaId = empresaId;
-    next();
-  } catch (err) {
-    console.error("Erro multi-tenant:", err);
-    res.status(401).json({ error: "Acesso não autorizado." });
-  }
+module.exports = {
+  resolveEmpresaFromReq,
+  getTenantDb,
 };

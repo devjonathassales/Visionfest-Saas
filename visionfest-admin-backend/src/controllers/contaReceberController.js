@@ -5,6 +5,7 @@ const {
   Empresa,
   Sequelize,
 } = require("../models");
+const { verificarEAtivarEmpresa } = require("../utils/financeiroUtils");
 
 const { Op } = Sequelize;
 
@@ -17,6 +18,11 @@ exports.listar = async (req, res) => {
           model: ContaBancaria,
           as: "contaBancaria",
           attributes: ["banco", "agencia", "conta", "id"],
+        },
+        {
+          model: Empresa,
+          as: "empresa",
+          attributes: ["nome"], // <-- Aqui está o nome da empresa
         },
       ],
       order: [["vencimento", "ASC"]],
@@ -43,6 +49,11 @@ exports.obterPorId = async (req, res) => {
           model: ContaBancaria,
           as: "contaBancaria",
           attributes: ["banco", "agencia", "conta", "id"],
+        },
+        {
+          model: Empresa,
+          as: "empresa",
+          attributes: ["nome"], // <-- Aqui também
         },
       ],
     });
@@ -136,21 +147,9 @@ exports.receber = async (req, res) => {
       centroReceitaId: centroReceita.id,
     });
 
+    // Ativação inteligente da empresa após o pagamento
     if (conta.empresaId) {
-      const abertas = await ContaReceber.count({
-        where: {
-          empresaId: conta.empresaId,
-          status: { [Op.ne]: "pago" },
-        },
-      });
-
-      if (abertas === 0) {
-        const empresa = await Empresa.findByPk(conta.empresaId);
-        if (empresa.status !== "ativo") {
-          await empresa.update({ status: "ativo" });
-          console.log(`✅ Empresa ${empresa.nome} ativada automaticamente.`);
-        }
-      }
+      await verificarEAtivarEmpresa(conta.empresaId);
     }
 
     res.json({ mensagem: "Pagamento registrado com sucesso.", conta });
@@ -166,7 +165,9 @@ exports.estornar = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status !== "pago") {
-      return res.status(400).json({ error: "Só é possível estornar uma conta paga." });
+      return res
+        .status(400)
+        .json({ error: "Só é possível estornar uma conta paga." });
     }
 
     await conta.update({
@@ -183,6 +184,29 @@ exports.estornar = async (req, res) => {
     res.status(500).json({ error: "Erro ao estornar conta." });
   }
 };
+exports.listarPorEmpresa = async (req, res) => {
+  try {
+    const empresaId = req.params.id;
+
+    const contas = await ContaReceber.findAll({
+      where: { empresaId },
+      include: [
+        { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
+        {
+          model: ContaBancaria,
+          as: "contaBancaria",
+          attributes: ["banco", "agencia", "conta", "id"],
+        },
+      ],
+      order: [["vencimento", "ASC"]],
+    });
+
+    res.json(contas);
+  } catch (err) {
+    console.error("Erro ao buscar contas por empresa:", err);
+    res.status(500).json({ error: "Erro ao buscar contas da empresa." });
+  }
+};
 
 exports.excluir = async (req, res) => {
   try {
@@ -190,7 +214,9 @@ exports.excluir = async (req, res) => {
     if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (conta.status === "pago") {
-      return res.status(400).json({ error: "Não é possível excluir uma conta já paga." });
+      return res
+        .status(400)
+        .json({ error: "Não é possível excluir uma conta já paga." });
     }
 
     await conta.destroy();

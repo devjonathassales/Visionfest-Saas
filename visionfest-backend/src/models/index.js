@@ -1,28 +1,50 @@
 const fs = require("fs");
 const path = require("path");
 const { Sequelize } = require("sequelize");
-require("dotenv").config();
 
-const sequelize = new Sequelize(process.env.DATABASE_URL, {
-  dialect: "postgres",
-  logging: false,
-});
+module.exports = async (sequelize, schema) => {
+  if (!schema || typeof schema !== 'string' || !schema.trim()) {
+    throw new Error("Schema inválido ou não informado");
+  }
 
-const db = { sequelize, Sequelize };
+  console.log("Schema carregado:", schema);
 
-// Carrega todos os models
-fs.readdirSync(__dirname)
-  .filter((file) => file !== "index.js" && file.endsWith(".js"))
-  .forEach((file) => {
-    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes); // <-- função que retorna o model
-    db[model.name] = model;
+  const db = { sequelize, Sequelize };
+
+  // Cria o schema se não existir
+  await sequelize.createSchema(schema, { ifNotExists: true });
+
+  // Ajusta o define para usar o schema informado
+  sequelize.define = ((originalDefine) => {
+    return function(modelName, attributes, options = {}) {
+      options.schema = schema;
+      return originalDefine.call(this, modelName, attributes, options);
+    };
+  })(sequelize.define);
+
+  // Carrega os models
+  const files = fs.readdirSync(__dirname).filter(
+    (file) => file !== "index.js" && file.endsWith(".js")
+  );
+
+  for (const file of files) {
+    const modelDef = require(path.join(__dirname, file));
+    if (typeof modelDef === "function") {
+      const model = modelDef(sequelize, Sequelize.DataTypes);
+      db[model.name] = model;
+    } else if (typeof modelDef === "object") {
+      Object.keys(modelDef).forEach((key) => {
+        db[key] = modelDef[key];
+      });
+    }
+  }
+
+  // Executa associate se existir
+  Object.values(db).forEach((model) => {
+    if (model && typeof model.associate === "function") {
+      model.associate(db);
+    }
   });
 
-// Executa associate se existir
-Object.values(db).forEach((model) => {
-  if (typeof model.associate === "function") {
-    model.associate(db);
-  }
-});
-
-module.exports = db;
+  return db;
+};

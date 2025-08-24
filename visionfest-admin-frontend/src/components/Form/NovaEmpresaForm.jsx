@@ -4,7 +4,11 @@ import { X } from "lucide-react";
 import api from "../../utils/api";
 import ReceberForm from "./ReceberForm";
 
-export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEditar }) {
+export default function NovaEmpresaModalForm({
+  onClose,
+  onSuccess,
+  empresaParaEditar,
+}) {
   const [form, setForm] = useState({
     nome: "",
     cpfCnpj: "",
@@ -20,7 +24,6 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
     email: "",
     senhaSuperAdmin: "",
     planoId: "",
-    diaVencimento: "",
   });
 
   const [planos, setPlanos] = useState([]);
@@ -45,10 +48,7 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
   useEffect(() => {
     if (cpfCnpjRef.current) {
       maskRef.current = IMask(cpfCnpjRef.current, {
-        mask: [
-          { mask: "000.000.000-00" },
-          { mask: "00.000.000/0000-00" },
-        ],
+        mask: [{ mask: "000.000.000-00" }, { mask: "00.000.000/0000-00" }],
         dispatch: function (appended, dynamicMasked) {
           const number = (dynamicMasked.value + appended).replace(/\D/g, "");
           return number.length > 11
@@ -88,7 +88,6 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         email: empresaParaEditar.email || "",
         senhaSuperAdmin: "", // senha não pré-preenchida por segurança
         planoId: empresaParaEditar.planoId || "",
-        diaVencimento: empresaParaEditar.diaVencimento || "",
       });
       setEmpresaIdCriada(null);
     }
@@ -132,8 +131,7 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
       !form.cpfCnpj ||
       !form.email ||
       !form.whatsapp ||
-      !form.planoId ||
-      !form.diaVencimento
+      !form.planoId
     ) {
       alert("Preencha os campos obrigatórios");
       return;
@@ -156,10 +154,12 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
       } else {
         // Criação
         const res = await api.post("/empresas", form);
-        alert("Empresa criada com sucesso!");
-        setEmpresaIdCriada(res.data.empresa.id || res.data.id || null);
-        if (onSuccess) onSuccess();
-        // Mantém o modal aberto para pagamento
+        const novaEmpresaId = res.data?.empresa?.id || res.data?.id;
+        if (!novaEmpresaId) {
+          alert("Erro: ID da empresa não retornado corretamente.");
+          return;
+        }
+        setEmpresaIdCriada(novaEmpresaId);
       }
     } catch (error) {
       alert("Erro ao salvar empresa");
@@ -167,14 +167,16 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
       setLoading(false);
     }
   }
-
   return (
     <div className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-screen overflow-y-auto">
       <div className="flex justify-between items-center px-8 py-4 border-b bg-white sticky top-0 z-10">
         <h2 className="text-3xl font-semibold text-gray-800">
           {empresaParaEditar ? "Editar Empresa" : "Cadastrar Nova Empresa"}
         </h2>
-        <button onClick={onClose} className="text-gray-500 hover:text-gray-800 p-2">
+        <button
+          onClick={onClose}
+          className="text-gray-500 hover:text-gray-800 p-2"
+        >
           <X size={24} />
         </button>
       </div>
@@ -184,7 +186,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         className="p-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
       >
         <div className="sm:col-span-2 lg:col-span-3">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Nome *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Nome *
+          </label>
           <input
             name="nome"
             value={form.nome}
@@ -195,7 +199,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">CPF/CNPJ *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            CPF/CNPJ *
+          </label>
           <input
             name="cpfCnpj"
             ref={cpfCnpjRef}
@@ -209,7 +215,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Domínio *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Domínio *
+          </label>
           <input
             name="dominio"
             value={form.dominio}
@@ -222,7 +230,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">CEP</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            CEP
+          </label>
           <input
             name="cep"
             value={form.cep}
@@ -234,7 +244,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Endereço</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Endereço
+          </label>
           <input
             name="endereco"
             value={form.endereco}
@@ -244,7 +256,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Número</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Número
+          </label>
           <input
             name="numero"
             value={form.numero}
@@ -254,7 +268,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Bairro</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Bairro
+          </label>
           <input
             name="bairro"
             value={form.bairro}
@@ -264,7 +280,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Cidade</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Cidade
+          </label>
           <input
             name="cidade"
             value={form.cidade}
@@ -274,7 +292,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">UF</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            UF
+          </label>
           <input
             name="uf"
             value={form.uf}
@@ -285,7 +305,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Plano *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Plano *
+          </label>
           <select
             name="planoId"
             value={form.planoId}
@@ -296,29 +318,17 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
           >
             <option value="">Selecione</option>
             {planos.map((p) => (
-              <option key={p.id} value={p.id}>{p.nome}</option>
+              <option key={p.id} value={p.id}>
+                {p.nome}
+              </option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Dia de Vencimento *</label>
-          <select
-            name="diaVencimento"
-            value={form.diaVencimento}
-            onChange={onChange}
-            required
-            className="w-full border border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            <option value="">Selecione</option>
-            {[5, 10, 15, 20, 25, 30].map((dia) => (
-              <option key={dia} value={dia}>{dia}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">WhatsApp *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            WhatsApp *
+          </label>
           <input
             name="whatsapp"
             value={form.whatsapp}
@@ -329,7 +339,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Instagram</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Instagram
+          </label>
           <input
             name="instagram"
             value={form.instagram}
@@ -339,7 +351,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
         </div>
 
         <div className="sm:col-span-2 lg:col-span-3">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Email *
+          </label>
           <input
             name="email"
             type="email"
@@ -353,7 +367,9 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
 
         {!empresaParaEditar && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Senha SuperAdmin *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Senha SuperAdmin *
+            </label>
             <input
               name="senhaSuperAdmin"
               type="password"
@@ -379,7 +395,11 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
             disabled={loading}
             className="bg-green-600 text-white px-7 py-3 rounded-md hover:bg-green-700 disabled:opacity-60"
           >
-            {loading ? "Salvando..." : empresaParaEditar ? "Atualizar" : "Salvar"}
+            {loading
+              ? "Salvando..."
+              : empresaParaEditar
+              ? "Atualizar"
+              : "Salvar"}
           </button>
         </div>
       </form>
@@ -387,11 +407,29 @@ export default function NovaEmpresaModalForm({ onClose, onSuccess, empresaParaEd
       {/* Se criou empresa nova, mostra formulário ReceberForm para pagamento */}
       {!empresaParaEditar && empresaIdCriada && (
         <div className="p-8 border-t mt-8">
-          <h3 className="text-xl font-semibold mb-4">Pagamento / Recebimento</h3>
-          <ReceberForm empresaId={empresaIdCriada} onSuccess={() => {
-            alert("Pagamento registrado com sucesso!");
-            onClose();
-          }} />
+          <h3 className="text-xl font-semibold mb-4">
+            Pagamento / Recebimento
+          </h3>
+          <ReceberForm
+            empresa={{
+              id: empresaIdCriada,
+              nome: form.nome,
+              dominio: form.dominio,
+            }}
+            onSuccess={async () => {
+              try {
+                await api.post(`/empresas/${empresaIdCriada}/ativar`);
+                alert("Pagamento registrado e empresa ativada com sucesso!");
+                onClose();
+              } catch (err) {
+                alert(
+                  "Pagamento foi registrado, mas houve erro ao ativar a empresa"
+                );
+                console.error(err);
+              }
+            }}
+            onClose={onClose}
+          />
         </div>
       )}
     </div>

@@ -24,4 +24,7 @@ router.patch("/:id/estornar", verificarPermissao("acessarFinanceiro"), controlle
 // Excluir conta
 router.delete("/:id", verificarPermissao("acessarFinanceiro"), controller.excluir);
 
+router.get("/empresa/:empresaId", verificarPermissao("acessarFinanceiro"), controller.listarPorEmpresa);
+
+
 module.exports = router;

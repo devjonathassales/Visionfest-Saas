@@ -1,27 +1,26 @@
-// middlewares/authEmpresa.js
+// src/middlewares/authCliente.js
 const jwt = require("jsonwebtoken");
-const { Empresa } = require("../models");
+const ACCESS_SECRET = process.env.JWT_SECRET_CLIENT || "visionfest_client_secret";
 
-module.exports = async (req, res, next) => {
+module.exports = function authCliente(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Token não informado" });
+    const auth = req.headers.authorization;
+    if (!auth || !auth.startsWith("Bearer ")) {
+      return res.status(401).json({ mensagem: "Token não fornecido." });
     }
 
-    const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = auth.split(" ")[1];
+    const decoded = jwt.verify(token, ACCESS_SECRET);
 
-    const empresa = await Empresa.findByPk(decoded.empresaId);
-    if (!empresa) {
-      return res.status(401).json({ error: "Empresa não encontrada" });
-    }
+    // opcional: validar tenant do token vs req.tenant detectado
+    // if (req.tenant?.empresa?.id && decoded.empresaId && String(req.tenant.empresa.id) !== String(decoded.empresaId)) {
+    //   return res.status(401).json({ mensagem: "Token não corresponde ao tenant." });
+    // }
 
-    req.empresa = empresa; // empresa disponível nos controllers
-    req.empresaId = empresa.id; // id direto se precisar
-    next();
+    req.user = decoded; // { usuarioId, empresaId, tenant, permissoes, iat, exp }
+    return next();
   } catch (err) {
-    console.error("Erro authEmpresa:", err);
-    return res.status(401).json({ error: "Token inválido ou expirado" });
+    console.error("Erro token cliente:", err.message);
+    return res.status(401).json({ mensagem: "Token inválido ou expirado." });
   }
 };

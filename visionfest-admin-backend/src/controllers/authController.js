@@ -1,218 +1,204 @@
-const { Empresa, Plano, ContaReceber } = require("../models");
-const { gerarParcelasPlanoAnual } = require("../utils/financeiroUtils");
-const { createSchemaAndUser } = require("../utils/dbUtils");
-const bcrypt = require("bcryptjs");
-const { sequelize } = require("../models");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
+const { AdminUser, Permissao } = require("../models");
 
-// 🔐 Função interna reutilizável
-async function processarCriacaoEmpresa(req, res) {
-  console.log("📩 Dados recebidos:", req.body);
-  const t = await Empresa.sequelize.transaction();
+const SECRET_KEY = process.env.JWT_SECRET || "visionfest_secret";
+const REFRESH_SECRET =
+  process.env.JWT_REFRESH_SECRET || "visionfest_refresh_secret";
+
+// Gera access token com payload completo
+function gerarAccessToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      permissoes: user.permissoes,
+    },
+    SECRET_KEY,
+    { expiresIn: "1h" }
+  );
+}
+
+// Gera refresh token apenas com ID
+function gerarRefreshToken(user) {
+  return jwt.sign({ userId: user.id }, REFRESH_SECRET, { expiresIn: "7d" });
+}
+
+async function login(req, res) {
+  const { email, password } = req.body;
 
   try {
-    const {
-      nome,
-      cpfCnpj,
-      dominio,
-      planoId,
-      diaVencimento,
-      cep,
-      endereco,
-      numero,
-      bairro,
-      cidade,
-      uf,
-      whatsapp,
-      instagram,
-      email,
-      senhaSuperAdmin,
-    } = req.body;
-
-    if (!nome || !cpfCnpj || !dominio || !planoId || !diaVencimento || !email || !senhaSuperAdmin) {
-      return res.status(400).json({ mensagem: "Preencha todos os campos obrigatórios." });
+    if (!email || !password) {
+      return res
+        .status(400)
+        .json({ mensagem: "Email e senha são obrigatórios." });
     }
 
-    const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    if (!emailValido) return res.status(400).json({ mensagem: "E-mail inválido." });
-    if (senhaSuperAdmin.length < 6) return res.status(400).json({ mensagem: "Senha fraca." });
-
-    const plano = await Plano.findByPk(planoId);
-    if (!plano) return res.status(400).json({ mensagem: "Plano inválido." });
-
-    const [empresaExistente, dominioExistente] = await Promise.all([
-      Empresa.findOne({ where: { cpfCnpj } }),
-      Empresa.findOne({ where: { dominio } }),
-    ]);
-    if (empresaExistente) return res.status(400).json({ mensagem: "CPF/CNPJ já cadastrado." });
-    if (dominioExistente) return res.status(400).json({ mensagem: "Domínio já em uso." });
-
-    const nomeBanco = `cliente_${dominio.replace(/\W/g, "_").toLowerCase()}`;
-    const senhaCriptografada = await bcrypt.hash(senhaSuperAdmin, 10);
-
-    await createSchemaAndUser(nomeBanco, email, senhaCriptografada);
-
-    const novaEmpresa = await Empresa.create({
-      nome,
-      cpfCnpj,
-      dominio,
-      bancoDados: nomeBanco,
-      cep,
-      endereco,
-      numero,
-      bairro,
-      cidade,
-      uf,
-      whatsapp,
-      instagram,
-      email,
-      planoId,
-      usuarioSuperAdmin: email,
-      senhaSuperAdmin: senhaCriptografada,
-      diaVencimento,
-      status: "aguardando_pagamento",
-    }, { transaction: t });
-
-    await gerarParcelasPlanoAnual({
-      empresa: novaEmpresa,
-      plano,
-      diaVencimento,
-      transaction: t,
+    // 🔥 Inclui explicitamente o campo 'senha'
+    const user = await AdminUser.scope("withPassword").findOne({
+      where: { email },
+      include: [
+        {
+          model: Permissao,
+          as: "permissoes",
+          attributes: ["chave"],
+          through: { attributes: [] },
+        },
+      ],
     });
 
-    await t.commit();
+    if (!user) {
+      return res.status(401).json({ mensagem: "Usuário não encontrado." });
+    }
 
-    const linkAcesso = `https://${dominio}.seusistema.com.br`;
+    if (!user.senha) {
+      console.error("⚠️ Usuário sem senha no banco:", user.email);
+      return res
+        .status(500)
+        .json({ mensagem: "Usuário com senha não definida." });
+    }
 
-    return res.status(201).json({
-      mensagem: "Empresa criada com sucesso. É necessário efetuar o pagamento.",
-      empresa: novaEmpresa,
-      linkAcesso,
+    const senhaCorreta = await bcrypt.compare(password, user.senha);
+
+    if (!senhaCorreta) {
+      return res.status(401).json({ mensagem: "Senha inválida." });
+    }
+
+    const permissoesObj = {};
+    user.permissoes.forEach((p) => {
+      permissoesObj[p.chave] = true;
     });
-  } catch (error) {
-    console.error("❌ Erro ao criar empresa:", error);
-    await t.rollback();
-    return res.status(500).json({ mensagem: "Erro ao criar empresa." });
+
+    const accessToken = gerarAccessToken({
+      ...user.toJSON(),
+      permissoes: permissoesObj,
+    });
+
+    const refreshToken = gerarRefreshToken(user);
+
+    await user.update({ refreshToken });
+
+    res.status(200).json({
+      mensagem: "Login realizado com sucesso",
+      accessToken,
+      refreshToken,
+      usuario: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        permissoes: permissoesObj,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Erro no login:", err);
+    res.status(500).json({ mensagem: "Erro interno no servidor." });
   }
 }
 
-exports.criarEmpresa = processarCriacaoEmpresa;
-exports.criarEmpresaViaWizard = processarCriacaoEmpresa;
+async function refreshToken(req, res) {
+  const { refreshToken } = req.body;
 
-exports.ativarEmpresa = async (req, res) => {
+  if (!refreshToken) {
+    return res.status(400).json({ error: "Refresh token é obrigatório." });
+  }
+
+  if (typeof refreshToken !== "string" || !refreshToken.split(".")[1]) {
+    return res.status(400).json({ error: "Formato de refresh token inválido." });
+  }
+
   try {
-    const { id } = req.params;
-    const empresa = await Empresa.findByPk(id, {
-      include: [{ model: ContaReceber }],
-    });
+    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
 
-    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    const user = await AdminUser.findByPk(decoded.userId);
 
-    const contasAbertas = empresa.ContaRecebers.filter((c) => c.status !== "pago");
-    if (contasAbertas.length > 0) {
-      return res.status(400).json({
-        mensagem: "Não é possível ativar a empresa. Existem contas pendentes.",
-        contasPendentes: contasAbertas,
-      });
+    if (!user || user.refreshToken !== refreshToken) {
+      if (user) await user.update({ refreshToken: null });
+      return res.status(403).json({ error: "Refresh token inválido." });
     }
 
-    empresa.status = "ativo";
-    await empresa.save();
-
-    return res.json({ mensagem: "Empresa ativada com sucesso", empresa });
-  } catch (error) {
-    console.error("❌ Erro ao ativar empresa:", error);
-    return res.status(500).json({ mensagem: "Erro ao ativar empresa." });
-  }
-};
-
-exports.listarEmpresas = async (_req, res) => {
-  try {
-    const empresas = await Empresa.findAll({
-      attributes: { exclude: ["senhaSuperAdmin"] },
+    // Regenerar os tokens
+    const permissoes = await user.getPermissoes({ attributes: ["chave"] });
+    const permissoesObj = {};
+    permissoes.forEach((p) => {
+      permissoesObj[p.chave] = true;
     });
 
-    const empresasComBadge = empresas.map((e) => ({
-      ...e.toJSON(),
-      statusBadge:
-        e.status === "ativo"
-          ? { text: "Ativo", color: "green" }
-          : e.status === "bloqueado"
-          ? { text: "Bloqueado", color: "red" }
-          : { text: "Aguardando Pagamento", color: "yellow" },
-    }));
+    const accessToken = gerarAccessToken({
+      ...user.toJSON(),
+      permissoes: permissoesObj,
+    });
 
-    return res.json(empresasComBadge);
-  } catch (error) {
-    console.error("❌ Erro ao listar empresas:", error);
-    return res.status(500).json({ mensagem: "Erro ao listar empresas." });
-  }
-};
-
-exports.bloquearDesbloquear = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const empresa = await Empresa.findByPk(id);
-    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
-
-    empresa.status = empresa.status === "bloqueado" ? "ativo" : "bloqueado";
-    await empresa.save();
+    const newRefreshToken = gerarRefreshToken(user);
+    await user.update({ refreshToken: newRefreshToken });
 
     return res.json({
-      mensagem: `Empresa ${empresa.status === "ativo" ? "desbloqueada" : "bloqueada"} com sucesso.`,
-      status: empresa.status,
+      accessToken,
+      refreshToken: newRefreshToken,
+      usuario: {
+        id: user.id,
+        nome: user.nome,
+        email: user.email,
+        role: user.role,
+        permissoes: permissoesObj,
+      },
     });
-  } catch (error) {
-    console.error("❌ Erro ao bloquear/desbloquear empresa:", error);
-    return res.status(500).json({ mensagem: "Erro ao atualizar status da empresa." });
+  } catch (err) {
+    console.error("❌ Erro ao validar refreshToken:", err.message);
+    return res
+      .status(401)
+      .json({ error: "Refresh token inválido ou expirado." });
   }
-};
+}
 
-// ✏️ Atualizar dados da empresa (exceto domínio/email/senha)
-exports.editarEmpresa = async (req, res) => {
+async function logout(req, res) {
   try {
-    const { id } = req.params;
-    const empresa = await Empresa.findByPk(id);
-    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
-
-    const camposNaoPermitidos = ["dominio", "email", "senhaSuperAdmin"];
-    camposNaoPermitidos.forEach((campo) => delete req.body[campo]);
-
-    await empresa.update(req.body);
-
-    return res.json({ mensagem: "Empresa atualizada com sucesso.", empresa });
-  } catch (error) {
-    console.error("❌ Erro ao atualizar empresa:", error);
-    return res.status(500).json({ mensagem: "Erro ao atualizar empresa." });
+    const { id } = req.user;
+    await AdminUser.update({ refreshToken: null }, { where: { id } });
+    res.status(200).json({ mensagem: "Logout realizado com sucesso." });
+  } catch (err) {
+    console.error("Erro no logout:", err);
+    res.status(500).json({ mensagem: "Erro ao realizar logout." });
   }
-};
+}
 
-// 🗑 Excluir empresa (se nenhuma parcela foi paga)
-exports.excluirEmpresa = async (req, res) => {
-  const t = await sequelize.transaction();
+async function getProfile(req, res) {
   try {
-    const { id } = req.params;
-    const empresa = await Empresa.findByPk(id, {
-      include: [ContaReceber],
+    const { id } = req.user;
+    const user = await AdminUser.findByPk(id, {
+      include: {
+        model: Permissao,
+        as: "permissoes",
+        attributes: ["chave"],
+        through: { attributes: [] },
+      },
     });
 
-    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    if (!user)
+      return res.status(404).json({ mensagem: "Usuário não encontrado." });
 
-    const algumaParcelaPaga = empresa.ContaRecebers.some((c) => c.status === "pago");
-    if (algumaParcelaPaga) {
-      return res.status(400).json({ mensagem: "Não é possível excluir empresa com pagamentos realizados." });
-    }
+    const permissoesObj = {};
+    user.permissoes.forEach((p) => {
+      permissoesObj[p.chave] = true;
+    });
 
-    await ContaReceber.destroy({ where: { empresaId: id }, transaction: t });
-    await Empresa.destroy({ where: { id }, transaction: t });
-
-    // Remove schema do banco
-    await sequelize.query(`DROP SCHEMA IF EXISTS "${empresa.bancoDados}" CASCADE;`, { transaction: t });
-
-    await t.commit();
-    return res.json({ mensagem: "Empresa excluída com sucesso." });
-  } catch (error) {
-    await t.rollback();
-    console.error("❌ Erro ao excluir empresa:", error);
-    return res.status(500).json({ mensagem: "Erro ao excluir empresa." });
+    res.status(200).json({
+      id: user.id,
+      nome: user.nome,
+      email: user.email,
+      role: user.role,
+      permissoes: permissoesObj,
+    });
+  } catch (err) {
+    console.error("Erro ao buscar perfil:", err);
+    res.status(500).json({ mensagem: "Erro ao buscar perfil do usuário." });
   }
+}
+
+module.exports = {
+  login,
+  refreshToken,
+  getProfile,
+  logout,
 };

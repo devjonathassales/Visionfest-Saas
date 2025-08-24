@@ -109,7 +109,7 @@ export default function ContasReceber() {
     if (!confirm("Estornar esta conta?")) return;
     try {
       setLoading(true);
-      await api.put(`/contas-receber/${id}/estorno`);
+      await api.patch(`/contas-receber/${id}/estornar`);
       toast.success("Estornado com sucesso");
       loadContas();
     } catch (e) {

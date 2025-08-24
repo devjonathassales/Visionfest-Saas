@@ -19,4 +19,13 @@ router.patch("/:id/upgrade", verificarPermissao("editarEmpresas"), empresaContro
 router.put("/:id", verificarPermissao("editarEmpresas"), empresaController.editarEmpresa);
 router.delete("/:id", verificarPermissao("editarEmpresas"), empresaController.excluirEmpresa);
 
+const contaReceberController = require("../controllers/contaReceberController");
+
+router.get(
+  "/:id/contas-receber",
+  verificarPermissao("visualizarEmpresas"), // ou outra permissão, se preferir
+  contaReceberController.listarPorEmpresa
+);
+
+
 module.exports = router;

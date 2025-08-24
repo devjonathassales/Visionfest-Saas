@@ -15,14 +15,14 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
 
   // Carregar clientes
   useEffect(() => {
-    api.get("/clientes")
-      .then(({ data }) => setClientes(data))
-      .catch(() => console.error("Erro ao carregar clientes"));
-  }, []);
+  api.get("/empresas")
+    .then(({ data }) => setClientes(data))
+    .catch(() => console.error("Erro ao carregar empresas"));
+}, []);
 
   // Carregar centros de custo do tipo Receita ou Ambos
   useEffect(() => {
-    api.get("/centrocusto")
+    api.get("/centros-custo")
       .then(({ data }) => {
         const custos = data.filter(c => c.tipo === "Receita" || c.tipo === "Ambos");
         setCentros(custos);

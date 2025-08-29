@@ -1,12 +1,17 @@
 // src/app.js
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
 const path = require("path");
 
-const multiTenant = require("./middlewares/multiTenantMiddleware");
-const authCliente = require("./middlewares/authEmpresa");
+// ✅ IMPORTS
+const multiTenantMiddleware = require("./middlewares/multiTenantMiddleware"); // export default (module.exports = fn)
+const authCliente = require("./middlewares/authCliente");
 
+// ✅ use somente o router unificado de auth
+const authRoutes = require("./routes/authRoutes");
+
+// Demais rotas protegidas
 const clienteRoutes = require("./routes/clienteRoutes");
 const fornecedorRoutes = require("./routes/fornecedorRoutes");
 const funcionarioRoutes = require("./routes/funcionarioRoutes");
@@ -23,21 +28,109 @@ const usuarioRoutes = require("./routes/usuarioRoutes");
 const permissoesRoutes = require("./routes/permissoesRoutes");
 const contratosRouter = require("./routes/contratoRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
-const clienteAuthRoutes = require("./routes/clienteAuthRoutes");
 
 const app = express();
 
-app.use(cors());
+// CORS (dev)
+app.use(
+  cors({
+    origin: [
+      /https?:\/\/([a-z0-9-]+)\.lvh\.me(?::\d+)?$/i,
+      /https?:\/\/localhost(?::\d+)?$/i,
+      /https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
+    ],
+    credentials: false,
+  })
+);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// 🔓 públicas (login/refresh)
-app.use("/api/cliente", clienteAuthRoutes);
+// Health
+app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// 🔐 tudo abaixo exige tenant + token
-app.use(multiTenant, authCliente);
+// Debug do tenant (DEV)
+app.get("/debug/tenant", async (req, res) => {
+  try {
+    const { Empresa } = require("./lib/adminDb");
+    const dominio = (
+      req.headers["x-tenant"] ||
+      req.query?.dominio ||
+      req.query?.tenant ||
+      process.env.DEFAULT_TENANT ||
+      ""
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
 
+    const empresa = await Empresa.findOne({ where: { dominio } });
+    if (!empresa) {
+      return res
+        .status(404)
+        .json({ ok: false, dominio, reason: "empresa_nao_encontrada" });
+    }
+
+    return res.json({
+      ok: true,
+      dominio,
+      empresaId: empresa.id,
+      schema: empresa.bancoDados,
+      status: empresa.status,
+    });
+  } catch (e) {
+    console.error("[/debug/tenant] erro:", e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// 🔑 Fallback de tenant só para /api/cliente (login/refresh/me/logout)
+app.use("/api/cliente", (req, _res, next) => {
+  if ((req.headers["x-tenant"] ?? "").toString().trim()) return next();
+
+  let dominio =
+    req.query?.dominio ||
+    req.query?.tenant ||
+    req.body?.dominio ||
+    req.body?.tenant ||
+    "";
+
+  if (!dominio) {
+    try {
+      const host = new URL(req.headers.origin || req.headers.referer || "")
+        .hostname;
+      const parts = host.split(".");
+      if (parts.length > 2) dominio = parts[0];
+    } catch {}
+  }
+
+  if (!dominio && process.env.DEFAULT_TENANT)
+    dominio = process.env.DEFAULT_TENANT;
+
+  if (dominio) {
+    req.headers["x-tenant"] = String(dominio).trim().toLowerCase();
+  }
+
+  console.log(
+    "[/api/cliente fallback] x-tenant =",
+    req.headers["x-tenant"] || null
+  );
+  next();
+});
+
+// 🔓 Rotas públicas de autenticação (únicas)
+app.use("/api/cliente", authRoutes);
+
+// 🔐 Tudo abaixo exige tenant + token
+if (typeof multiTenantMiddleware !== "function") {
+  console.error(
+    "ERRO: multiTenantMiddleware não é uma função. Verifique o export em src/middlewares/multiTenantMiddleware.js"
+  );
+}
+app.use(multiTenantMiddleware, authCliente);
+
+// Rotas protegidas
 app.use("/api/clientes", clienteRoutes);
 app.use("/api/fornecedores", fornecedorRoutes);
 app.use("/api/funcionarios", funcionarioRoutes);

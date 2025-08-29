@@ -1,32 +1,39 @@
+// src/components/ClienteVisualizar.jsx
 import React, { useState, useEffect } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function ClienteVisualizar({ cliente, onClose }) {
+  const { api } = useAuth();
   const [dadosCliente, setDadosCliente] = useState(null);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
-    if (!cliente?.id) {
-      setDadosCliente(null);
-      return;
+    let alive = true;
+    async function load() {
+      if (!cliente?.id) {
+        setDadosCliente(null);
+        return;
+      }
+      setLoading(true);
+      setErro(null);
+      try {
+        const { data } = await api.get(`/api/clientes/${cliente.id}`);
+        if (alive) setDadosCliente(data);
+      } catch (e) {
+        if (alive)
+          setErro(
+            e?.response?.data?.message || "Erro ao buscar dados do cliente"
+          );
+      } finally {
+        if (alive) setLoading(false);
+      }
     }
-
-    setLoading(true);
-    setErro(null);
-
-    fetch(`http://localhost:5000/api/clientes/${cliente.id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Erro ao buscar dados do cliente");
-        return res.json();
-      })
-      .then((data) => {
-        setDadosCliente(data);
-      })
-      .catch((err) => {
-        setErro(err.message);
-      })
-      .finally(() => setLoading(false));
-  }, [cliente]);
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [cliente, api]);
 
   if (!cliente) return null;
 
@@ -58,7 +65,10 @@ export default function ClienteVisualizar({ cliente, onClose }) {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm font-opensans">
           <InfoItem label="Nome" value={dadosCliente.nome} />
           <InfoItem label="CPF" value={dadosCliente.cpf} />
-          <InfoItem label="Data de Nascimento" value={dadosCliente.dataNascimento} />
+          <InfoItem
+            label="Data de Nascimento"
+            value={dadosCliente.dataNascimento}
+          />
           <InfoItem label="WhatsApp" value={dadosCliente.whatsapp} />
           <InfoItem label="Celular" value={dadosCliente.celular} />
           <InfoItem label="Email" value={dadosCliente.email} />

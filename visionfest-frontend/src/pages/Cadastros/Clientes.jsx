@@ -1,55 +1,56 @@
-import React, { useState, useEffect } from 'react';
-import ClienteForm from '../../components/ClienteForm';
-import ClienteVisualizar from '../../components/ClienteVisualizar';
-import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+// src/pages/Cadastros/Clientes.jsx
+import React, { useState, useEffect } from "react";
+import { FiPlus, FiEye, FiEdit, FiTrash2 } from "react-icons/fi";
+import ClienteForm from "../../components/ClienteForm";
+import ClienteVisualizar from "../../components/ClienteVisualizar";
+import { useAuth } from "/src/contexts/authContext.jsx"; // usa o contexto
 
 export default function Clientes() {
+  const { api, isAuthenticated } = useAuth(); // api já tem baseURL, X-Tenant e Bearer
   const [clientes, setClientes] = useState([]);
-  const [busca, setBusca] = useState('');
-  const [ordenarPor, setOrdenarPor] = useState('alfabetica');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  const [busca, setBusca] = useState("");
+  const [ordenarPor, setOrdenarPor] = useState("alfabetica");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState(null);
   const [clienteVisualizar, setClienteVisualizar] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // Buscar clientes do backend
   const fetchClientes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/clientes`);
-      if (!res.ok) throw new Error('Erro ao buscar clientes');
-      const data = await res.json();
-      setClientes(data);
+      const { data } = await api.get("/api/clientes");
+      setClientes(Array.isArray(data) ? data : []);
     } catch (error) {
-      alert('Erro ao carregar clientes: ' + error.message);
+      console.error(error);
+      alert(error?.response?.data?.message || "Erro ao carregar clientes");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchClientes();
-  }, []);
+    if (isAuthenticated) fetchClientes();
+  }, [isAuthenticated]);
 
   const filtrarClientes = () => {
     let lista = [...clientes];
     if (busca.length >= 3) {
-      lista = lista.filter(c =>
-        c.nome.toLowerCase().includes(busca.toLowerCase())
+      lista = lista.filter((c) =>
+        (c.nome || "").toLowerCase().includes(busca.toLowerCase())
       );
     }
-    if (ordenarPor === 'alfabetica') {
-      lista.sort((a, b) => a.nome.localeCompare(b.nome));
-    } else if (ordenarPor === 'data' && dataInicio && dataFim) {
+    if (ordenarPor === "alfabetica") {
+      lista.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    } else if (ordenarPor === "data" && dataInicio && dataFim) {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
-      lista = lista.filter(cliente => {
-        const data = new Date(cliente.dataCadastro);
-        return data >= inicio && data <= fim;
+      lista = lista.filter((cliente) => {
+        const data = cliente.dataCadastro
+          ? new Date(cliente.dataCadastro)
+          : null;
+        return data && data >= inicio && data <= fim;
       });
     }
     return lista;
@@ -57,26 +58,17 @@ export default function Clientes() {
 
   const handleSalvar = async (novoCliente) => {
     try {
-      let res;
       if (novoCliente.id) {
-        res = await fetch(`${API_BASE_URL}/clientes/${novoCliente.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoCliente),
-        });
+        await api.put(`/api/clientes/${novoCliente.id}`, novoCliente);
       } else {
-        res = await fetch(`${API_BASE_URL}/clientes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoCliente),
-        });
+        await api.post("/api/clientes", novoCliente);
       }
-      if (!res.ok) throw new Error('Erro ao salvar cliente');
       await fetchClientes();
       setMostrarFormulario(false);
       setClienteSelecionado(null);
     } catch (error) {
-      alert('Erro ao salvar cliente: ' + error.message);
+      console.error(error);
+      alert(error?.response?.data?.message || "Erro ao salvar cliente");
     }
   };
 
@@ -87,25 +79,27 @@ export default function Clientes() {
 
   const handleExcluir = async (id) => {
     if (!window.confirm("Deseja excluir este cliente?")) return;
-
     try {
-      const res = await fetch(`${API_BASE_URL}/clientes/${id}`, { method: 'DELETE' });
-      if (res.status === 400) {
-        const err = await res.json();
-        throw new Error(err.error || 'Não é possível excluir este cliente');
-      }
-      if (!res.ok) throw new Error('Erro ao excluir cliente');
-      setClientes(prev => prev.filter(c => c.id !== id));
+      await api.delete(`/api/clientes/${id}`);
+      setClientes((prev) => prev.filter((c) => c.id !== id));
     } catch (error) {
-      alert('Erro ao excluir cliente: ' + error.message);
+      console.error(error);
+      const msg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        "Não é possível excluir este cliente";
+      alert(`Erro ao excluir cliente: ${msg}`);
     }
   };
 
   return (
     <div className="p-4">
       <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">Cadastro de Clientes</h1>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">
+          Cadastro de Clientes
+        </h1>
       </div>
+
       {clienteVisualizar && (
         <ClienteVisualizar
           cliente={clienteVisualizar}
@@ -146,7 +140,7 @@ export default function Clientes() {
               </select>
             </div>
 
-            {ordenarPor === 'data' && (
+            {ordenarPor === "data" && (
               <div className="flex flex-col md:flex-row gap-2">
                 <input
                   type="date"
@@ -183,24 +177,39 @@ export default function Clientes() {
                 <tr>
                   <th className="p-2 text-left">Nome</th>
                   <th className="p-2 text-left hidden md:table-cell">Email</th>
-                  <th className="p-2 text-left hidden md:table-cell">WhatsApp</th>
+                  <th className="p-2 text-left hidden md:table-cell">
+                    WhatsApp
+                  </th>
                   <th className="p-2 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrarClientes().map(cliente => (
+                {filtrarClientes().map((cliente) => (
                   <tr key={cliente.id} className="border-t hover:bg-gray-50">
                     <td className="p-2">{cliente.nome}</td>
-                    <td className="p-2 hidden md:table-cell">{cliente.email}</td>
-                    <td className="p-2 hidden md:table-cell">{cliente.whatsapp}</td>
+                    <td className="p-2 hidden md:table-cell">
+                      {cliente.email}
+                    </td>
+                    <td className="p-2 hidden md:table-cell">
+                      {cliente.whatsapp}
+                    </td>
                     <td className="p-2 flex justify-center gap-2 text-primary">
-                      <button onClick={() => setClienteVisualizar(cliente)} title="Visualizar">
+                      <button
+                        onClick={() => setClienteVisualizar(cliente)}
+                        title="Visualizar"
+                      >
                         <FiEye />
                       </button>
-                      <button onClick={() => handleEditar(cliente)} title="Editar">
+                      <button
+                        onClick={() => handleEditar(cliente)}
+                        title="Editar"
+                      >
                         <FiEdit />
                       </button>
-                      <button onClick={() => handleExcluir(cliente.id)} title="Excluir">
+                      <button
+                        onClick={() => handleExcluir(cliente.id)}
+                        title="Excluir"
+                      >
                         <FiTrash2 />
                       </button>
                     </td>

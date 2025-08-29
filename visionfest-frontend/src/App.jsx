@@ -8,9 +8,9 @@ import MainLayout from "./layout/MainLayout";
 import Dashboard from "./pages/Dashboard";
 
 // Auth
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider } from "/src/contexts/authContext.jsx";
 import ProtectedRoute from "./components/ProtectedRoute";
-import LoginPage from "./pages/LoginPage";
+import LoginCliente from "./pages/LoginCliente";
 
 // Cadastros
 import Clientes from "./pages/Cadastros/Clientes";
@@ -53,7 +53,7 @@ export default function App() {
       <Router>
         <Routes>
           {/* Rota pública: login */}
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<LoginCliente />} />
 
           {/* Rotas protegidas: tudo dentro do MainLayout */}
           <Route element={<ProtectedRoute />}>

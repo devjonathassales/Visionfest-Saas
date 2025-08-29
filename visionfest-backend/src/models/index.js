@@ -1,50 +1,51 @@
+// src/models/index.js
 const fs = require("fs");
 const path = require("path");
-const { Sequelize } = require("sequelize");
+const { DataTypes } = require("sequelize");
 
 module.exports = async (sequelize, schema) => {
-  if (!schema || typeof schema !== 'string' || !schema.trim()) {
+  if (!schema || typeof schema !== "string" || !schema.trim()) {
     throw new Error("Schema inválido ou não informado");
   }
+  const safeSchema = schema.replace(/"/g, "");
+  console.log("Schema carregado:", safeSchema);
 
-  console.log("Schema carregado:", schema);
+  // ✅ Cria o schema só se não existir (idempotente) e ajusta o search_path
+  await sequelize.query(`CREATE SCHEMA IF NOT EXISTS "${safeSchema}";`);
+  await sequelize.query(`SET search_path TO "${safeSchema}", public;`);
 
-  const db = { sequelize, Sequelize };
+  // 🔹 Se no Sequelize do tenant você já passou: define: { schema: safeSchema }
+  //     (como no seu multiTenantMiddleware), a linha acima (search_path) já resolve.
+  //     Mesmo assim, reforçamos o schema em cada model após carregá-los.
 
-  // Cria o schema se não existir
-  await sequelize.createSchema(schema, { ifNotExists: true });
+  // Carrega todos os models *.js desta pasta (menos este index)
+  const files = fs
+    .readdirSync(__dirname)
+    .filter((file) => file !== "index.js" && file.endsWith(".js"));
 
-  // Ajusta o define para usar o schema informado
-  sequelize.define = ((originalDefine) => {
-    return function(modelName, attributes, options = {}) {
-      options.schema = schema;
-      return originalDefine.call(this, modelName, attributes, options);
-    };
-  })(sequelize.define);
-
-  // Carrega os models
-  const files = fs.readdirSync(__dirname).filter(
-    (file) => file !== "index.js" && file.endsWith(".js")
-  );
+  const db = { sequelize };
 
   for (const file of files) {
-    const modelDef = require(path.join(__dirname, file));
-    if (typeof modelDef === "function") {
-      const model = modelDef(sequelize, Sequelize.DataTypes);
+    const def = require(path.join(__dirname, file));
+    if (typeof def === "function") {
+      const model = def(sequelize, DataTypes);
       db[model.name] = model;
-    } else if (typeof modelDef === "object") {
-      Object.keys(modelDef).forEach((key) => {
-        db[key] = modelDef[key];
-      });
     }
   }
 
-  // Executa associate se existir
+  // Associações (se existirem)
   Object.values(db).forEach((model) => {
     if (model && typeof model.associate === "function") {
       model.associate(db);
     }
   });
+
+  // 🔒 Garante que cada model esteja no schema do tenant
+  for (const model of Object.values(db)) {
+    if (model && typeof model.schema === "function") {
+      model.schema(safeSchema);
+    }
+  }
 
   return db;
 };

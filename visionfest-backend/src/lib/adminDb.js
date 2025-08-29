@@ -2,28 +2,36 @@
 require("dotenv").config();
 const { Sequelize, DataTypes } = require("sequelize");
 
-// Conexão fixa no schema PUBLIC (painel administrativo)
+// Conexão única com o BANCO DO PAINEL (schema public)
 const adminSequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: "postgres",
   logging: false,
   define: { schema: "public" },
 });
 
-// Modelo mínimo de Empresa só para lookup de tenant
+// ✅ Modelo da Empresa do PAINEL (snake_case mapeado via `field`)
 const Empresa = adminSequelize.define(
   "Empresa",
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-    nome: DataTypes.STRING,
-    dominio: DataTypes.STRING,
-    bancoDados: { type: DataTypes.STRING, field: "banco_dados" },
-    status: DataTypes.STRING,
+    nome: { type: DataTypes.STRING },
+    cpfCnpj: { type: DataTypes.STRING, field: "cpf_cnpj" }, // <- painel
+    dominio: { type: DataTypes.STRING },
+    status: {
+      type: DataTypes.ENUM("ativo", "bloqueado", "aguardando_pagamento"),
+    },
+    bancoDados: { type: DataTypes.STRING, field: "banco_dados" }, // <- painel
   },
   {
     tableName: "empresas",
-    underscored: true,
+    schema: "public",
+    underscored: true, // created_at / updated_at
     timestamps: true,
+    freezeTableName: true,
   }
 );
 
-module.exports = { sequelize: adminSequelize, Empresa };
+module.exports = {
+  sequelize: adminSequelize,
+  Empresa,
+};

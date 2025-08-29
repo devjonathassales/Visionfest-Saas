@@ -1,4 +1,4 @@
-const { getDbCliente } = require("../utils/multiTenant");
+const { getDbCliente } = require("../utils/tenant");
 
 function formatarConta(c) {
   return {

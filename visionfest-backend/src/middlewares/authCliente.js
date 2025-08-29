@@ -1,6 +1,7 @@
 // src/middlewares/authCliente.js
 const jwt = require("jsonwebtoken");
-const ACCESS_SECRET = process.env.JWT_SECRET_CLIENT || "visionfest_client_secret";
+const ACCESS_SECRET =
+  process.env.JWT_SECRET_CLIENT || "visionfest_client_secret";
 
 module.exports = function authCliente(req, res, next) {
   try {

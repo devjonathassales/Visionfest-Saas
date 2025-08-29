@@ -18,7 +18,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     cidade: "",
     estado: "",
   });
-
   const [errors, setErrors] = useState({});
 
   const cpfRef = useRef(null);
@@ -28,75 +27,56 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
   const dataNascimentoRef = useRef(null);
   const maskRefs = useRef({});
 
+  // máscaras
   useEffect(() => {
     if (cpfRef.current) {
       maskRefs.current.cpf = IMask(cpfRef.current, {
         mask: "000.000.000-00",
         lazy: false,
       });
-      maskRefs.current.cpf.on("accept", () => {
-        setForm((prev) => ({
-          ...prev,
-          cpf: maskRefs.current.cpf.value,
-        }));
-      });
+      maskRefs.current.cpf.on("accept", () =>
+        setForm((p) => ({ ...p, cpf: maskRefs.current.cpf.value }))
+      );
     }
-
     if (whatsappRef.current) {
       maskRefs.current.whatsapp = IMask(whatsappRef.current, {
         mask: [
           { mask: "(00) 00000-0000", startsWith: "9", lazy: false },
           { mask: "(00) 0000-0000", lazy: false },
         ],
-        dispatch: (appended, dynamicMasked) => {
-          const number = (dynamicMasked.value + appended).replace(/\D/g, "");
-          return number.length > 10
-            ? dynamicMasked.compiledMasks[0]
-            : dynamicMasked.compiledMasks[1];
-        },
+        dispatch: (appended, m) =>
+          (m.value + appended).replace(/\D/g, "").length > 10
+            ? m.compiledMasks[0]
+            : m.compiledMasks[1],
       });
-      maskRefs.current.whatsapp.on("accept", () => {
-        setForm((prev) => ({
-          ...prev,
-          whatsapp: maskRefs.current.whatsapp.value,
-        }));
-      });
+      maskRefs.current.whatsapp.on("accept", () =>
+        setForm((p) => ({ ...p, whatsapp: maskRefs.current.whatsapp.value }))
+      );
     }
-
     if (celularRef.current) {
       maskRefs.current.celular = IMask(celularRef.current, {
         mask: [
           { mask: "(00) 00000-0000", startsWith: "9", lazy: false },
           { mask: "(00) 0000-0000", lazy: false },
         ],
-        dispatch: (appended, dynamicMasked) => {
-          const number = (dynamicMasked.value + appended).replace(/\D/g, "");
-          return number.length > 10
-            ? dynamicMasked.compiledMasks[0]
-            : dynamicMasked.compiledMasks[1];
-        },
+        dispatch: (appended, m) =>
+          (m.value + appended).replace(/\D/g, "").length > 10
+            ? m.compiledMasks[0]
+            : m.compiledMasks[1],
       });
-      maskRefs.current.celular.on("accept", () => {
-        setForm((prev) => ({
-          ...prev,
-          celular: maskRefs.current.celular.value,
-        }));
-      });
+      maskRefs.current.celular.on("accept", () =>
+        setForm((p) => ({ ...p, celular: maskRefs.current.celular.value }))
+      );
     }
-
     if (cepRef.current) {
       maskRefs.current.cep = IMask(cepRef.current, {
         mask: "00000-000",
         lazy: false,
       });
-      maskRefs.current.cep.on("accept", () => {
-        setForm((prev) => ({
-          ...prev,
-          cep: maskRefs.current.cep.value,
-        }));
-      });
+      maskRefs.current.cep.on("accept", () =>
+        setForm((p) => ({ ...p, cep: maskRefs.current.cep.value }))
+      );
     }
-
     if (dataNascimentoRef.current) {
       maskRefs.current.dataNascimento = IMask(dataNascimentoRef.current, {
         mask: IMask.MaskedDate,
@@ -108,58 +88,54 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
           Y: { mask: IMask.MaskedRange, from: 1900, to: 2099 },
         },
       });
-      maskRefs.current.dataNascimento.on("accept", () => {
-        setForm((prev) => ({
-          ...prev,
+      maskRefs.current.dataNascimento.on("accept", () =>
+        setForm((p) => ({
+          ...p,
           dataNascimento: maskRefs.current.dataNascimento.value,
-        }));
-      });
+        }))
+      );
     }
-
     return () => {
-      Object.values(maskRefs.current).forEach((mask) => mask.destroy());
+      Object.values(maskRefs.current).forEach((m) => m.destroy());
       maskRefs.current = {};
     };
   }, []);
 
+  // preload do selecionado
   useEffect(() => {
     if (clienteSelecionado) {
       setForm({ ...clienteSelecionado });
       setTimeout(() => {
-        if (maskRefs.current.cpf) {
-          maskRefs.current.cpf.value = clienteSelecionado.cpf || "";
-          maskRefs.current.cpf.updateValue();
-        }
-        if (maskRefs.current.whatsapp) {
-          maskRefs.current.whatsapp.value = clienteSelecionado.whatsapp || "";
-          maskRefs.current.whatsapp.updateValue();
-        }
-        if (maskRefs.current.celular) {
-          maskRefs.current.celular.value = clienteSelecionado.celular || "";
-          maskRefs.current.celular.updateValue();
-        }
-        if (maskRefs.current.cep) {
-          maskRefs.current.cep.value = clienteSelecionado.cep || "";
-          maskRefs.current.cep.updateValue();
-        }
-        if (maskRefs.current.dataNascimento) {
-          maskRefs.current.dataNascimento.value = clienteSelecionado.dataNascimento || "";
-          maskRefs.current.dataNascimento.updateValue();
-        }
+        maskRefs.current.cpf &&
+          ((maskRefs.current.cpf.value = clienteSelecionado.cpf || ""),
+          maskRefs.current.cpf.updateValue());
+        maskRefs.current.whatsapp &&
+          ((maskRefs.current.whatsapp.value =
+            clienteSelecionado.whatsapp || ""),
+          maskRefs.current.whatsapp.updateValue());
+        maskRefs.current.celular &&
+          ((maskRefs.current.celular.value = clienteSelecionado.celular || ""),
+          maskRefs.current.celular.updateValue());
+        maskRefs.current.cep &&
+          ((maskRefs.current.cep.value = clienteSelecionado.cep || ""),
+          maskRefs.current.cep.updateValue());
+        maskRefs.current.dataNascimento &&
+          ((maskRefs.current.dataNascimento.value =
+            clienteSelecionado.dataNascimento || ""),
+          maskRefs.current.dataNascimento.updateValue());
       }, 0);
     }
   }, [clienteSelecionado]);
 
+  // ESC fecha
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const onKey = (e) => e.key === "Escape" && onCancel();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
   function validarCPF(strCPF) {
-    const cpf = strCPF.replace(/[^\d]+/g, "");
+    const cpf = (strCPF || "").replace(/[^\d]+/g, "");
     if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
     let soma = 0;
     for (let i = 1; i <= 9; i++)
@@ -175,28 +151,25 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
     return resto === parseInt(cpf.substring(10, 11));
   }
 
+  // viacep/ibge (externo, ok usar fetch)
   async function buscarEndereco(cep) {
-    const cepLimpo = cep.replace(/\D/g, "");
+    const cepLimpo = (cep || "").replace(/\D/g, "");
     if (cepLimpo.length !== 8) return;
-
     try {
-      const response = await fetch(
+      const data = await fetch(
         `https://viacep.com.br/ws/${cepLimpo}/json/`
-      );
-      const data = await response.json();
-
-      if (!data.erro) {
+      ).then((r) => r.json());
+      if (!data?.erro) {
         const cidadesIBGE = await fetch(
           `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`
-        ).then((res) => res.json());
-
+        ).then((r) => r.json());
         const cidadeOficial =
           cidadesIBGE.find(
-            (c) => c.nome.toLowerCase() === data.localidade.toLowerCase()
+            (c) =>
+              c.nome.toLowerCase() === (data.localidade || "").toLowerCase()
           )?.nome || data.localidade;
-
-        setForm((prev) => ({
-          ...prev,
+        setForm((p) => ({
+          ...p,
           logradouro: data.logradouro || "",
           bairro: data.bairro || "",
           cidade: cidadeOficial,
@@ -210,78 +183,32 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    if (
-      ["cpf", "whatsapp", "celular", "cep", "dataNascimento"].includes(name)
-    ) {
-      return;
-    }
-
-    setForm((prev) => ({ ...prev, [name]: value }));
-
-    if (name === "cep" && value.replace(/\D/g, "").length === 8) {
+    if (["cpf", "whatsapp", "celular", "cep", "dataNascimento"].includes(name))
+      return; // controladas pelas máscaras
+    setForm((p) => ({ ...p, [name]: value }));
+    if (name === "cep" && value.replace(/\D/g, "").length === 8)
       buscarEndereco(value);
-    }
   };
 
   const validarForm = () => {
     const newErrors = {};
     if (!form.nome.trim()) newErrors.nome = "Nome é obrigatório";
-
-    const whatsappLen = form.whatsapp.replace(/\D/g, "").length;
+    const whatsLen = (form.whatsapp || "").replace(/\D/g, "").length;
     if (!form.whatsapp.trim()) newErrors.whatsapp = "WhatsApp é obrigatório";
-    else if (whatsappLen < 10) newErrors.whatsapp = "WhatsApp incompleto";
-
-    if (!form.cpf.trim()) {
-      newErrors.cpf = "CPF é obrigatório";
-    } else if (!validarCPF(form.cpf)) {
-      newErrors.cpf = "CPF inválido";
-    }
-
+    else if (whatsLen < 10) newErrors.whatsapp = "WhatsApp incompleto";
+    if (!form.cpf.trim()) newErrors.cpf = "CPF é obrigatório";
+    else if (!validarCPF(form.cpf)) newErrors.cpf = "CPF inválido";
     if (!form.email.trim()) newErrors.email = "Email é obrigatório";
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
-
-  // IMPORTANTE: alterei a URL da API para o backend correto
-  const salvarClienteBackend = async (dados) => {
-    try {
-      const urlBase = "http://localhost:5000/api/clientes";
-      const isEdit = !!dados.id;
-
-      const response = await fetch(
-        isEdit ? `${urlBase}/${dados.id}` : urlBase,
-        {
-          method: isEdit ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(dados),
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        alert(
-          "Erro ao salvar cliente: " +
-            (errorData.message || response.statusText)
-        );
-        return null;
-      }
-
-      return await response.json();
-    } catch (error) {
-      alert("Erro ao conectar com o servidor.");
-      console.error(error);
-      return null;
-    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validarForm()) return;
-
-    const dadosParaSalvar = {
+    const payload = {
       ...form,
+      id: clienteSelecionado?.id || undefined,
       nome: form.nome.trim(),
       cpf: form.cpf.trim(),
       whatsapp: form.whatsapp.trim(),
@@ -296,11 +223,9 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
       bairro: form.bairro.trim(),
       cidade: form.cidade.trim(),
       estado: form.estado.trim(),
-      id: clienteSelecionado?.id || undefined,
     };
-
-    const clienteSalvo = await salvarClienteBackend(dadosParaSalvar);
-    if (clienteSalvo) onSave(clienteSalvo);
+    // deixa o PAI salvar (ele usa api do contexto)
+    await onSave(payload);
   };
 
   return (
@@ -308,9 +233,6 @@ export default function ClienteForm({ onSave, clienteSelecionado, onCancel }) {
       onSubmit={handleSubmit}
       className="max-w-4xl mx-auto bg-white p-6 rounded shadow-md space-y-6"
     >
-      {/* Campos do formulário aqui (igual ao seu código original) */}
-      {/* Copiei exatamente igual pra não perder a estrutura */}
-
       <div>
         <label className="block font-semibold mb-1" htmlFor="nome">
           Nome *

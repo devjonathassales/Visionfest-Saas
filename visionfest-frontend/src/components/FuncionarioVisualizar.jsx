@@ -1,43 +1,75 @@
-import React from 'react';
+import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
-export default function FuncionarioVisualizar({ funcionario, onClose }) {
-  if (!funcionario) return null;
-  const Info = ({ label, value }) => (
+export default function FornecedorVisualizar({ fornecedor, onClose }) {
+  const { api } = useAuth();
+  const [dados, setDados] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [erro, setErro] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      if (!fornecedor?.id) {
+        setDados(null);
+        return;
+      }
+      setLoading(true);
+      setErro(null);
+      try {
+        const { data } = await api.get(`/api/fornecedores/${fornecedor.id}`);
+        if (alive) setDados(data);
+      } catch (e) {
+        if (alive)
+          setErro(e?.response?.data?.message || "Erro ao carregar fornecedor");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [fornecedor, api]);
+
+  if (!fornecedor) return null;
+
+  const Item = ({ label, value }) => (
     <div className="flex flex-col">
-      <span className="text-xs text-gray-500">{label}</span>
-      <span className="font-semibold">{value ?? '—'}</span>
+      <span className="text-xs text-gray-500 font-opensans">{label}</span>
+      <span className="font-semibold font-opensans">{value || "—"}</span>
     </div>
   );
 
   return (
-    <div className="bg-white p-6 rounded shadow-md max-w-4xl mx-auto">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-montserrat text-primary">Detalhes do Funcionário</h2>
-        <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
-          Fechar
-        </button>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-sm font-opensans">
-        <Info label="Nome" value={funcionario.nome} />
-        <Info label="RG" value={funcionario.rg} />
-        <Info label="CPF" value={funcionario.cpf} />
-        <Info label="Data Nascimento" value={funcionario.dataNascimento} />
-        <Info label="Estado Civil" value={funcionario.estadoCivil} />
-        <Info label="Filhos" value={funcionario.filhos ? `Sim (${funcionario.filhosQtd})` : 'Não'} />
-        <Info label="WhatsApp" value={funcionario.whatsapp} />
-        <Info label="Email" value={funcionario.email} />
-        <Info label="CEP" value={funcionario.cep} />
-        <Info label="Logradouro" value={funcionario.logradouro} />
-        <Info label="Número" value={funcionario.numero} />
-        <Info label="Bairro" value={funcionario.bairro} />
-        <Info label="Cidade" value={funcionario.cidade} />
-        <Info label="Estado" value={funcionario.estado} />
-        <Info label="Agência" value={funcionario.agencia} />
-        <Info label="Conta" value={funcionario.conta} />
-        <Info label="Pix" value={`${funcionario.pixTipo}: ${funcionario.pixChave}`} />
-        <Info label="Data Admissão" value={funcionario.dataAdmissao} />
-        <Info label="Data Demissão" value={funcionario.dataDemissao || '—'} />
-        <Info label="Status" value={funcionario.dataDemissao ? 'Inativo' : 'Ativo'} />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded shadow-md max-w-4xl w-full p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-2xl font-montserrat font-bold text-[#7ED957]">
+            Detalhes do Fornecedor
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-sm px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 transition"
+          >
+            Fechar
+          </button>
+        </div>
+
+        {loading && <p>Carregando...</p>}
+        {erro && <p className="text-red-600">Erro: {erro}</p>}
+
+        {!loading && !erro && dados && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm font-opensans text-black">
+            <Item label="Nome" value={dados.nome} />
+            <Item label="CPF/CNPJ" value={dados.cpfCnpj} />
+            <Item label="Endereço" value={dados.endereco} />
+            <Item label="Email" value={dados.email} />
+            <Item label="WhatsApp" value={dados.whatsapp} />
+            <Item label="Criado em" value={dados.createdAt} />
+            <Item label="Atualizado em" value={dados.updatedAt} />
+          </div>
+        )}
       </div>
     </div>
   );

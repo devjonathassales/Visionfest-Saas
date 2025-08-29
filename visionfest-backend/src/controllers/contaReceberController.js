@@ -1,4 +1,4 @@
-const { getDbCliente } = require("../utils/multiTenant");
+const { getDbCliente } = require("../utils/tenant");
 const { atualizarStatusContratoSePago } = require("../utils/financeiro");
 
 exports.listar = async (req, res) => {

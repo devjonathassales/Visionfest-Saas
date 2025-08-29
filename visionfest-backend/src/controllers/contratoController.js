@@ -1,6 +1,6 @@
 const { Op } = require("sequelize");
 const { gerarContasReceberContrato } = require("../utils/financeiro");
-const { getDbCliente } = require("../utils/multiTenant"); // 📌 IMPORTA O MULTI-TENANT
+const { getDbCliente } = require("../utils/tenant"); // 📌 IMPORTA O MULTI-TENANT
 
 function limparCamposVazios(obj) {
   const novoObj = {};

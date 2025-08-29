@@ -1,21 +1,22 @@
-// src/context/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import axios from "axios";
-
-// Base da API (altere se usar proxy)
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
-// Criar um axios próprio para o app
-const api = axios.create({
-  baseURL: API_BASE,
-  withCredentials: false,
-});
+import apiCliente, { API_BASE } from "/src/utils/apiCliente.js";
 
 const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [accessToken, setAccessToken] = useState(() => localStorage.getItem("vf_client_access") || "");
-  const [refreshToken, setRefreshToken] = useState(() => localStorage.getItem("vf_client_refresh") || "");
+  const [accessToken, setAccessToken] = useState(
+    () => localStorage.getItem("vf_client_access") || ""
+  );
+  const [refreshToken, setRefreshToken] = useState(
+    () => localStorage.getItem("vf_client_refresh") || ""
+  );
   const [usuario, setUsuario] = useState(() => {
     const raw = localStorage.getItem("vf_client_user");
     return raw ? JSON.parse(raw) : null;
@@ -28,25 +29,50 @@ export function AuthProvider({ children }) {
 
   const isAuthenticated = !!accessToken;
 
-  // Interceptor: injeta token e tenta refresh em 401
+  // Garante X-Tenant (pode vir de env, query ?dominio= ou localStorage)
   useEffect(() => {
-    const reqId = api.interceptors.request.use((config) => {
+    try {
+      const byEnv = (import.meta.env.VITE_TENANT || "").trim();
+      const byQS = new URLSearchParams(window.location.search).get("dominio");
+      const byLS = localStorage.getItem("tenant");
+      const tenant =
+        (byEnv && byEnv) ||
+        (byQS && String(byQS).trim()) ||
+        (byLS && String(byLS).trim()) ||
+        null;
+
+      if (tenant) {
+        apiCliente.defaults.headers.common["X-Tenant"] = tenant;
+        localStorage.setItem("tenant", tenant);
+      }
+    } catch {}
+  }, []);
+
+  // Interceptores: injeta Bearer e tenta refresh em 401 (uma vez)
+  useEffect(() => {
+    const reqId = apiCliente.interceptors.request.use((config) => {
       if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
       return config;
     });
 
-    const respId = api.interceptors.response.use(
+    const respId = apiCliente.interceptors.response.use(
       (res) => res,
       async (error) => {
         const original = error.config;
         if (
-          error.response?.status === 401 &&
-          !original._retry &&
+          error?.response?.status === 401 &&
+          !original?._retry &&
           refreshToken
         ) {
           original._retry = true;
           try {
-            const { data } = await axios.post(`${API_BASE}/api/cliente/refresh`, { refreshToken });
+            const tenant = apiCliente.defaults.headers.common["X-Tenant"];
+            const { data } = await axios.post(
+              `${API_BASE}/api/cliente/refresh`,
+              { refreshToken },
+              { headers: tenant ? { "X-Tenant": tenant } : {} }
+            );
+
             const newAccess = data.accessToken;
             const newRefresh = data.refreshToken || refreshToken;
 
@@ -55,10 +81,10 @@ export function AuthProvider({ children }) {
             localStorage.setItem("vf_client_access", newAccess);
             localStorage.setItem("vf_client_refresh", newRefresh);
 
+            original.headers = original.headers || {};
             original.headers.Authorization = `Bearer ${newAccess}`;
-            return api.request(original);
-          } catch (err) {
-            // refresh falhou → logout
+            return apiCliente.request(original);
+          } catch {
             logout();
           }
         }
@@ -67,15 +93,22 @@ export function AuthProvider({ children }) {
     );
 
     return () => {
-      api.interceptors.request.eject(reqId);
-      api.interceptors.response.eject(respId);
+      apiCliente.interceptors.request.eject(reqId);
+      apiCliente.interceptors.response.eject(respId);
     };
   }, [accessToken, refreshToken]);
 
   async function login({ email, senha }) {
     setLoading(true);
     try {
-      const { data } = await axios.post(`${API_BASE}/api/cliente/login`, { email, senha });
+      const tenant = apiCliente.defaults.headers.common["X-Tenant"];
+      // usa axios "cru" para evitar o interceptor de refresh durante o login
+      const { data } = await axios.post(
+        `${API_BASE}/api/cliente/login`,
+        { email, senha },
+        { headers: tenant ? { "X-Tenant": tenant } : {} }
+      );
+
       setAccessToken(data.accessToken);
       setRefreshToken(data.refreshToken);
       setUsuario(data.usuario);
@@ -88,7 +121,10 @@ export function AuthProvider({ children }) {
 
       return { ok: true };
     } catch (e) {
-      return { ok: false, error: e?.response?.data?.mensagem || "Falha no login" };
+      return {
+        ok: false,
+        error: e?.response?.data?.mensagem || "Falha no login",
+      };
     } finally {
       setLoading(false);
     }
@@ -107,7 +143,7 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      api,
+      api: apiCliente,
       isAuthenticated,
       accessToken,
       usuario,
@@ -123,5 +159,7 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthCtx);
+  const ctx = useContext(AuthCtx);
+  if (!ctx) throw new Error("useAuth deve ser usado dentro de <AuthProvider>");
+  return ctx;
 }

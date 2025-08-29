@@ -1,31 +1,36 @@
-// src/api/axios.js
 import axios from "axios";
 
-const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
-});
+export const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
 
-function extractSubdomain(host) {
-  if (!host) return null;
-  const h = host.split(":")[0];
-  const parts = h.split(".");
-  if (parts.length <= 1) return null;
-  return parts[0];
+function resolveTenant() {
+  const env = (import.meta.env.VITE_TENANT || "").trim().toLowerCase();
+  if (env) return env;
+
+  try {
+    const h = window.location.hostname;
+    const isLocalHost = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(h);
+    const parts = h.split(".");
+    if (!isLocalHost && parts.length > 2) return parts[0].toLowerCase();
+  } catch {}
+
+  // fallback dev
+  return "visionware";
 }
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("cliente_access_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+const apiCliente = axios.create({
+  baseURL: API_BASE,
+  withCredentials: false,
+});
 
-  // mande o tenant sempre, por subdomínio ou variável de ambiente
-  const sub = extractSubdomain(window.location.hostname);
-  const forcedTenant = import.meta.env.VITE_TENANT; // opcional para dev
-  const tenant = forcedTenant || sub || "visionware"; // ajuste o default conforme seu ambiente
-  config.headers["x-tenant"] = tenant;
+// Header do tenant (default)
+apiCliente.defaults.headers.common["X-Tenant"] = resolveTenant();
 
+// Injeta Authorization se houver token
+apiCliente.interceptors.request.use((config) => {
+  const token = localStorage.getItem("vf_client_access");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-export default api;
+export default apiCliente;

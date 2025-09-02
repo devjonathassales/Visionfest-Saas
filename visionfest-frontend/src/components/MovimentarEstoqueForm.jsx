@@ -1,34 +1,38 @@
-import React, { useState, useEffect } from 'react';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function MovimentarEstoqueForm({ onClose, onSave }) {
+  const { api } = useAuth();
   const [produtos, setProdutos] = useState([]);
-  const [busca, setBusca] = useState('');
+  const [busca, setBusca] = useState("");
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
-  const [quantidade, setQuantidade] = useState('');
-  const [tipo, setTipo] = useState('entrada');
+  const [quantidade, setQuantidade] = useState("");
+  const [tipo, setTipo] = useState("entrada");
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/produtos`)
-      .then((res) => res.json())
-      .then((data) => setProdutos(data))
-      .catch((err) => console.error('Erro ao carregar produtos:', err));
-  }, []);
+    (async () => {
+      try {
+        // 🔑 sem barra inicial => respeita baseURL "/api"
+        const { data } = await api.get("/api/produtos");
+        setProdutos(data || []);
+      } catch (err) {
+        console.error("Erro ao carregar produtos:", err);
+      }
+    })();
+  }, [api]);
 
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    const handleKeyDown = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  const produtosFiltrados = busca.length >= 3
-    ? produtos.filter((p) =>
-        p.nome.toLowerCase().includes(busca.toLowerCase())
-      )
-    : [];
+  const produtosFiltrados =
+    busca.length >= 3
+      ? produtos.filter((p) =>
+          (p.nome || "").toLowerCase().includes(busca.toLowerCase())
+        )
+      : [];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -93,7 +97,9 @@ export default function MovimentarEstoqueForm({ onClose, onSave }) {
             </div>
 
             <div className="mb-4">
-              <label className="block font-semibold mb-1">Tipo de Movimentação</label>
+              <label className="block font-semibold mb-1">
+                Tipo de Movimentação
+              </label>
               <select
                 value={tipo}
                 onChange={(e) => setTipo(e.target.value)}

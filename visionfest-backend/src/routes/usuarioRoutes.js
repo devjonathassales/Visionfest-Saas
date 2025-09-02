@@ -1,13 +1,15 @@
+// src/routes/usuarioRoutes.js
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
 
-// USUÁRIOS
+const authCliente = require("../middlewares/authCliente");
 const usuarioController = require("../controllers/usuarioController");
-router.post("/usuarios", authEmpresa, usuarioController.criar);
-router.get("/usuarios", authEmpresa, usuarioController.listar);
-router.put("/usuarios/:id", authEmpresa, usuarioController.atualizar);
-router.patch("/usuarios/:id/ativo", authEmpresa, usuarioController.toggleAtivo);
-router.delete("/usuarios/:id", authEmpresa, usuarioController.deletar);
+
+// O app monta: app.use("/api/usuarios", usuarioRoutes)
+router.post("/", authCliente, usuarioController.criar);
+router.get("/", authCliente, usuarioController.listar);
+router.put("/:id", authCliente, usuarioController.atualizar);
+router.patch("/:id/ativo", authCliente, usuarioController.toggleAtivo);
+router.delete("/:id", authCliente, usuarioController.deletar);
 
 module.exports = router;

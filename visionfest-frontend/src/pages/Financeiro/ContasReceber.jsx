@@ -7,13 +7,15 @@ import {
   startOfWeek,
   endOfWeek,
 } from "date-fns";
+import { toast } from "react-toastify";
+import { useAuth } from "/src/contexts/authContext.jsx";
+
 import ContaReceberForm from "../../components/ContaReceberForm";
 import ReceberForm from "../../components/ReceberForm";
-import { toast } from "react-toastify";
-
-const API_URL = "http://localhost:5000/api/contas-receber";
 
 export default function ContasReceber() {
+  const { api } = useAuth();
+
   const [contas, setContas] = useState([]);
   const [filtro, setFiltro] = useState("mensal");
   const [dataInicial, setDataInicial] = useState(startOfMonth(new Date()));
@@ -46,16 +48,18 @@ export default function ContasReceber() {
   const loadContas = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(API_URL);
-      if (!res.ok) throw new Error("Erro ao carregar");
-      const data = await res.json();
+      const params = {
+        dataInicio: format(dataInicial, "yyyy-MM-dd"),
+        dataFim: format(dataFinal, "yyyy-MM-dd"),
+      };
+      const { data } = await api.get("/api/contas-receber", { params });
       setContas(data);
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e?.response?.data?.error || "Erro ao carregar contas.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [api, dataInicial, dataFinal]);
 
   useEffect(() => {
     loadContas();
@@ -65,7 +69,6 @@ export default function ContasReceber() {
     setContaSel(c);
     setMostrarReceberForm(true);
   };
-
   const fecharReceber = () => {
     setContaSel(null);
     setMostrarReceberForm(false);
@@ -74,12 +77,10 @@ export default function ContasReceber() {
   const abrirDetalhes = async (conta) => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/${conta.id}`);
-      if (!res.ok) throw new Error("Erro ao carregar detalhes");
-      const data = await res.json();
+      const { data } = await api.get(`/api/contas-receber/${conta.id}`);
       setContaSel(data);
     } catch {
-      toast.error("Erro ao buscar detalhes");
+      toast.error("Erro ao buscar detalhes.");
       setContaSel(conta);
     } finally {
       setDetalhesAberto(true);
@@ -97,12 +98,11 @@ export default function ContasReceber() {
     if (!confirm("Excluir esta conta?")) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Erro ao excluir");
-      toast.success("Excluído com sucesso");
+      await api.delete(`/api/contas-receber/${id}`);
+      toast.success("Excluído com sucesso.");
       loadContas();
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e?.response?.data?.error || "Erro ao excluir.");
     } finally {
       setLoading(false);
     }
@@ -112,12 +112,11 @@ export default function ContasReceber() {
     if (!confirm("Estornar esta conta?")) return;
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/${id}/estorno`, { method: "PUT" });
-      if (!res.ok) throw new Error("Erro ao estornar");
-      toast.success("Estornado");
+      await api.put(`/api/contas-receber/${id}/estorno`);
+      toast.success("Estornado.");
       loadContas();
     } catch (e) {
-      toast.error(e.message);
+      toast.error(e?.response?.data?.error || "Erro ao estornar.");
     } finally {
       setLoading(false);
     }
@@ -125,11 +124,14 @@ export default function ContasReceber() {
 
   const filtered = contas
     .filter((c) => {
+      // se o backend já filtra por período, isso aqui é redundante, mas mantemos local
       const v = new Date(c.vencimento);
       return v >= dataInicial && v <= dataFinal;
     })
     .filter((c) =>
-      pesquisa ? c.descricao.toLowerCase().includes(pesquisa.toLowerCase()) : true
+      pesquisa
+        ? c.descricao?.toLowerCase().includes(pesquisa.toLowerCase())
+        : true
     )
     .sort((a, b) => new Date(a.vencimento) - new Date(b.vencimento));
 
@@ -152,6 +154,7 @@ export default function ContasReceber() {
           className="select select-bordered w-full sm:w-[10%] min-w-[130px]"
           value={filtro}
           onChange={(e) => setFiltro(e.target.value)}
+          disabled={loading}
         >
           <option value="mensal">Mensal</option>
           <option value="semanal">Semanal</option>
@@ -159,15 +162,17 @@ export default function ContasReceber() {
         </select>
         <input
           type="date"
-          className="input input-bordered w-full sm:w-[13%] w-[130px]"
+          className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
           value={format(dataInicial, "yyyy-MM-dd")}
           onChange={(e) => setDataInicial(new Date(e.target.value))}
+          disabled={loading}
         />
         <input
           type="date"
-          className="input input-bordered w-full sm:w-[13%] w-[130px]"
+          className="input input-bordered w-full sm:w-[13%] min-w-[130px]"
           value={format(dataFinal, "yyyy-MM-dd")}
           onChange={(e) => setDataFinal(new Date(e.target.value))}
+          disabled={loading}
         />
         <button
           onClick={() => setMostrarForm(true)}
@@ -205,7 +210,7 @@ export default function ContasReceber() {
                   <td>{format(new Date(c.vencimento), "dd/MM/yyyy")}</td>
                   <td className="capitalize">{c.status}</td>
                   <td>
-                    {c.status === "pago"
+                    {c.status === "pago" && c.dataRecebimento
                       ? format(new Date(c.dataRecebimento), "dd/MM/yyyy")
                       : "-"}
                   </td>
@@ -216,6 +221,7 @@ export default function ContasReceber() {
                           className="text-green-600"
                           title="Receber"
                           onClick={() => abrirReceber(c)}
+                          disabled={loading}
                         >
                           <FiCheck />
                         </button>
@@ -223,6 +229,7 @@ export default function ContasReceber() {
                           className="text-red-600"
                           title="Excluir"
                           onClick={() => excluir(c.id)}
+                          disabled={loading}
                         >
                           <FiTrash2 />
                         </button>
@@ -233,6 +240,7 @@ export default function ContasReceber() {
                           className="text-blue-600"
                           title="Detalhes"
                           onClick={() => abrirDetalhes(c)}
+                          disabled={loading}
                         >
                           <FiEye />
                         </button>
@@ -240,6 +248,7 @@ export default function ContasReceber() {
                           className="text-yellow-600"
                           title="Estornar"
                           onClick={() => estornar(c.id)}
+                          disabled={loading}
                         >
                           ↩
                         </button>
@@ -254,11 +263,22 @@ export default function ContasReceber() {
       </div>
 
       {mostrarForm && (
-        <ContaReceberForm onClose={() => setMostrarForm(false)} onSave={loadContas} />
+        <ContaReceberForm
+          onClose={() => setMostrarForm(false)}
+          onSave={loadContas}
+          onPagar={(conta) => {
+            loadContas();
+            abrirReceber(conta);
+          }}
+        />
       )}
 
       {mostrarReceberForm && contaSel && (
-        <ReceberForm conta={contaSel} onClose={fecharReceber} onBaixa={handleReceber} />
+        <ReceberForm
+          conta={contaSel}
+          onClose={fecharReceber}
+          onBaixa={handleReceber}
+        />
       )}
 
       {detalhesAberto && contaSel && (
@@ -278,7 +298,9 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Vencimento:</span>
-                <span>{format(new Date(contaSel.vencimento), "dd/MM/yyyy")}</span>
+                <span>
+                  {format(new Date(contaSel.vencimento), "dd/MM/yyyy")}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Recebido em:</span>
@@ -290,15 +312,20 @@ export default function ContasReceber() {
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Forma de Pagamento:</span>
-                <span className="capitalize">{contaSel.formaPagamento || "-"}</span>
+                <span className="capitalize">
+                  {contaSel.formaPagamento || "-"}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="font-semibold">Valor Recebido:</span>
-                <span>R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}</span>
+                <span>
+                  R$ {parseFloat(contaSel.valorRecebido || 0).toFixed(2)}
+                </span>
               </div>
 
-              {/* Dados Bancários */}
-              {["pix", "debito", "transferencia"].includes(contaSel.formaPagamento) &&
+              {["pix", "debito", "transferencia"].includes(
+                contaSel.formaPagamento
+              ) &&
                 contaSel.contaBancaria && (
                   <>
                     <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
@@ -319,28 +346,29 @@ export default function ContasReceber() {
                   </>
                 )}
 
-              {/* Crédito/Débito info */}
-              {["debito", "credito"].includes(contaSel.formaPagamento) && contaSel.maquina && (
-                <div className="flex justify-between">
-                  <span className="font-semibold">Máquina:</span>
-                  <span>{contaSel.maquina}</span>
-                </div>
-              )}
-              {contaSel.formaPagamento === "credito" && contaSel.cartaoCredito && (
-                <>
-                  <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
-                    Informações do Crédito
-                  </div>
+              {["debito", "credito"].includes(contaSel.formaPagamento) &&
+                contaSel.maquina && (
                   <div className="flex justify-between">
-                    <span className="font-semibold">Cartão:</span>
-                    <span>{contaSel.cartaoCredito.banco}</span>
+                    <span className="font-semibold">Máquina:</span>
+                    <span>{contaSel.maquina}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="font-semibold">Taxa repassada:</span>
-                    <span>{contaSel.taxaRepassada ? "Sim" : "Não"}</span>
-                  </div>
-                </>
-              )}
+                )}
+              {contaSel.formaPagamento === "credito" &&
+                contaSel.cartaoCredito && (
+                  <>
+                    <div className="border-t border-gray-200 pt-2 mt-2 font-medium text-[#7ED957]">
+                      Informações do Crédito
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Cartão:</span>
+                      <span>{contaSel.cartaoCredito.banco}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="font-semibold">Taxa repassada:</span>
+                      <span>{contaSel.taxaRepassada ? "Sim" : "Não"}</span>
+                    </div>
+                  </>
+                )}
             </div>
             <div className="flex justify-end mt-4">
               <button

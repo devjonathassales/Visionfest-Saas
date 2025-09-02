@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { FiPlus, FiCheck, FiTrash2, FiEye } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useAuth } from "/src/contexts/authContext.jsx";
 import ContasPagarForm from "../../components/ContaPagarForm";
 import PagamentoContaForm from "../../components/PagamentoContaForm";
 
-const API_URL = "http://localhost:5000/api/contas-pagar";
-
 export default function ContasPagar() {
+  const { api } = useAuth(); // axios com Bearer + x-tenant
   const [contas, setContas] = useState([]);
   const [busca, setBusca] = useState("");
   const [formAberto, setFormAberto] = useState(false);
@@ -19,11 +19,10 @@ export default function ContasPagar() {
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
 
-  // Novo estado para filtro por fornecedor
   const [fornecedores, setFornecedores] = useState([]);
   const [fornecedorIdFiltro, setFornecedorIdFiltro] = useState("");
 
-  // Função para obter datas conforme período
+  // datas de acordo com o período
   const getDatasPorPeriodo = (tipo) => {
     const hoje = new Date();
     let inicio, fim;
@@ -32,69 +31,66 @@ export default function ContasPagar() {
       inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
       fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
     } else if (tipo === "semanal") {
-      const dia = hoje.getDay();
-      const diff = hoje.getDate() - dia;
-      inicio = new Date(hoje.setDate(diff));
-      fim = new Date(inicio);
-      fim.setDate(fim.getDate() + 6);
+      const d = new Date();
+      const diaSemana = d.getDay(); // 0-dom
+      const inicioSemana = new Date(d);
+      inicioSemana.setDate(d.getDate() - diaSemana);
+      inicio = inicioSemana;
+      fim = new Date(inicioSemana);
+      fim.setDate(inicioSemana.getDate() + 6);
     } else {
-      inicio = fim = hoje;
+      inicio = hoje;
+      fim = hoje;
     }
 
-    return {
-      inicio: inicio.toISOString().substring(0, 10),
-      fim: fim.toISOString().substring(0, 10),
-    };
+    const toStr = (dt) => dt.toISOString().slice(0, 10);
+    return { inicio: toStr(inicio), fim: toStr(fim) };
   };
 
-  // Atualiza dataInicio e dataFim quando muda o período
   useEffect(() => {
     const { inicio, fim } = getDatasPorPeriodo(periodo);
     setDataInicio(inicio);
     setDataFim(fim);
   }, [periodo]);
 
-  // Buscar fornecedores para filtro (supondo API /api/fornecedores)
+  // fornecedores para filtro
   const carregarFornecedores = useCallback(async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/fornecedores");
-      if (!res.ok) throw new Error("Erro ao buscar fornecedores");
-      const dados = await res.json();
-      setFornecedores(dados);
+      const { data } = await api.get("/api/fornecedores");
+      setFornecedores(data || []);
     } catch (err) {
-      toast.error("Erro ao carregar fornecedores: " + err.message);
+      toast.error("Erro ao carregar fornecedores.");
     }
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     carregarFornecedores();
   }, [carregarFornecedores]);
 
-  // Carregar contas com filtro (incluindo fornecedorIdFiltro)
+  // lista de contas com filtros (intervalo + fornecedor opcional)
   const carregarContas = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        dataInicio,
-        dataFim,
-        fornecedorId: fornecedorIdFiltro,
+      const { data } = await api.get("/api/contas-pagar", {
+        params: {
+          dataInicio,
+          dataFim,
+          fornecedorId: fornecedorIdFiltro || undefined,
+        },
       });
-      const res = await fetch(`${API_URL}?${params.toString()}`);
-      if (!res.ok) throw new Error("Erro ao buscar contas");
-      const data = await res.json();
-      setContas(data);
+      setContas(data || []);
     } catch (err) {
-      toast.error("Erro ao carregar contas: " + err.message);
+      toast.error("Erro ao carregar contas.");
     } finally {
       setLoading(false);
     }
-  }, [dataInicio, dataFim, fornecedorIdFiltro]);
+  }, [api, dataInicio, dataFim, fornecedorIdFiltro]);
 
   useEffect(() => {
     carregarContas();
   }, [carregarContas]);
 
-  // Os outros métodos permanecem os mesmos...
+  // ações UI
   const abrirForm = () => {
     setContaSelecionada(null);
     setFormAberto(true);
@@ -114,15 +110,14 @@ export default function ContasPagar() {
     setPagamentoAberto(false);
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/${conta.id}`);
-      if (!res.ok) throw new Error("Erro ao carregar detalhes da conta");
-      const contaDetalhada = await res.json();
-      setContaSelecionada(contaDetalhada);
+      const { data } = await api.get(`/api/contas-pagar/${conta.id}`);
+      setContaSelecionada(data);
       setDetalhesAberto(true);
     } catch (err) {
-      toast.error("Erro ao carregar detalhes: " + err.message);
+      // fallback para exibir algo
       setContaSelecionada(conta);
       setDetalhesAberto(true);
+      toast.error("Erro ao carregar detalhes.");
     } finally {
       setLoading(false);
     }
@@ -132,34 +127,30 @@ export default function ContasPagar() {
     if (!window.confirm("Deseja excluir esta conta?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Erro ao excluir conta");
+      await api.delete(`/api/contas-pagar/${id}`);
       toast.success("Conta excluída com sucesso!");
       await carregarContas();
-    } catch (err) {
-      toast.error("Erro ao excluir conta: " + err.message);
+    } catch {
+      toast.error("Erro ao excluir conta.");
     } finally {
       setLoading(false);
     }
   };
 
-  const pagarConta = async (dados) => {
+  const pagarConta = async (dadosPagamento) => {
     if (!contaSelecionada?.id) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/${contaSelecionada.id}/baixa`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dados),
-      });
-      if (!res.ok) throw new Error("Erro ao pagar conta");
-      const contaAtualizada = await res.json();
+      const { data } = await api.put(
+        `/api/contas-pagar/${contaSelecionada.id}/baixa`,
+        dadosPagamento
+      );
       toast.success("Pagamento realizado com sucesso!");
       setPagamentoAberto(false);
-      setContaSelecionada(contaAtualizada);
+      setContaSelecionada(data);
       await carregarContas();
-    } catch (err) {
-      toast.error("Erro ao pagar conta: " + err.message);
+    } catch {
+      toast.error("Erro ao pagar conta.");
     } finally {
       setLoading(false);
     }
@@ -169,27 +160,26 @@ export default function ContasPagar() {
     if (!window.confirm("Deseja estornar esta conta?")) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/${id}/estorno`, {
-        method: "PUT",
-      });
-      if (!res.ok) throw new Error("Erro ao estornar conta");
+      await api.put(`/api/contas-pagar/${id}/estorno`);
       toast.success("Conta estornada com sucesso!");
       await carregarContas();
-    } catch (err) {
-      toast.error("Erro ao estornar conta: " + err.message);
+    } catch {
+      toast.error("Erro ao estornar conta.");
     } finally {
       setLoading(false);
     }
   };
 
-  // Filtra localmente pelo texto da busca na descrição
+  // filtro de texto local
   const contasFiltradas = contas.filter((c) =>
-    c.descricao?.toLowerCase().includes(busca.toLowerCase())
+    (c.descricao || "").toLowerCase().includes(busca.toLowerCase())
   );
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-4xl font-bold text-[#7ED957] text-center">Contas a Pagar</h1>
+      <h1 className="text-4xl font-bold text-[#7ED957] text-center">
+        Contas a Pagar
+      </h1>
 
       {/* Filtros */}
       <div className="flex flex-wrap items-end gap-2 border border-gray-300 rounded-md p-3 bg-white">
@@ -229,7 +219,7 @@ export default function ContasPagar() {
           disabled={loading}
         />
 
-        {/* Novo filtro por fornecedor */}
+        {/* Filtro por fornecedor */}
         <select
           className="select select-bordered w-full sm:w-[20%] min-w-[180px]"
           value={fornecedorIdFiltro}
@@ -281,10 +271,12 @@ export default function ContasPagar() {
                   <td className="p-2">{c.centroCusto?.descricao || "-"}</td>
                   <td className="p-2">{c.fornecedor?.nome || "-"}</td>
                   <td className="p-2 text-right">
-                    R$ {parseFloat(c.valorTotal).toFixed(2)}
+                    R$ {Number(c.valorTotal || 0).toFixed(2)}
                   </td>
                   <td className="p-2 text-center">
-                    {new Date(c.vencimento).toLocaleDateString()}
+                    {c.vencimento
+                      ? new Date(c.vencimento).toLocaleDateString()
+                      : "-"}
                   </td>
                   <td className="p-2 text-center capitalize">{c.status}</td>
                   <td className="p-2 text-right flex justify-end gap-2">
@@ -357,7 +349,7 @@ export default function ContasPagar() {
         />
       )}
 
-      {/* Modal: Detalhes da Conta Paga */}
+      {/* Modal: Detalhes */}
       {detalhesAberto && contaSelecionada && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center p-4 z-50">
           <div className="bg-white rounded-md p-6 w-full max-w-lg relative">
@@ -368,28 +360,71 @@ export default function ContasPagar() {
               &times;
             </button>
             <h2 className="text-xl font-semibold mb-4">Detalhes da Conta</h2>
-            <p><strong>Descrição:</strong> {contaSelecionada.descricao}</p>
-            <p><strong>Centro de Custo:</strong> {contaSelecionada.centroCusto?.descricao || "-"}</p>
-            <p><strong>Fornecedor:</strong> {contaSelecionada.fornecedor?.nome || "-"}</p>
-            <p><strong>Valor Total:</strong> R$ {parseFloat(contaSelecionada.valorTotal).toFixed(2)}</p>
-            <p><strong>Vencimento:</strong> {new Date(contaSelecionada.vencimento).toLocaleDateString()}</p>
-            <p><strong>Status:</strong> {contaSelecionada.status}</p>
+            <p>
+              <strong>Descrição:</strong> {contaSelecionada.descricao}
+            </p>
+            <p>
+              <strong>Centro de Custo:</strong>{" "}
+              {contaSelecionada.centroCusto?.descricao || "-"}
+            </p>
+            <p>
+              <strong>Fornecedor:</strong>{" "}
+              {contaSelecionada.fornecedor?.nome || "-"}
+            </p>
+            <p>
+              <strong>Valor Total:</strong> R${" "}
+              {Number(contaSelecionada.valorTotal || 0).toFixed(2)}
+            </p>
+            <p>
+              <strong>Vencimento:</strong>{" "}
+              {contaSelecionada.vencimento
+                ? new Date(contaSelecionada.vencimento).toLocaleDateString()
+                : "-"}
+            </p>
+            <p>
+              <strong>Status:</strong> {contaSelecionada.status}
+            </p>
+
             {contaSelecionada.status === "pago" && (
               <>
-                <p><strong>Data Pagamento:</strong> {new Date(contaSelecionada.dataPagamento).toLocaleDateString()}</p>
-                <p><strong>Forma Pagamento:</strong> {contaSelecionada.formaPagamento}</p>
+                <p>
+                  <strong>Data Pagamento:</strong>{" "}
+                  {contaSelecionada.dataPagamento
+                    ? new Date(
+                        contaSelecionada.dataPagamento
+                      ).toLocaleDateString()
+                    : "-"}
+                </p>
+                <p>
+                  <strong>Forma Pagamento:</strong>{" "}
+                  {contaSelecionada.formaPagamento}
+                </p>
                 {contaSelecionada.contaBancaria && (
                   <p>
-                    <strong>Conta Bancária:</strong> {contaSelecionada.contaBancaria.banco} - Agência {contaSelecionada.contaBancaria.agencia} - Conta {contaSelecionada.contaBancaria.conta}
+                    <strong>Conta Bancária:</strong>{" "}
+                    {contaSelecionada.contaBancaria.banco} - Ag.{" "}
+                    {contaSelecionada.contaBancaria.agencia} - Cc.{" "}
+                    {contaSelecionada.contaBancaria.conta}
                   </p>
                 )}
-                <p><strong>Valor Pago:</strong> R$ {parseFloat(contaSelecionada.valorPago).toFixed(2)}</p>
-                <p><strong>Troco:</strong> R$ {parseFloat(contaSelecionada.troco || 0).toFixed(2)}</p>
+                <p>
+                  <strong>Valor Pago:</strong> R${" "}
+                  {Number(contaSelecionada.valorPago || 0).toFixed(2)}
+                </p>
+                <p>
+                  <strong>Troco:</strong> R${" "}
+                  {Number(contaSelecionada.troco || 0).toFixed(2)}
+                </p>
                 {contaSelecionada.formaPagamento === "credito" && (
                   <>
-                    <p><strong>Tipo Crédito:</strong> {contaSelecionada.tipoCredito}</p>
+                    <p>
+                      <strong>Tipo Crédito:</strong>{" "}
+                      {contaSelecionada.tipoCredito}
+                    </p>
                     {contaSelecionada.tipoCredito === "parcelado" && (
-                      <p><strong>Parcelas:</strong> {contaSelecionada.parcelas}</p>
+                      <p>
+                        <strong>Parcelas:</strong> {contaSelecionada.parcelas}
+                      </p>
                     )}
                   </>
                 )}

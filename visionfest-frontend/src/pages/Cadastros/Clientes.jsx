@@ -1,12 +1,11 @@
-// src/pages/Cadastros/Clientes.jsx
 import React, { useState, useEffect } from "react";
-import { FiPlus, FiEye, FiEdit, FiTrash2 } from "react-icons/fi";
+import { useAuth } from "/src/contexts/authContext.jsx";
 import ClienteForm from "../../components/ClienteForm";
 import ClienteVisualizar from "../../components/ClienteVisualizar";
-import { useAuth } from "/src/contexts/authContext.jsx"; // usa o contexto
+import { FiPlus, FiEye, FiEdit, FiTrash2 } from "react-icons/fi";
 
 export default function Clientes() {
-  const { api, isAuthenticated } = useAuth(); // api já tem baseURL, X-Tenant e Bearer
+  const { api } = useAuth(); // <- usa o axios com Bearer + X-Tenant
   const [clientes, setClientes] = useState([]);
   const [busca, setBusca] = useState("");
   const [ordenarPor, setOrdenarPor] = useState("alfabetica");
@@ -21,18 +20,18 @@ export default function Clientes() {
     setLoading(true);
     try {
       const { data } = await api.get("/api/clientes");
-      setClientes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error(error);
-      alert(error?.response?.data?.message || "Erro ao carregar clientes");
+      setClientes(data);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao carregar clientes");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isAuthenticated) fetchClientes();
-  }, [isAuthenticated]);
+    fetchClientes();
+  }, []);
 
   const filtrarClientes = () => {
     let lista = [...clientes];
@@ -47,10 +46,8 @@ export default function Clientes() {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
       lista = lista.filter((cliente) => {
-        const data = cliente.dataCadastro
-          ? new Date(cliente.dataCadastro)
-          : null;
-        return data && data >= inicio && data <= fim;
+        const data = new Date(cliente.dataCadastro);
+        return data >= inicio && data <= fim;
       });
     }
     return lista;
@@ -61,14 +58,14 @@ export default function Clientes() {
       if (novoCliente.id) {
         await api.put(`/api/clientes/${novoCliente.id}`, novoCliente);
       } else {
-        await api.post("/api/clientes", novoCliente);
+        await api.post(`/api/clientes`, novoCliente);
       }
       await fetchClientes();
       setMostrarFormulario(false);
       setClienteSelecionado(null);
-    } catch (error) {
-      console.error(error);
-      alert(error?.response?.data?.message || "Erro ao salvar cliente");
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar cliente");
     }
   };
 
@@ -82,13 +79,9 @@ export default function Clientes() {
     try {
       await api.delete(`/api/clientes/${id}`);
       setClientes((prev) => prev.filter((c) => c.id !== id));
-    } catch (error) {
-      console.error(error);
-      const msg =
-        error?.response?.data?.error ||
-        error?.response?.data?.message ||
-        "Não é possível excluir este cliente";
-      alert(`Erro ao excluir cliente: ${msg}`);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao excluir cliente");
     }
   };
 

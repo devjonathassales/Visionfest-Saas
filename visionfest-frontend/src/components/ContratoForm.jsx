@@ -1,14 +1,21 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Select from "react-select";
-
-const API_BASE = "http://localhost:5000/api";
+import { useAuth } from "../contexts/authContext.jsx";
+import api from "../utils/apiCliente.js"; // fallback seguro
 
 export default function ContratoForm({
   onClose,
   onContratoSalvo,
-  contrato = null, // pode vir nulo inicialmente
+  contrato = null,
   modoEdicao = false,
 }) {
+  const auth = useAuth?.();
+  // http será apiCliente (se vier do contexto) ou o api padrão
+  const http = useMemo(
+    () => (auth?.apiCliente ? auth.apiCliente : api),
+    [auth]
+  );
+
   const [clientes, setClientes] = useState([]);
   const [produtos, setProdutos] = useState([]);
 
@@ -28,41 +35,47 @@ export default function ContratoForm({
     valorTotal: 0,
   });
 
-  // Carregar clientes e produtos
+  // Carrega clientes e produtos
   useEffect(() => {
+    let ativo = true;
     async function carregarDados() {
       try {
         const [resClientes, resProdutos] = await Promise.all([
-          fetch(`${API_BASE}/clientes`),
-          fetch(`${API_BASE}/produtos`),
+          http.get("/api/clientes"),
+          http.get("/api/produtos"),
         ]);
-
-        const [clientesJson, produtosJson] = await Promise.all([
-          resClientes.json(),
-          resProdutos.json(),
-        ]);
-
-        setClientes(clientesJson);
-        setProdutos(produtosJson);
+        if (!ativo) return;
+        setClientes(resClientes?.data ?? []);
+        setProdutos(resProdutos?.data ?? []);
       } catch (err) {
         console.error("Erro ao carregar clientes/produtos:", err);
       }
     }
     carregarDados();
-  }, []);
+    return () => {
+      ativo = false;
+    };
+  }, [http]);
 
-  // Preencher o form se contrato vier da API
+  // Preenche formulário quando vier um contrato (edição)
   useEffect(() => {
     if (contrato && contrato.id) {
+      const prodSel =
+        contrato.Produtos?.map((p) => ({
+          produtoId: p.id,
+          nome: p.nome,
+          valor: Number(p.valor ?? 0),
+          quantidade: Number(p.ContratoProduto?.quantidade ?? 1),
+        })) ?? [];
+
+      const total = prodSel.reduce(
+        (acc, p) => acc + Number(p.valor || 0) * Number(p.quantidade || 0),
+        0
+      );
+
       setForm({
         clienteId: contrato.clienteId || "",
-        produtosSelecionados:
-          contrato.Produtos?.map((p) => ({
-            produtoId: p.id,
-            nome: p.nome,
-            valor: p.valor,
-            quantidade: p.ContratoProduto?.quantidade || 1,
-          })) || [],
+        produtosSelecionados: prodSel,
         corTema: contrato.corTema || "",
         dataEvento: contrato.dataEvento || "",
         horarioInicio: contrato.horarioInicio || "",
@@ -71,59 +84,53 @@ export default function ContratoForm({
         nomeBuffet: contrato.nomeBuffet || "",
         dataContrato:
           contrato.dataContrato || new Date().toISOString().slice(0, 10),
-        valorTotal:
-          contrato.Produtos?.reduce(
-            (acc, p) =>
-              acc + (p.valor || 0) * (p.ContratoProduto?.quantidade || 1),
-            0
-          ) || 0,
+        valorTotal: total,
       });
     }
   }, [contrato]);
 
-  // Recalcular valor total ao alterar produtos
+  // Recalcula total a cada mudança dos produtos selecionados
   useEffect(() => {
-    const total = form.produtosSelecionados.reduce(
-      (acc, p) => acc + p.valor * p.quantidade,
+    const total = (form.produtosSelecionados || []).reduce(
+      (acc, p) => acc + Number(p.valor || 0) * Number(p.quantidade || 0),
       0
     );
     setForm((f) => ({ ...f, valorTotal: total }));
   }, [form.produtosSelecionados]);
 
   const adicionarProduto = () => {
-    const quantidade = parseInt(quantidadeProduto);
-    if (!produtoSelecionado || isNaN(quantidade) || quantidade < 1) {
-      alert("Selecione um produto e quantidade válida.");
+    const qtd = parseInt(quantidadeProduto, 10);
+    if (!produtoSelecionado || Number.isNaN(qtd) || qtd < 1) {
+      alert("Selecione um produto e uma quantidade válida.");
       return;
     }
 
+    const idSel = produtoSelecionado.value;
+    const produtoBase = produtos.find((p) => p.id === idSel);
+    const valorBase = Number(produtoBase?.valor ?? 0);
+    const nomeBase = String(produtoBase?.nome ?? "");
+
     setForm((f) => {
       const existente = f.produtosSelecionados.find(
-        (p) => p.produtoId === produtoSelecionado.value
+        (p) => p.produtoId === idSel
       );
-
       if (existente) {
         return {
           ...f,
           produtosSelecionados: f.produtosSelecionados.map((p) =>
-            p.produtoId === produtoSelecionado.value
-              ? { ...p, quantidade: p.quantidade + quantidade }
-              : p
+            p.produtoId === idSel ? { ...p, quantidade: p.quantidade + qtd } : p
           ),
         };
       }
-
       return {
         ...f,
         produtosSelecionados: [
           ...f.produtosSelecionados,
           {
-            produtoId: produtoSelecionado.value,
-            nome: produtoSelecionado.label.split(" - R$")[0],
-            valor:
-              produtos.find((p) => p.id === produtoSelecionado.value)?.valor ||
-              0,
-            quantidade,
+            produtoId: idSel,
+            nome: nomeBase,
+            valor: valorBase,
+            quantidade: qtd,
           },
         ],
       };
@@ -134,8 +141,8 @@ export default function ContratoForm({
   };
 
   const alterarQuantidadeProduto = (produtoId, novaQuantidade) => {
-    const qtd = parseInt(novaQuantidade);
-    if (isNaN(qtd) || qtd < 1) return;
+    const qtd = parseInt(novaQuantidade, 10);
+    if (Number.isNaN(qtd) || qtd < 1) return;
     setForm((f) => ({
       ...f,
       produtosSelecionados: f.produtosSelecionados.map((p) =>
@@ -158,11 +165,11 @@ export default function ContratoForm({
       alert("Selecione um cliente.");
       return false;
     }
-    if (form.produtosSelecionados.length === 0) {
+    if ((form.produtosSelecionados || []).length === 0) {
       alert("Adicione pelo menos um produto.");
       return false;
     }
-    if (!form.nomeBuffet.trim()) {
+    if (!String(form.nomeBuffet || "").trim()) {
       alert("Informe o nome do buffet.");
       return false;
     }
@@ -186,7 +193,7 @@ export default function ContratoForm({
       enderecoEvento: form.enderecoEvento,
       nomeBuffet: form.nomeBuffet,
       dataContrato: form.dataContrato,
-      produtos: form.produtosSelecionados.map((p) => ({
+      produtos: (form.produtosSelecionados || []).map((p) => ({
         produtoId: p.produtoId,
         quantidade: p.quantidade,
       })),
@@ -195,24 +202,18 @@ export default function ContratoForm({
 
     try {
       const url = modoEdicao
-        ? `${API_BASE}/contratos/${contrato.id}`
-        : `${API_BASE}/contratos`;
-      const method = modoEdicao ? "PUT" : "POST";
+        ? `/api/contratos/${contrato.id}`
+        : `/api/contratos`;
+      const method = modoEdicao ? "put" : "post";
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error("Erro ao salvar contrato.");
-      const data = await res.json();
-      onContratoSalvo(data);
+      const { data } = await http[method](url, payload);
+      onContratoSalvo && onContratoSalvo(data);
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar contrato.");
     }
   };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-center items-start pt-10 bg-black bg-opacity-30 overflow-y-auto">
       <form
@@ -238,7 +239,7 @@ export default function ContratoForm({
               }
               isClearable
               placeholder="Selecione um Cliente"
-              isDisabled={modoEdicao} // 🔒 cliente bloqueado em edição
+              isDisabled={modoEdicao}
             />
           </div>
 
@@ -261,7 +262,7 @@ export default function ContratoForm({
             <Select
               options={produtos.map((p) => ({
                 value: p.id,
-                label: `${p.nome} - R$ ${p.valor.toFixed(2)}`,
+                label: `${p.nome} - R$ ${Number(p.valor || 0).toFixed(2)}`,
               }))}
               value={produtoSelecionado}
               onChange={setProdutoSelecionado}
@@ -304,10 +305,11 @@ export default function ContratoForm({
                 {form.produtosSelecionados.map((p) => (
                   <tr key={p.produtoId} className="border-b">
                     <td className="p-2">{p.nome}</td>
-                    <td className="p-2">R$ {p.valor.toFixed(2)}</td>
+                    <td className="p-2">R$ {Number(p.valor).toFixed(2)}</td>
                     <td className="p-2">
                       <input
                         type="number"
+                        min="1"
                         value={p.quantidade}
                         onChange={(e) =>
                           alterarQuantidadeProduto(p.produtoId, e.target.value)
@@ -316,7 +318,7 @@ export default function ContratoForm({
                       />
                     </td>
                     <td className="p-2">
-                      R$ {(p.valor * p.quantidade).toFixed(2)}
+                      R$ {(Number(p.valor) * Number(p.quantidade)).toFixed(2)}
                     </td>
                     <td className="p-2">
                       <button
@@ -333,6 +335,7 @@ export default function ContratoForm({
             </table>
           </div>
         )}
+
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-semibold">
@@ -419,7 +422,7 @@ export default function ContratoForm({
             />
           </div>
           <div className="text-lg font-semibold mt-2 md:mt-0">
-            Valor Total: R$ {form.valorTotal.toFixed(2)}
+            Valor Total: R$ {Number(form.valorTotal).toFixed(2)}
           </div>
         </div>
 

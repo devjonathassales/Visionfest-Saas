@@ -1,13 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// CONTAS BANCÁRIAS
 const contaBancariaController = require("../controllers/contaBancariaController");
-router.get("/contas-bancarias", authEmpresa, contaBancariaController.listar);
-router.post("/contas-bancarias", authEmpresa, contaBancariaController.criar);
-router.put("/contas-bancarias/:id", authEmpresa, contaBancariaController.atualizar);
-router.delete("/contas-bancarias/:id", authEmpresa, contaBancariaController.excluir);
 
+// Montado em /api/contas-bancarias no app.js
+router.get("/", contaBancariaController.listar);
+router.get("/:id", contaBancariaController.obterPorId);
+router.post("/", contaBancariaController.criar);
+router.put("/:id", contaBancariaController.atualizar);
+router.delete("/:id", contaBancariaController.excluir);
 
 module.exports = router;

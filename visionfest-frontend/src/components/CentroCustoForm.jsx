@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
 export default function CentroCustoForm({
   onClose,
@@ -6,12 +6,15 @@ export default function CentroCustoForm({
   centroSelecionado,
 }) {
   const [descricao, setDescricao] = useState("");
-  const [tipo, setTipo] = useState("Custo");
+  const [tipo, setTipo] = useState("Custo"); // Custo | Receita | Ambos
 
   useEffect(() => {
     if (centroSelecionado) {
-      setDescricao(centroSelecionado.descricao);
-      setTipo(centroSelecionado.tipo);
+      setDescricao(centroSelecionado.descricao || "");
+      setTipo(centroSelecionado.tipo || "Custo");
+    } else {
+      setDescricao("");
+      setTipo("Custo");
     }
   }, [centroSelecionado]);
 
@@ -25,15 +28,16 @@ export default function CentroCustoForm({
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!descricao.trim()) return;
+    const desc = (descricao || "").trim();
+    if (!desc) return;
 
-    const dados = {
-      descricao,
+    const payload = {
+      descricao: desc,
       tipo,
       ...(centroSelecionado?.id && { id: centroSelecionado.id }),
     };
 
-    onSalvar(dados);
+    onSalvar(payload);
   };
 
   return (
@@ -44,6 +48,7 @@ export default function CentroCustoForm({
             ? "Editar Centro de Custo/Receita"
             : "Novo Centro de Custo/Receita"}
         </h2>
+
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
             <label className="block mb-1 font-semibold">Descrição</label>
@@ -55,6 +60,7 @@ export default function CentroCustoForm({
               autoFocus
             />
           </div>
+
           <div className="mb-4">
             <label className="block mb-1 font-semibold">Tipo</label>
             <select
@@ -67,6 +73,7 @@ export default function CentroCustoForm({
               <option value="Ambos">Ambos</option>
             </select>
           </div>
+
           <div className="flex justify-end gap-2">
             <button
               type="button"

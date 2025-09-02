@@ -1,39 +1,67 @@
 const { Op } = require("sequelize");
 const { gerarContasReceberContrato } = require("../utils/financeiro");
-const { getDbCliente } = require("../utils/tenant"); // 📌 IMPORTA O MULTI-TENANT
+const { resolveEmpresaFromReq, getTenantDb } = require("../utils/tenant");
 
-function limparCamposVazios(obj) {
-  const novoObj = {};
-  for (const key in obj) {
-    novoObj[key] = obj[key] === "" ? null : obj[key];
-  }
-  return novoObj;
+// Usa o db já colocado pelo middleware; se não, resolve na hora
+async function getDbFromReq(req) {
+  if (req.tenantDb) return req.tenantDb;
+  const empresa = await resolveEmpresaFromReq(req);
+  if (!empresa) throw new Error("empresa_nao_identificada");
+  return getTenantDb(empresa.bancoDados);
 }
 
-const contratoController = {
+// Aplica empresaId somente se a coluna existir no model
+function scopedWhere(Model, req, base = {}) {
+  const where = { ...base };
+  if (Model?.rawAttributes?.empresaId && req.empresaId) {
+    where.empresaId = req.empresaId;
+  }
+  return where;
+}
+
+// Normaliza strings vazias para null (evita sobrescrever com "")
+function limparCamposVazios(obj = {}) {
+  const out = {};
+  for (const k of Object.keys(obj)) out[k] = obj[k] === "" ? null : obj[k];
+  return out;
+}
+
+module.exports = {
   async listar(req, res) {
     try {
-      // 📌 pega o banco certo da empresa logada
-      const db = await getDbCliente(req.bancoCliente);
-      const { Contrato, Cliente, Produto } = db.models;
+      const db = await getDbFromReq(req);
+      const { Contrato, Cliente, Produto, ContratoProduto } = db;
 
-      const { cliente, dataInicio, dataFim } = req.query;
-      const where = { empresaId: req.empresaId }; // 📌 aplica filtro multi-tenant
+      if (!Contrato || !Cliente || !Produto) {
+        console.error("[contratos:listar] Models ausentes no tenant");
+        return res
+          .status(500)
+          .json({ error: "Models não carregados no schema do tenant." });
+      }
+
+      const { cliente, dataInicio, dataFim } = req.query || {};
+      const where = scopedWhere(Contrato, req);
 
       if (cliente) {
+        // filtra por nome de cliente
         const clientes = await Cliente.findAll({
-          where: {
+          where: scopedWhere(Cliente, req, {
             nome: { [Op.iLike]: `%${cliente}%` },
-            empresaId: req.empresaId, // 📌 aplica aqui também
-          },
+          }),
           attributes: ["id"],
         });
         where.clienteId = { [Op.in]: clientes.map((c) => c.id) };
       }
 
-      if (dataInicio && dataFim) {
+      if (dataInicio && dataFim && Contrato.rawAttributes?.dataEvento) {
         where.dataEvento = { [Op.between]: [dataInicio, dataFim] };
       }
+
+      const order = [];
+      if (Contrato.rawAttributes?.dataEvento) order.push(["dataEvento", "ASC"]);
+      if (Contrato.rawAttributes?.createdAt) order.push(["createdAt", "ASC"]);
+      if (order.length === 0 && Contrato.rawAttributes?.id)
+        order.push(["id", "ASC"]);
 
       const contratos = await Contrato.findAll({
         where,
@@ -42,294 +70,386 @@ const contratoController = {
           {
             model: Produto,
             attributes: ["id", "nome", "valor"],
-            through: { attributes: ["quantidade", "dataEvento"] },
+            through: {
+              model: ContratoProduto,
+              attributes: ["quantidade", "dataEvento"],
+            },
           },
         ],
-        order: [["dataEvento", "ASC"]],
+        order,
       });
 
-      res.json(contratos);
+      return res.json(contratos);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: "Erro ao listar contratos" });
+      console.error("Erro ao listar contratos:", err);
+      return res.status(500).json({ error: "Erro ao listar contratos." });
     }
   },
 
   async listarAgenda(req, res) {
     try {
-      const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
-      const { Contrato, Cliente } = db.models;
-
-      const { dataInicio, dataFim } = req.query;
-
-      if (!dataInicio || !dataFim) {
-        return res.status(400).json({ error: "Informe dataInicio e dataFim" });
+      const db = await getDbFromReq(req);
+      const { Contrato, Cliente } = db;
+      if (!Contrato || !Cliente) {
+        return res
+          .status(500)
+          .json({ error: "Models não carregados no schema do tenant." });
       }
 
-      const contratos = await Contrato.findAll({
-        where: {
-          dataEvento: { [Op.between]: [dataInicio, dataFim] },
-          empresaId: req.empresaId, // 📌 filtro multi-tenant
-        },
-        include: [{ model: Cliente, attributes: ["id", "nome"] }],
-        order: [["dataEvento", "ASC"], ["horarioInicio", "ASC"]],
+      const { dataInicio, dataFim } = req.query || {};
+      if (!dataInicio || !dataFim) {
+        return res.status(400).json({ error: "Informe dataInicio e dataFim." });
+      }
+
+      const where = scopedWhere(Contrato, req, {
+        ...(Contrato.rawAttributes?.dataEvento
+          ? { dataEvento: { [Op.between]: [dataInicio, dataFim] } }
+          : {}),
       });
 
-      const resposta = contratos.map((c) => ({
+      const order = [];
+      if (Contrato.rawAttributes?.dataEvento) order.push(["dataEvento", "ASC"]);
+      if (Contrato.rawAttributes?.horarioInicio)
+        order.push(["horarioInicio", "ASC"]);
+
+      const contratos = await Contrato.findAll({
+        where,
+        include: [{ model: Cliente, attributes: ["id", "nome"] }],
+        order,
+      });
+
+      const resp = contratos.map((c) => ({
         id: c.id,
-        cliente: c.Cliente.nome,
-        dataEvento: c.dataEvento,
-        horaInicio: c.horarioInicio,
-        horaFim: c.horarioTermino,
-        tema: c.temaFesta,
-        endereco: c.localEvento,
+        cliente: c.Cliente?.nome || "-",
+        dataEvento: c.dataEvento ?? null,
+        horaInicio: c.horarioInicio ?? null,
+        horaFim: c.horarioTermino ?? null,
+        tema: c.temaFesta ?? null,
+        endereco: c.localEvento ?? null,
       }));
 
-      res.json(resposta);
+      return res.json(resp);
     } catch (err) {
-      console.error("❌ Erro ao listar agenda:", err);
-      res.status(500).json({ error: "Erro ao listar agenda" });
+      console.error("Erro ao listar agenda:", err);
+      return res.status(500).json({ error: "Erro ao listar agenda." });
     }
   },
 
   async buscarPorId(req, res) {
     try {
-      const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
-      const { Contrato, Cliente, Produto, ContaReceber } = db.models;
-      const { id } = req.params;
+      const db = await getDbFromReq(req);
+      const { Contrato, Cliente, Produto, ContratoProduto, ContaReceber } = db;
+      if (!Contrato)
+        return res
+          .status(500)
+          .json({ error: "Model Contrato não carregado no tenant." });
+
+      const where = scopedWhere(Contrato, req, { id: Number(req.params.id) });
 
       const contrato = await Contrato.findOne({
-        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
+        where,
         include: [
           { model: Cliente, attributes: ["id", "nome"] },
           {
             model: Produto,
             attributes: ["id", "nome", "valor"],
-            through: { attributes: ["quantidade", "dataEvento"] },
+            through: {
+              model: ContratoProduto,
+              attributes: ["quantidade", "dataEvento"],
+            },
           },
-          { model: ContaReceber, as: "contasReceber" },
+          // Só inclui contas se a associação existir nesse tenant
+          ...(ContaReceber
+            ? [{ model: ContaReceber, as: "contasReceber" }]
+            : []),
         ],
       });
 
-      if (!contrato) {
-        return res.status(404).json({ error: "Contrato não encontrado" });
-      }
-
-      res.json(contrato);
+      if (!contrato)
+        return res.status(404).json({ error: "Contrato não encontrado." });
+      return res.json(contrato);
     } catch (err) {
-      console.error("❌ Erro ao buscar contrato:", err);
-      res.status(500).json({ error: "Erro ao buscar contrato" });
+      console.error("Erro ao buscar contrato:", err);
+      return res.status(500).json({ error: "Erro ao buscar contrato." });
     }
   },
 
   async criar(req, res) {
-    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
+    const tdb = await getDbFromReq(req);
     const {
       Contrato,
+      ContratoProduto,
+      CentroCusto,
       Cliente,
       Produto,
-      ContratoProduto,
       ContaReceber,
-      CentroCusto,
       sequelize,
-    } = db.models;
+    } = tdb;
 
     const t = await sequelize.transaction();
     try {
-      const dados = limparCamposVazios(req.body);
+      if (!Contrato || !Cliente || !Produto || !ContratoProduto) {
+        await t.rollback();
+        return res
+          .status(500)
+          .json({ error: "Models não carregados no schema do tenant." });
+      }
 
-      const contrato = await Contrato.create(
-        {
-          ...dados,
-          empresaId: req.empresaId, // 📌 define empresaId ao criar
-          statusPagamento:
-            dados.valorEntrada >= dados.valorTotal
-              ? "Totalmente Pago"
-              : dados.valorEntrada > 0
-              ? "Parcialmente Pago"
-              : "Aberto",
-        },
-        { transaction: t }
-      );
+      const dados = limparCamposVazios(req.body || {});
+      if (!dados.clienteId) {
+        await t.rollback();
+        return res.status(400).json({ error: "clienteId é obrigatório." });
+      }
+      if (!Array.isArray(dados.produtos) || dados.produtos.length === 0) {
+        await t.rollback();
+        return res.status(400).json({ error: "Informe ao menos um produto." });
+      }
 
-      console.log("🆔 Contrato criado com ID:", contrato.id);
+      const valorEntradaNum = Number(dados.valorEntrada) || 0;
+      const valorTotalNum = Number(dados.valorTotal) || 0;
 
-      // Salvar produtos
-      if (Array.isArray(dados.produtos) && dados.produtos.length > 0) {
-        const produtosParaSalvar = dados.produtos.map((p) => ({
-          contratoId: contrato.id,
-          produtoId: p.produtoId || p.id,
-          quantidade: p.quantidade || 1,
-          dataEvento: dados.dataEvento,
-        }));
+      const payload = {
+        ...dados,
+      };
+      // injeta empresaId se existir a coluna
+      if (Contrato?.rawAttributes?.empresaId && req.empresaId) {
+        payload.empresaId = req.empresaId;
+      }
+      // statusPagamento
+      payload.statusPagamento =
+        valorEntradaNum >= valorTotalNum
+          ? "Totalmente Pago"
+          : valorEntradaNum > 0
+          ? "Parcialmente Pago"
+          : "Aberto";
 
+      const contrato = await Contrato.create(payload, { transaction: t });
+
+      // Vincula produtos
+      const produtosParaSalvar = dados.produtos.map((p) => ({
+        contratoId: contrato.id,
+        produtoId: p.produtoId || p.id,
+        quantidade: p.quantidade || 1,
+        dataEvento: dados.dataEvento || null,
+      }));
+      await ContratoProduto.bulkCreate(produtosParaSalvar, { transaction: t });
+
+      // Centro de Custo "Contratos"
+      let centroContratoId = null;
+      if (CentroCusto) {
+        const [centroContrato] = await CentroCusto.findOrCreate({
+          where: scopedWhere(CentroCusto, req, { descricao: "Contratos" }),
+          defaults: scopedWhere(CentroCusto, req, {
+            descricao: "Contratos",
+            tipo: "Receita",
+          }),
+          transaction: t,
+        });
+        centroContratoId = centroContrato?.id ?? null;
+      }
+
+      // Gera contas a receber (se util existir)
+      if (typeof gerarContasReceberContrato === "function") {
+        await gerarContasReceberContrato(
+          contrato,
+          {
+            clienteId: dados.clienteId,
+            centroCustoId: centroContratoId,
+            valorEntrada: valorEntradaNum,
+            dataContrato: dados.dataContrato,
+            valorRestante: Number(dados.valorRestante) || 0,
+            parcelasRestante: Array.isArray(dados.parcelasRestante)
+              ? dados.parcelasRestante
+              : [],
+          },
+          t
+        );
+      }
+
+      await t.commit();
+
+      const contratoCompleto = await Contrato.findOne({
+        where: scopedWhere(Contrato, req, { id: contrato.id }),
+        include: [
+          { model: Cliente, attributes: ["id", "nome"] },
+          {
+            model: Produto,
+            attributes: ["id", "nome", "valor"],
+            through: {
+              model: ContratoProduto,
+              attributes: ["quantidade", "dataEvento"],
+            },
+          },
+        ],
+      });
+
+      return res.status(201).json(contratoCompleto);
+    } catch (err) {
+      await t.rollback();
+      console.error("Erro ao criar contrato:", err);
+      return res.status(500).json({ error: "Erro ao criar contrato." });
+    }
+  },
+
+  async atualizar(req, res) {
+    const tdb = await getDbFromReq(req);
+    const {
+      Contrato,
+      ContratoProduto,
+      ContaReceber,
+      CentroCusto,
+      Produto,
+      Cliente,
+      sequelize,
+    } = tdb;
+
+    const t = await sequelize.transaction();
+    try {
+      if (!Contrato || !ContratoProduto) {
+        await t.rollback();
+        return res
+          .status(500)
+          .json({ error: "Models não carregados no schema do tenant." });
+      }
+
+      const { id } = req.params;
+      const dados = limparCamposVazios(req.body || {});
+      const where = scopedWhere(Contrato, req, { id: Number(id) });
+
+      const contrato = await Contrato.findOne({ where });
+      if (!contrato) {
+        await t.rollback();
+        return res.status(404).json({ error: "Contrato não encontrado." });
+      }
+
+      await contrato.update(dados, { transaction: t });
+
+      // Atualiza produtos (reset + recria)
+      await ContratoProduto.destroy({
+        where: { contratoId: contrato.id },
+        transaction: t,
+      });
+      const produtosParaSalvar = (
+        Array.isArray(dados.produtos) ? dados.produtos : []
+      ).map((p) => ({
+        contratoId: contrato.id,
+        produtoId: p.produtoId || p.id,
+        quantidade: p.quantidade || 1,
+        dataEvento: dados.dataEvento || null,
+      }));
+      if (produtosParaSalvar.length > 0) {
         await ContratoProduto.bulkCreate(produtosParaSalvar, {
           transaction: t,
         });
       }
 
-      // Gerar contas a receber
-      const [centroContrato] = await CentroCusto.findOrCreate({
-        where: { descricao: "Contratos", empresaId: req.empresaId }, // 📌 filtro aqui também
-        defaults: { tipo: "Receita" },
-        transaction: t,
-      });
+      // Regera contas a receber
+      if (ContaReceber) {
+        await ContaReceber.destroy({
+          where: scopedWhere(ContaReceber, req, { contratoId: contrato.id }),
+          transaction: t,
+        });
+      }
 
-      await gerarContasReceberContrato(
-        contrato,
-        {
-          clienteId: dados.clienteId,
-          centroCustoId: centroContrato.id,
-          valorEntrada: dados.valorEntrada,
-          dataContrato: dados.dataContrato,
-          valorRestante: dados.valorRestante,
-          parcelasRestante: dados.parcelasRestante,
-        },
-        t
-      );
+      let centroContratoId = null;
+      if (CentroCusto) {
+        const [centroContrato] = await CentroCusto.findOrCreate({
+          where: scopedWhere(CentroCusto, req, { descricao: "Contratos" }),
+          defaults: scopedWhere(CentroCusto, req, {
+            descricao: "Contratos",
+            tipo: "Receita",
+          }),
+          transaction: t,
+        });
+        centroContratoId = centroContrato?.id ?? null;
+      }
+
+      if (typeof gerarContasReceberContrato === "function") {
+        await gerarContasReceberContrato(
+          contrato,
+          {
+            clienteId: dados.clienteId,
+            centroCustoId: centroContratoId,
+            valorEntrada: Number(dados.valorEntrada) || 0,
+            dataContrato: dados.dataContrato,
+            valorRestante: Number(dados.valorRestante) || 0,
+            parcelasRestante: Array.isArray(dados.parcelasRestante)
+              ? dados.parcelasRestante
+              : [],
+          },
+          t
+        );
+      }
 
       await t.commit();
 
-      const contratoCompleto = await Contrato.findByPk(contrato.id, {
+      const contratoAtualizado = await Contrato.findOne({
+        where: scopedWhere(Contrato, req, { id: contrato.id }),
         include: [
           { model: Cliente, attributes: ["id", "nome"] },
           {
             model: Produto,
-            through: { attributes: ["quantidade", "dataEvento"] },
+            attributes: ["id", "nome", "valor"],
+            through: {
+              model: tdb.ContratoProduto,
+              attributes: ["quantidade", "dataEvento"],
+            },
           },
         ],
       });
 
-      res.status(201).json(contratoCompleto);
+      return res.json(contratoAtualizado);
     } catch (err) {
       await t.rollback();
-      console.error(err);
-      res.status(500).json({ error: "Erro ao criar contrato" });
-    }
-  },
-
-  async atualizar(req, res) {
-    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
-    const {
-      Contrato,
-      ContratoProduto,
-      ContaReceber,
-      CentroCusto,
-      sequelize,
-    } = db.models;
-
-    const t = await sequelize.transaction();
-    try {
-      const { id } = req.params;
-      const dados = limparCamposVazios(req.body);
-
-      const contrato = await Contrato.findOne({
-        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
-      });
-
-      if (!contrato) {
-        return res.status(404).json({ error: "Contrato não encontrado" });
-      }
-
-      await contrato.update(dados, { transaction: t });
-
-      // Atualiza produtos e contas a receber (igual antes)
-      await ContratoProduto.destroy({
-        where: { contratoId: contrato.id },
-        transaction: t,
-      });
-
-      const produtosParaSalvar = dados.produtos.map((p) => ({
-        contratoId: contrato.id,
-        produtoId: p.produtoId || p.id,
-        quantidade: p.quantidade || 1,
-        dataEvento: dados.dataEvento,
-      }));
-
-      await ContratoProduto.bulkCreate(produtosParaSalvar, {
-        transaction: t,
-      });
-
-      await ContaReceber.destroy({
-        where: { contratoId: contrato.id },
-        transaction: t,
-      });
-
-      const [centroContrato] = await CentroCusto.findOrCreate({
-        where: { descricao: "Contratos", empresaId: req.empresaId }, // 📌
-        defaults: { tipo: "Receita" },
-        transaction: t,
-      });
-
-      await gerarContasReceberContrato(
-        contrato,
-        {
-          clienteId: dados.clienteId,
-          centroCustoId: centroContrato.id,
-          valorEntrada: dados.valorEntrada,
-          dataContrato: dados.dataContrato,
-          valorRestante: dados.valorRestante,
-          parcelasRestante: dados.parcelasRestante,
-        },
-        t
-      );
-
-      await t.commit();
-
-      const contratoAtualizado = await Contrato.findByPk(contrato.id, {
-        include: [
-          { model: db.models.Cliente, attributes: ["id", "nome"] },
-          {
-            model: db.models.Produto,
-            through: { attributes: ["quantidade", "dataEvento"] },
-          },
-        ],
-      });
-
-      res.json(contratoAtualizado);
-    } catch (err) {
-      await t.rollback();
-      console.error(err);
-      res.status(500).json({ error: "Erro ao atualizar contrato" });
+      console.error("Erro ao atualizar contrato:", err);
+      return res.status(500).json({ error: "Erro ao atualizar contrato." });
     }
   },
 
   async excluir(req, res) {
-    const db = await getDbCliente(req.bancoCliente); // 📌 banco certo
-    const { Contrato, ContratoProduto, ContaReceber, sequelize } = db.models;
+    const tdb = await getDbFromReq(req);
+    const { Contrato, ContratoProduto, ContaReceber, sequelize } = tdb;
 
     const t = await sequelize.transaction();
     try {
-      const { id } = req.params;
-
-      const contrato = await Contrato.findOne({
-        where: { id, empresaId: req.empresaId }, // 📌 filtro multi-tenant
-      });
-
-      if (!contrato) {
-        return res.status(404).json({ error: "Contrato não encontrado" });
+      if (!Contrato) {
+        await t.rollback();
+        return res
+          .status(500)
+          .json({ error: "Model Contrato não carregado no tenant." });
       }
 
-      await ContaReceber.destroy({
-        where: { contratoId: id },
-        transaction: t,
-      });
+      const where = scopedWhere(Contrato, req, { id: Number(req.params.id) });
+      const contrato = await Contrato.findOne({ where });
+      if (!contrato) {
+        await t.rollback();
+        return res.status(404).json({ error: "Contrato não encontrado." });
+      }
 
-      await ContratoProduto.destroy({
-        where: { contratoId: id },
-        transaction: t,
-      });
+      if (ContaReceber) {
+        await ContaReceber.destroy({
+          where: scopedWhere(ContaReceber, req, { contratoId: contrato.id }),
+          transaction: t,
+        });
+      }
+
+      if (ContratoProduto) {
+        await ContratoProduto.destroy({
+          where: { contratoId: contrato.id },
+          transaction: t,
+        });
+      }
 
       await contrato.destroy({ transaction: t });
-
       await t.commit();
-      res.json({ message: "Contrato e dependências excluídos com sucesso" });
+
+      return res.json({
+        message: "Contrato e dependências excluídos com sucesso.",
+      });
     } catch (err) {
       await t.rollback();
-      console.error(err);
-      res.status(500).json({ error: "Erro ao excluir contrato" });
+      console.error("Erro ao excluir contrato:", err);
+      return res.status(500).json({ error: "Erro ao excluir contrato." });
     }
   },
 };
-
-module.exports = contratoController;

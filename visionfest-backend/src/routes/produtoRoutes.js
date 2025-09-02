@@ -1,13 +1,14 @@
+// src/routes/produtoRoutes.js
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// PRODUTOS
+const authCliente = require("../middlewares/authCliente");
 const produtoController = require("../controllers/produtoController");
-router.get("/produtos", authEmpresa, produtoController.listar);
-router.get("/produtos/:id", authEmpresa, produtoController.buscarPorId);
-router.post("/produtos", authEmpresa, produtoController.criar);
-router.put("/produtos/:id", authEmpresa, produtoController.atualizar);
-router.delete("/produtos/:id", authEmpresa, produtoController.excluir);
+
+// Montado em /api/produtos no app.js
+router.get("/", authCliente, produtoController.listar);
+router.get("/:id", authCliente, produtoController.buscarPorId);
+router.post("/", authCliente, produtoController.criar);
+router.put("/:id", authCliente, produtoController.atualizar);
+router.delete("/:id", authCliente, produtoController.excluir);
 
 module.exports = router;

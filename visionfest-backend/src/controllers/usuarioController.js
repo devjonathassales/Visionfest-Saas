@@ -1,115 +1,249 @@
-const { Usuario } = require("../models");
+// src/controllers/usuarioController.js
 const bcrypt = require("bcrypt");
+const { Op } = require("sequelize");
+const { resolveEmpresaFromReq, getTenantDb } = require("../utils/tenant");
+
+// Obtém o DB do tenant (do middleware ou resolvendo pela req)
+async function getDbFromReq(req) {
+  if (req.tenantDb) return req.tenantDb;
+  const empresa = await resolveEmpresaFromReq(req);
+  if (!empresa) throw new Error("empresa_nao_identificada");
+  return getTenantDb(empresa.bancoDados);
+}
+
+// Tenta descobrir empresaId de múltiplas fontes
+async function getDbAndEmpresaId(req) {
+  const db = await getDbFromReq(req);
+  let empresaId = req.empresaId ?? null;
+
+  if (empresaId == null) {
+    try {
+      const empresa = await resolveEmpresaFromReq(req);
+      if (empresa?.id != null) empresaId = empresa.id;
+    } catch (_) {}
+  }
+  return { db, empresaId };
+}
+
+// Busca modelo em db.models[Name] ou db[Name]
+const getModel = (db, name) => db?.models?.[name] ?? db?.[name];
+const hasAttr = (Model, attr) => !!Model?.rawAttributes?.[attr];
+
+function sanitize(u) {
+  if (!u) return u;
+  const plain = u.toJSON ? u.toJSON() : u;
+  const { senhaHash, ...rest } = plain;
+  return rest;
+}
 
 module.exports = {
   async criar(req, res) {
     try {
-      const { nome, email, senha, confirmarSenha } = req.body;
+      const { db, empresaId } = await getDbAndEmpresaId(req);
+      const Usuario = getModel(db, "Usuario");
+      if (!Usuario) {
+        console.error("[usuarios] Modelo 'Usuario' não encontrado no tenant.");
+        return res
+          .status(500)
+          .json({ error: "Modelo Usuario não registrado para este tenant." });
+      }
 
+      let { nome, email, senha, confirmarSenha } = req.body || {};
       if (!nome || !email || !senha || !confirmarSenha) {
         return res.status(400).json({ error: "Campos obrigatórios faltando." });
       }
       if (senha !== confirmarSenha) {
         return res.status(400).json({ error: "Senhas não coincidem." });
       }
-      if (senha.length < 6) {
-        return res.status(400).json({ error: "Senha deve ter no mínimo 6 caracteres." });
+      if (String(senha).length < 6) {
+        return res
+          .status(400)
+          .json({ error: "Senha deve ter no mínimo 6 caracteres." });
       }
 
-      const existente = await Usuario.findOne({ where: { email } });
+      email = String(email).trim().toLowerCase();
+
+      if (hasAttr(Usuario, "empresaId") && empresaId == null) {
+        return res
+          .status(400)
+          .json({ error: "empresaId não identificado para este tenant." });
+      }
+
+      const whereEmail = { email };
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        whereEmail.empresaId = empresaId;
+      }
+      const existente = await Usuario.findOne({ where: whereEmail });
       if (existente) {
         return res.status(400).json({ error: "Email já cadastrado." });
       }
 
       const senhaHash = await bcrypt.hash(senha, 10);
-      const usuario = await Usuario.create({ nome, email, senhaHash, ativo: true });
-      const { senhaHash: _, ...rest } = usuario.toJSON();
+      const payload = { nome, email, senhaHash, ativo: true };
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        payload.empresaId = empresaId;
+      }
 
-      res.status(201).json(rest);
+      const usuario = await Usuario.create(payload);
+      return res.status(201).json(sanitize(usuario));
     } catch (err) {
       console.error("Erro ao criar usuário:", err);
-      res.status(500).json({ error: "Erro interno do servidor." });
+      return res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
   async listar(req, res) {
     try {
-      const usuarios = await Usuario.findAll({
-        attributes: ["id", "nome", "email", "ativo", "createdAt"],
-      });
-      res.json(usuarios);
+      const { db, empresaId } = await getDbAndEmpresaId(req);
+      const Usuario = getModel(db, "Usuario");
+      if (!Usuario) {
+        console.error("[usuarios] Modelo 'Usuario' não encontrado no tenant.");
+        return res
+          .status(500)
+          .json({ error: "Modelo Usuario não registrado para este tenant." });
+      }
+
+      const where = {};
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        where.empresaId = empresaId;
+      }
+
+      const order = hasAttr(Usuario, "createdAt")
+        ? [["createdAt", "DESC"]]
+        : [["nome", "ASC"]];
+
+      const attributes = ["id", "nome", "email", "ativo"];
+      if (hasAttr(Usuario, "createdAt")) attributes.push("createdAt");
+
+      const usuarios = await Usuario.findAll({ where, attributes, order });
+      return res.json(usuarios);
     } catch (err) {
       console.error("Erro ao listar usuários:", err);
-      res.status(500).json({ error: "Erro interno do servidor." });
+      return res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
   async atualizar(req, res) {
     try {
-      const { id } = req.params;
-      const { nome, email, senha, confirmarSenha } = req.body;
+      const { db, empresaId } = await getDbAndEmpresaId(req);
+      const Usuario = getModel(db, "Usuario");
+      if (!Usuario) {
+        console.error("[usuarios] Modelo 'Usuario' não encontrado no tenant.");
+        return res
+          .status(500)
+          .json({ error: "Modelo Usuario não registrado para este tenant." });
+      }
 
-      const usuario = await Usuario.findByPk(id);
+      const id = Number(req.params.id);
+      let { nome, email, senha, confirmarSenha } = req.body || {};
+
+      const whereId = { id };
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        whereId.empresaId = empresaId;
+      }
+
+      const usuario = await Usuario.findOne({ where: whereId });
       if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
       }
 
-      if (senha || confirmarSenha) {
+      if (email !== undefined && email !== null) {
+        email = String(email).trim().toLowerCase();
+        const dupWhere = { email, id: { [Op.ne]: id } };
+        if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+          dupWhere.empresaId = empresaId;
+        }
+        const duplicado = await Usuario.findOne({ where: dupWhere });
+        if (duplicado) {
+          return res.status(400).json({ error: "Email já cadastrado." });
+        }
+        usuario.email = email;
+      }
+
+      if (nome !== undefined && nome !== null) {
+        usuario.nome = nome;
+      }
+
+      if (senha !== undefined || confirmarSenha !== undefined) {
         if (senha !== confirmarSenha) {
           return res.status(400).json({ error: "Senhas não coincidem." });
         }
-        if (senha.length < 6) {
-          return res.status(400).json({ error: "Senha deve ter no mínimo 6 caracteres." });
+        if (!senha || String(senha).length < 6) {
+          return res
+            .status(400)
+            .json({ error: "Senha deve ter no mínimo 6 caracteres." });
         }
         usuario.senhaHash = await bcrypt.hash(senha, 10);
       }
 
-      usuario.nome = nome;
-      usuario.email = email;
       await usuario.save();
-
-      const { senhaHash: _, ...rest } = usuario.toJSON();
-      res.json(rest);
+      return res.json(sanitize(usuario));
     } catch (err) {
       console.error("Erro ao atualizar usuário:", err);
-      res.status(500).json({ error: "Erro interno do servidor." });
+      return res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
   async toggleAtivo(req, res) {
     try {
-      const { id } = req.params;
-      const { ativo } = req.body;
+      const { db, empresaId } = await getDbAndEmpresaId(req);
+      const Usuario = getModel(db, "Usuario");
+      if (!Usuario) {
+        console.error("[usuarios] Modelo 'Usuario' não encontrado no tenant.");
+        return res
+          .status(500)
+          .json({ error: "Modelo Usuario não registrado para este tenant." });
+      }
 
-      const usuario = await Usuario.findByPk(id);
+      const id = Number(req.params.id);
+      const { ativo } = req.body || {};
+
+      const whereId = { id };
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        whereId.empresaId = empresaId;
+      }
+
+      const usuario = await Usuario.findOne({ where: whereId });
       if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
       }
 
-      usuario.ativo = ativo;
+      usuario.ativo = !!ativo;
       await usuario.save();
-
-      const { senhaHash: _, ...rest } = usuario.toJSON();
-      res.json(rest);
+      return res.json(sanitize(usuario));
     } catch (err) {
       console.error("Erro ao alterar ativo:", err);
-      res.status(500).json({ error: "Erro interno do servidor." });
+      return res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 
   async deletar(req, res) {
     try {
-      const { id } = req.params;
-      const usuario = await Usuario.findByPk(id);
+      const { db, empresaId } = await getDbAndEmpresaId(req);
+      const Usuario = getModel(db, "Usuario");
+      if (!Usuario) {
+        console.error("[usuarios] Modelo 'Usuario' não encontrado no tenant.");
+        return res
+          .status(500)
+          .json({ error: "Modelo Usuario não registrado para este tenant." });
+      }
+
+      const id = Number(req.params.id);
+      const whereId = { id };
+      if (hasAttr(Usuario, "empresaId") && empresaId != null) {
+        whereId.empresaId = empresaId;
+      }
+
+      const usuario = await Usuario.findOne({ where: whereId });
       if (!usuario) {
         return res.status(404).json({ error: "Usuário não encontrado." });
       }
 
       await usuario.destroy();
-      res.json({ message: "Usuário excluído com sucesso." });
+      return res.json({ message: "Usuário excluído com sucesso." });
     } catch (err) {
       console.error("Erro ao excluir usuário:", err);
-      res.status(500).json({ error: "Erro interno do servidor." });
+      return res.status(500).json({ error: "Erro interno do servidor." });
     }
   },
 };

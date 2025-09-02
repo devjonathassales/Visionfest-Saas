@@ -1,109 +1,95 @@
-import React, { useState, useEffect } from 'react';
-import ProdutosForm from '../../components/ProdutosForm';
-import ProdutoVisualizar from '../../components/ProdutosVisualiza';
-import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
+import ProdutosForm from "../../components/ProdutosForm.jsx";
+import ProdutoVisualizar from "../../components/ProdutosVisualiza.jsx";
+import { FiPlus, FiEye, FiEdit, FiTrash2 } from "react-icons/fi";
 
 export default function Produtos() {
+  const { api } = useAuth(); // axios com Bearer + X-Tenant
   const [produtos, setProdutos] = useState([]);
-  const [busca, setBusca] = useState('');
-  const [ordenarPor, setOrdenarPor] = useState('alfabetica');
+  const [busca, setBusca] = useState("");
+  const [ordenarPor, setOrdenarPor] = useState("alfabetica");
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
   const [produtoVisualizar, setProdutoVisualizar] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchProdutos = async () => {
+  async function fetchProdutos() {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/produtos`);
-      if (!res.ok) throw new Error('Erro ao buscar produtos');
-      const data = await res.json();
-      setProdutos(data);
-    } catch (error) {
-      alert('Erro ao carregar produtos: ' + error.message);
+      const { data } = await api.get("/api/produtos");
+      setProdutos(data || []);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao carregar produtos");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
     fetchProdutos();
   }, []);
 
-  const filtrarProdutos = () => {
+  function filtrarProdutos() {
     let lista = [...produtos];
 
-    if (busca.length >= 3) {
-      lista = lista.filter(p =>
-        p.nome.toLowerCase().includes(busca.toLowerCase())
-      );
+    if (busca.trim().length >= 3) {
+      const q = busca.toLowerCase();
+      lista = lista.filter((p) => (p.nome || "").toLowerCase().includes(q));
     }
 
-    if (ordenarPor === 'alfabetica') {
-      lista.sort((a, b) => a.nome.localeCompare(b.nome));
+    if (ordenarPor === "alfabetica") {
+      lista.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
     }
 
     return lista;
-  };
+  }
 
-  const handleSalvar = async (novoProduto) => {
+  async function handleSalvar(novoProduto) {
     try {
-      let res;
       if (novoProduto.id) {
-        res = await fetch(`${API_BASE_URL}/produtos/${novoProduto.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoProduto),
-        });
+        await api.put(`/api/produtos/${novoProduto.id}`, novoProduto);
       } else {
-        res = await fetch(`${API_BASE_URL}/produtos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoProduto),
-        });
+        await api.post(`/api/produtos`, novoProduto);
       }
-
-      if (!res.ok) throw new Error('Erro ao salvar produto');
       await fetchProdutos();
-
       setMostrarFormulario(false);
       setProdutoSelecionado(null);
-    } catch (error) {
-      alert('Erro ao salvar produto: ' + error.message);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar produto");
     }
-  };
+  }
 
-  const handleEditar = (produto) => {
+  async function handleExcluir(id) {
+    if (!window.confirm("Deseja excluir este produto?")) return;
+    try {
+      await api.delete(`/api/produtos/${id}`);
+      setProdutos((prev) => prev.filter((p) => p.id !== id));
+    } catch (e) {
+      console.error(e);
+      const msg =
+        e?.response?.data?.error ||
+        e?.response?.data?.message ||
+        "Erro ao excluir produto";
+      alert(msg);
+    }
+  }
+
+  function handleEditar(produto) {
     setProdutoSelecionado(produto);
     setMostrarFormulario(true);
-  };
-
-  const handleExcluir = async (id) => {
-    if (!window.confirm('Deseja excluir este produto?')) return;
-
-    try {
-      const res = await fetch(`${API_BASE_URL}/produtos/${id}`, { method: 'DELETE' });
-
-      if (res.status === 400) {
-        const err = await res.json();
-        throw new Error(err.error || 'Não é possível excluir este produto');
-      }
-
-      if (!res.ok) throw new Error('Erro ao excluir produto');
-
-      setProdutos(prev => prev.filter(p => p.id !== id));
-    } catch (error) {
-      alert('Erro ao excluir produto: ' + error.message);
-    }
-  };
+  }
 
   return (
     <div className="p-4">
       <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">Cadastro de Produtos/Serviços</h1>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">
+          Cadastro de Produtos/Serviços
+        </h1>
       </div>
+
       {produtoVisualizar && (
         <ProdutoVisualizar
           produto={produtoVisualizar}
@@ -124,6 +110,7 @@ export default function Produtos() {
 
       {!mostrarFormulario && !produtoVisualizar && (
         <>
+          {/* Filtros */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-2/3">
               <input
@@ -153,6 +140,7 @@ export default function Produtos() {
             </button>
           </div>
 
+          {/* Tabela */}
           {loading ? (
             <div>Carregando produtos...</div>
           ) : (
@@ -167,25 +155,38 @@ export default function Produtos() {
                 </tr>
               </thead>
               <tbody>
-                {filtrarProdutos().map(produto => (
+                {filtrarProdutos().map((produto) => (
                   <tr key={produto.id} className="border-t hover:bg-gray-50">
                     <td className="p-2">{produto.nome}</td>
                     <td className="p-2">
-                      {produto.valor.toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL'
-                      })}
+                      {typeof produto.valor === "number"
+                        ? produto.valor.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                          })
+                        : "—"}
                     </td>
-                    <td className="p-2">{produto.movimentaEstoque ? 'Sim' : 'Não'}</td>
-                    <td className="p-2">{produto.estoqueMinimo}</td>
+                    <td className="p-2">
+                      {produto.movimentaEstoque ? "Sim" : "Não"}
+                    </td>
+                    <td className="p-2">{produto.estoqueMinimo ?? 0}</td>
                     <td className="p-2 flex justify-center gap-2 text-primary">
-                      <button onClick={() => setProdutoVisualizar(produto)} title="Visualizar">
+                      <button
+                        onClick={() => setProdutoVisualizar(produto)}
+                        title="Visualizar"
+                      >
                         <FiEye />
                       </button>
-                      <button onClick={() => handleEditar(produto)} title="Editar">
+                      <button
+                        onClick={() => handleEditar(produto)}
+                        title="Editar"
+                      >
                         <FiEdit />
                       </button>
-                      <button onClick={() => handleExcluir(produto.id)} title="Excluir">
+                      <button
+                        onClick={() => handleExcluir(produto.id)}
+                        title="Excluir"
+                      >
                         <FiTrash2 />
                       </button>
                     </td>

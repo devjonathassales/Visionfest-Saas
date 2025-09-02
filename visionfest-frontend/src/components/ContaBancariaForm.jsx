@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
 export default function ContaBancariaForm({ conta, onCancel, onSave }) {
-  const [banco, setBanco] = useState('');
-  const [agencia, setAgencia] = useState('');
-  const [contaInput, setContaInput] = useState('');
+  const [banco, setBanco] = useState("");
+  const [agencia, setAgencia] = useState("");
+  const [contaInput, setContaInput] = useState("");
   const [possuiPix, setPossuiPix] = useState(false);
-  const [tipoPix, setTipoPix] = useState('');
-  const [valorPix, setValorPix] = useState('');
+  const [tipoPix, setTipoPix] = useState("");
+  const [valorPix, setValorPix] = useState("");
 
   useEffect(() => {
     if (conta) {
-      setBanco(conta.banco || '');
-      setAgencia(conta.agencia || '');
-      setContaInput(conta.conta || '');
+      setBanco(conta.banco || "");
+      setAgencia(conta.agencia || "");
+      setContaInput(conta.conta || "");
       setPossuiPix(!!conta.chavePix);
-      setTipoPix(conta.chavePix?.tipo || '');
-      setValorPix(conta.chavePix?.valor || '');
+      setTipoPix(conta.chavePix?.tipo || "");
+      setValorPix(conta.chavePix?.valor || "");
     } else {
-      setBanco('');
-      setAgencia('');
-      setContaInput('');
+      setBanco("");
+      setAgencia("");
+      setContaInput("");
       setPossuiPix(false);
-      setTipoPix('');
-      setValorPix('');
+      setTipoPix("");
+      setValorPix("");
     }
   }, [conta]);
 
@@ -30,11 +30,11 @@ export default function ContaBancariaForm({ conta, onCancel, onSave }) {
     e.preventDefault();
 
     if (!banco.trim() || !agencia.trim()) {
-      alert('Banco e Agência são obrigatórios.');
+      alert("Banco e Agência são obrigatórios.");
       return;
     }
     if (possuiPix && (!tipoPix || !valorPix.trim())) {
-      alert('Preencha o tipo e a chave Pix.');
+      alert("Preencha o tipo e a chave Pix.");
       return;
     }
 
@@ -50,7 +50,7 @@ export default function ContaBancariaForm({ conta, onCancel, onSave }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <h2 className="text-xl font-bold text-green-600">
-        {conta ? 'Editar Conta Bancária' : 'Nova Conta Bancária'}
+        {conta ? "Editar Conta Bancária" : "Nova Conta Bancária"}
       </h2>
 
       <div>

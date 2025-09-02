@@ -1,10 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
 
-// ESTOQUE
+const authCliente = require("../middlewares/authCliente");
 const estoqueController = require("../controllers/estoqueController");
-router.get("/estoque", authEmpresa, estoqueController.listarEstoque);
-router.post("/estoque/movimentar", authEmpresa, estoqueController.registrarMovimentacao);
+
+// Montado em /api/estoque no app.js
+router.get("/", authCliente, estoqueController.listarEstoque);
+router.post(
+  "/movimentar",
+  authCliente,
+  estoqueController.registrarMovimentacao
+);
 
 module.exports = router;

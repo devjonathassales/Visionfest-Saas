@@ -1,10 +1,102 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+} from "react";
 import { FaEdit, FaEye, FaTrash, FaPlus } from "react-icons/fa";
 import { MdToggleOn, MdToggleOff } from "react-icons/md";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
-const API_BASE = "http://localhost:5000/api";
+// Garante o prefixo /api mesmo se o axios não tiver baseURL configurado
+function withApiPrefix(path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return p.startsWith("/api/") ? p : `/api${p}`;
+}
 
 export default function CadastroUsuarios() {
+  const auth = useAuth();
+  const axiosClient = useMemo(
+    () => auth?.apiCliente || auth?.api || null,
+    [auth]
+  );
+
+  // Cliente HTTP estável por ref (axios se existir; fallback fetch)
+  const httpRef = useRef({
+    get: async (path) => {
+      const res = await fetch(withApiPrefix(path), { credentials: "include" });
+      if (!res.ok) throw new Error(`Falha ao carregar (${res.status})`);
+      const data = await res.json().catch(() => []);
+      return { data };
+    },
+    post: async (path, body) => {
+      const res = await fetch(withApiPrefix(path), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Falha ao salvar (${res.status})`);
+      }
+      const data = await res.json().catch(() => ({}));
+      return { data };
+    },
+    put: async (path, body) => {
+      const res = await fetch(withApiPrefix(path), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Falha ao salvar (${res.status})`);
+      }
+      const data = await res.json().catch(() => ({}));
+      return { data };
+    },
+    patch: async (path, body) => {
+      const res = await fetch(withApiPrefix(path), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Falha ao atualizar (${res.status})`);
+      }
+      const data = await res.json().catch(() => ({}));
+      return { data };
+    },
+    delete: async (path) => {
+      const res = await fetch(withApiPrefix(path), {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Falha ao excluir (${res.status})`);
+      }
+      return {};
+    },
+  });
+
+  // Se existir axios configurado, usa ele (com prefixo /api garantido)
+  useEffect(() => {
+    if (!axiosClient) return;
+    httpRef.current = {
+      get: (path) => axiosClient.get(withApiPrefix(path)),
+      post: (path, body) => axiosClient.post(withApiPrefix(path), body),
+      put: (path, body) => axiosClient.put(withApiPrefix(path), body),
+      patch: (path, body) => axiosClient.patch(withApiPrefix(path), body),
+      delete: (path) => axiosClient.delete(withApiPrefix(path)),
+    };
+  }, [axiosClient]);
+
   const [usuarios, setUsuarios] = useState([]);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [form, setForm] = useState({
@@ -16,28 +108,37 @@ export default function CadastroUsuarios() {
   });
   const [loading, setLoading] = useState(false);
 
-  const carregarUsuarios = async () => {
+  // Evita o duplo fetch em dev (StrictMode)
+  const hasFetchedRef = useRef(false);
+
+  const carregarUsuarios = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/usuarios`);
-      if (!res.ok) throw new Error("Erro ao carregar usuários");
-      const data = await res.json();
-      setUsuarios(data);
+      const { data } = await httpRef.current.get("/usuarios");
+      setUsuarios(Array.isArray(data) ? data : []);
     } catch (err) {
-      alert(err.message);
+      alert(err?.message || "Erro ao carregar usuários");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     carregarUsuarios();
-  }, []);
+  }, [carregarUsuarios]);
 
   const abrirFormulario = (usuario = null) => {
     setForm(
       usuario
-        ? { id: usuario.id, nome: usuario.nome, email: usuario.email, senha: "", confirmarSenha: "" }
+        ? {
+            id: usuario.id,
+            nome: usuario.nome,
+            email: usuario.email,
+            senha: "",
+            confirmarSenha: "",
+          }
         : { id: null, nome: "", email: "", senha: "", confirmarSenha: "" }
     );
     setMostrarFormulario(true);
@@ -54,91 +155,80 @@ export default function CadastroUsuarios() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if ((form.senha || form.confirmarSenha) && form.senha !== form.confirmarSenha) {
+    if (
+      (form.senha || form.confirmarSenha) &&
+      form.senha !== form.confirmarSenha
+    ) {
       alert("As senhas não coincidem.");
       return;
     }
-
     if (form.senha && form.senha.length < 6) {
       alert("A senha deve ter no mínimo 6 caracteres.");
       return;
     }
 
     try {
-      const url = form.id ? `${API_BASE}/usuarios/${form.id}` : `${API_BASE}/usuarios`;
-      const method = form.id ? "PUT" : "POST";
-
       const body = {
         nome: form.nome,
         email: form.email,
       };
-
       if (form.senha) {
         body.senha = form.senha;
         body.confirmarSenha = form.confirmarSenha;
       }
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro ao salvar usuário");
+      if (form.id) {
+        await httpRef.current.put(`/usuarios/${form.id}`, body);
+      } else {
+        await httpRef.current.post(`/usuarios`, body);
       }
 
       alert("Usuário salvo com sucesso!");
       fecharFormulario();
-      carregarUsuarios();
+      await carregarUsuarios();
     } catch (err) {
-      alert(err.message);
+      alert(err?.message || "Erro ao salvar usuário");
     }
   };
 
   const toggleAtivo = async (usuario) => {
     try {
-      const res = await fetch(`${API_BASE}/usuarios/${usuario.id}/ativo`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ativo: !usuario.ativo }),
+      await httpRef.current.patch(`/usuarios/${usuario.id}/ativo`, {
+        ativo: !usuario.ativo,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro ao alterar status");
-      }
-      carregarUsuarios();
+      await carregarUsuarios();
     } catch (err) {
-      alert(err.message);
+      alert(err?.message || "Erro ao alterar status");
     }
   };
 
   const excluirUsuario = async (usuario) => {
     if (confirm(`Deseja realmente excluir "${usuario.nome}"?`)) {
       try {
-        const res = await fetch(`${API_BASE}/usuarios/${usuario.id}`, {
-          method: "DELETE",
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Erro ao excluir usuário");
-        }
-        carregarUsuarios();
+        await httpRef.current.delete(`/usuarios/${usuario.id}`);
+        await carregarUsuarios();
       } catch (err) {
-        alert(err.message);
+        alert(err?.message || "Erro ao excluir usuário");
       }
     }
   };
 
   const formatarData = (iso) => {
+    if (!iso) return "-";
     const d = new Date(iso);
-    return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    if (isNaN(d.getTime())) return "-";
+    return (
+      d.toLocaleDateString("pt-BR") +
+      " " +
+      d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    );
   };
 
   return (
     <div className="p-4 md:p-8 font-open max-w-6xl mx-auto">
-      <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6">Cadastro de Usuários</h1>
+      <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6">
+        Cadastro de Usuários
+      </h1>
 
       {!mostrarFormulario && (
         <button
@@ -155,7 +245,9 @@ export default function CadastroUsuarios() {
           className="bg-white shadow-md rounded-md p-6 space-y-4 mb-6 max-w-xl"
         >
           <div>
-            <label className="block text-gray-700 font-semibold mb-1">Nome</label>
+            <label className="block text-gray-700 font-semibold mb-1">
+              Nome
+            </label>
             <input
               type="text"
               name="nome"
@@ -167,7 +259,9 @@ export default function CadastroUsuarios() {
           </div>
 
           <div>
-            <label className="block text-gray-700 font-semibold mb-1">E-mail</label>
+            <label className="block text-gray-700 font-semibold mb-1">
+              E-mail
+            </label>
             <input
               type="email"
               name="email"
@@ -181,7 +275,8 @@ export default function CadastroUsuarios() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-gray-700 font-semibold mb-1">
-                Senha {form.id && <span className="text-xs italic">(opcional)</span>}
+                Senha{" "}
+                {form.id && <span className="text-xs italic">(opcional)</span>}
               </label>
               <input
                 type="password"
@@ -194,7 +289,9 @@ export default function CadastroUsuarios() {
             </div>
 
             <div>
-              <label className="block text-gray-700 font-semibold mb-1">Confirmar Senha</label>
+              <label className="block text-gray-700 font-semibold mb-1">
+                Confirmar Senha
+              </label>
               <input
                 type="password"
                 name="confirmarSenha"
@@ -235,17 +332,24 @@ export default function CadastroUsuarios() {
             <div className="hidden md:block">Status</div>
             <div>Ações</div>
           </div>
+
           {usuarios.map((u) => (
-            <div key={u.id} className="p-4 grid grid-cols-2 md:grid-cols-5 items-center hover:bg-gray-50 gap-2">
+            <div
+              key={u.id}
+              className="p-4 grid grid-cols-2 md:grid-cols-5 items-center hover:bg-gray-50 gap-2"
+            >
               <div>{u.nome}</div>
-              <div className="hidden md:block">{u.email}</div>
+              <div className="hidden md:block break-all">{u.email}</div>
               <div className="hidden md:block">{formatarData(u.createdAt)}</div>
               <div className="hidden md:block">
-                <button onClick={() => toggleAtivo(u)}>
+                <button
+                  onClick={() => toggleAtivo(u)}
+                  title={u.ativo ? "Desativar" : "Ativar"}
+                >
                   {u.ativo ? (
-                    <MdToggleOn className="text-green-600 text-5xl" title="Desativar" />
+                    <MdToggleOn className="text-green-600 text-5xl" />
                   ) : (
-                    <MdToggleOff className="text-gray-400 text-5xl" title="Ativar" />
+                    <MdToggleOff className="text-gray-400 text-5xl" />
                   )}
                 </button>
               </div>

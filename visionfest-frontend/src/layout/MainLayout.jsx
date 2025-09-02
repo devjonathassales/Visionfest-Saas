@@ -1,6 +1,7 @@
+// src/layout/MainLayout.jsx
 import React, { useState } from "react";
+import { Outlet } from "react-router-dom"; // << IMPORTANTE
 import { ToastContainer } from "react-toastify";
-import { Outlet } from "react-router-dom"; // 👈 IMPORTANTE
 import "react-toastify/dist/ReactToastify.css";
 
 import Navbar from "../components/Navbar";
@@ -14,22 +15,12 @@ export default function MainLayout() {
       <Navbar onToggleSidebar={() => setSidebarOpen(!isSidebarOpen)} />
       <div className="flex pt-16">
         <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <main className="flex-1 p-4 overflow-y-auto font-opensans min-w-0">
-          <Outlet /> {/* 👈 É AQUI que as páginas aparecem */}
+        <main className="flex-1 p-4 overflow-y-auto font-opensans">
+          <Outlet /> {/* << RENDERIZA AS ROTAS FILHAS */}
         </main>
       </div>
 
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-      />
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 }

@@ -1,236 +1,458 @@
-const { getDbCliente } = require("../utils/tenant");
+// src/controllers/contaReceberController.js
+const { Op } = require("sequelize");
+const { resolveEmpresaFromReq, getTenantDb } = require("../utils/tenant");
 const { atualizarStatusContratoSePago } = require("../utils/financeiro");
 
-exports.listar = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const {
-      ContaReceber,
-      CentroCusto,
-      ContaBancaria,
-      Cliente,
-    } = db.models;
+// Pega o DB do tenant (usa o já setado pelo middleware se houver)
+async function getDbFromReq(req) {
+  if (req.tenantDb) return req.tenantDb;
+  const empresa = await resolveEmpresaFromReq(req);
+  if (!empresa) throw new Error("empresa_nao_identificada");
+  return getTenantDb(empresa.bancoDados);
+}
 
-    const contas = await ContaReceber.findAll({
-      where: { empresaId: req.empresaId },
-      include: [
-        { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
-        {
-          model: ContaBancaria,
-          as: "contaBancaria",
-          attributes: ["banco", "agencia", "conta", "id"],
-        },
-        { model: Cliente, as: "cliente", attributes: ["id", "nome"] },
-      ],
-      order: [["vencimento", "ASC"]],
+// dd/mm/aaaa -> aaaa-mm-dd (mantém ISO se já estiver)
+function normalizeDate(d) {
+  if (!d || typeof d !== "string") return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d;
+  const [dd, mm, yyyy] = d.split("/");
+  if (dd && mm && yyyy)
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  return d;
+}
+
+// Escopo por empresaId somente se a coluna existir
+function scopedWhere(Model, req, base = {}) {
+  const where = { ...base };
+  if (Model?.rawAttributes?.empresaId && req.empresaId)
+    where.empresaId = req.empresaId;
+  return where;
+}
+
+// Calcula valorTotal com segurança
+function calcularValorTotal(valor = 0, desconto = 0, tipoDesconto = "valor") {
+  const v = Number(valor) || 0;
+  const d = Number(desconto) || 0;
+  return tipoDesconto === "percentual"
+    ? Math.max(v - (v * d) / 100, 0)
+    : Math.max(v - d, 0);
+}
+
+const hasAssoc = (Model, alias) => Boolean(Model?.associations?.[alias]);
+
+// Includes para LISTAGEM (sem cartaoCredito)
+function includesList(db, ContaReceber) {
+  const inc = [];
+  if (hasAssoc(ContaReceber, "centroReceita") && db.CentroCusto) {
+    inc.push({
+      model: db.CentroCusto,
+      as: "centroReceita",
+      attributes: ["id", "descricao", "tipo"],
     });
-    res.json(contas);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao listar contas a receber." });
   }
-};
-
-exports.obterPorId = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber, CentroCusto, ContaBancaria, Cliente } = db.models;
-
-    const { id } = req.params;
-
-    const conta = await ContaReceber.findOne({
-      where: { id, empresaId: req.empresaId },
-      include: [
-        { model: CentroCusto, as: "centroReceita", attributes: ["descricao"] },
-        {
-          model: ContaBancaria,
-          as: "contaBancaria",
-          attributes: ["banco", "agencia", "conta", "id"],
-        },
-        { model: Cliente, as: "cliente", attributes: ["id", "nome"] },
-      ],
+  if (hasAssoc(ContaReceber, "contaBancaria") && db.ContaBancaria) {
+    inc.push({
+      model: db.ContaBancaria,
+      as: "contaBancaria",
+      attributes: ["id", "banco", "agencia", "conta"],
     });
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-    res.json(conta);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Erro ao buscar conta." });
   }
-};
-
-exports.criar = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber } = db.models;
-
-    const nova = await ContaReceber.create({
-      ...req.body,
-      empresaId: req.empresaId,
-    });
-    res.status(201).json(nova);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao criar conta a receber." });
+  if (hasAssoc(ContaReceber, "cliente") && db.Cliente) {
+    inc.push({ model: db.Cliente, as: "cliente", attributes: ["id", "nome"] });
   }
-};
+  return inc;
+}
 
-exports.atualizar = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber } = db.models;
-
-    const conta = await ContaReceber.findOne({
-      where: { id: req.params.id, empresaId: req.empresaId },
+// Includes para DETALHE (pode incluir cartaoCredito se existir)
+function includesDetail(db, ContaReceber) {
+  const inc = includesList(db, ContaReceber);
+  if (hasAssoc(ContaReceber, "cartaoCredito") && db.CartaoCredito) {
+    inc.push({
+      model: db.CartaoCredito,
+      as: "cartaoCredito",
+      attributes: ["id", "banco"],
     });
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
-
-    await conta.update(req.body);
-    res.json(conta);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao atualizar conta." });
   }
-};
+  return inc;
+}
 
-exports.receber = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber } = db.models;
+module.exports = {
+  async listar(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber) {
+        console.error(
+          "[contasReceber:listar] Model ContaReceber não encontrado no tenant."
+        );
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
+      }
 
-    const conta = await ContaReceber.findOne({
-      where: { id: req.params.id, empresaId: req.empresaId },
-    });
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+      const { dataInicio, dataFim, clienteId } = req.query || {};
+      const di = normalizeDate(dataInicio);
+      const df = normalizeDate(dataFim);
 
-    const {
-      dataRecebimento,
-      formaPagamento,
-      contaBancariaId,
-      tipoCredito,
-      parcelas,
-      valorRecebido,
-      novaDataVencimento,
-      cartaoId,
-      taxaRepassada,
-    } = req.body;
+      const where = scopedWhere(ContaReceber, req);
+      if (di && df) where.vencimento = { [Op.between]: [di, df] };
+      if (clienteId) where.clienteId = Number(clienteId);
 
-    const valorRecebidoNum = parseFloat(valorRecebido || 0);
-    const valorTotalNum = parseFloat(conta.valorTotal || 0);
-
-    await conta.update({
-      dataRecebimento: dataRecebimento || new Date(),
-      formaPagamento,
-      contaBancariaId: contaBancariaId || null,
-      cartaoId: cartaoId || null,
-      valorRecebido: valorRecebidoNum,
-      tipoCredito: tipoCredito || null,
-      parcelas: parcelas || null,
-      taxaRepassada: taxaRepassada || false,
-      status: "pago",
-    });
-
-    if (valorRecebidoNum < valorTotalNum && novaDataVencimento) {
-      const valorRestante = (valorTotalNum - valorRecebidoNum).toFixed(2);
-
-      await ContaReceber.create({
-        descricao: `${conta.descricao} (Parcial - Restante)`,
-        valor: valorRestante,
-        desconto: 0,
-        tipoDesconto: "valor",
-        valorTotal: valorRestante,
-        vencimento: novaDataVencimento,
-        centroCustoId: conta.centroCustoId,
-        clienteId: conta.clienteId,
-        contratoId: conta.contratoId || null,
-        status: "aberto",
-        referenciaId: conta.id,
-        empresaId: req.empresaId,
+      const contas = await ContaReceber.findAll({
+        where,
+        include: includesList(db, ContaReceber),
+        order: [
+          ["vencimento", "ASC"],
+          ["createdAt", "ASC"],
+        ],
       });
+
+      res.json(contas);
+    } catch (err) {
+      console.error("Erro ao listar contas a receber:", err);
+      res.status(500).json({ message: "Erro ao listar contas a receber." });
     }
+  },
 
-    if (conta.contratoId) {
-      await atualizarStatusContratoSePago(conta.contratoId, req);
+  async obterPorId(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
+
+      const { id } = req.params;
+      const where = scopedWhere(ContaReceber, req, { id: Number(id) });
+
+      const conta = await ContaReceber.findOne({
+        where,
+        include: includesDetail(db, ContaReceber),
+      });
+
+      if (!conta)
+        return res.status(404).json({ message: "Conta não encontrada." });
+      res.json(conta);
+    } catch (err) {
+      console.error("Erro ao buscar conta a receber:", err);
+      res.status(500).json({ message: "Erro ao buscar conta a receber." });
     }
+  },
 
-    res.json(conta);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao receber conta." });
-  }
-};
+  async criar(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
 
-exports.estornar = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber } = db.models;
+      const {
+        descricao,
+        clienteId,
+        centroCustoId,
+        vencimento,
+        valor = 0,
+        desconto = 0,
+        tipoDesconto = "valor",
+        contratoId,
+      } = req.body || {};
 
-    const conta = await ContaReceber.findOne({
-      where: { id: req.params.id, empresaId: req.empresaId },
-    });
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+      if (!descricao)
+        return res.status(400).json({ message: "Descrição é obrigatória." });
 
-    if (conta.status !== "pago") {
-      return res
-        .status(400)
-        .json({ error: "Só é possível estornar uma conta paga." });
+      const payload = {
+        descricao: (descricao ?? "").trim() || null,
+        clienteId: clienteId || null,
+        centroCustoId: centroCustoId || null,
+        vencimento: normalizeDate(vencimento),
+        valor: Number(valor) || 0,
+        desconto: Number(desconto) || 0,
+        tipoDesconto,
+        valorTotal: calcularValorTotal(valor, desconto, tipoDesconto),
+        status: "aberto",
+        contratoId: contratoId || null,
+      };
+      if (ContaReceber?.rawAttributes?.empresaId && req.empresaId)
+        payload.empresaId = req.empresaId;
+
+      const nova = await ContaReceber.create(payload);
+      const criada = await ContaReceber.findOne({
+        where: scopedWhere(ContaReceber, req, { id: nova.id }),
+        include: includesDetail(db, ContaReceber),
+      });
+
+      res.status(201).json(criada);
+    } catch (e) {
+      console.error("Erro ao criar conta a receber:", e);
+      res.status(500).json({ message: "Erro ao criar conta a receber." });
     }
+  },
 
-    await conta.update({
-      dataRecebimento: null,
-      formaPagamento: null,
-      contaBancariaId: null,
-      cartaoId: null,
-      valorRecebido: null,
-      tipoCredito: null,
-      parcelas: null,
-      taxaRepassada: false,
-      status: "aberto",
-    });
+  async atualizar(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
 
-    res.json({ message: "Estornado com sucesso." });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao estornar conta." });
-  }
-};
+      const { id } = req.params;
+      const where = scopedWhere(ContaReceber, req, { id: Number(id) });
+      const conta = await ContaReceber.findOne({ where });
+      if (!conta)
+        return res.status(404).json({ message: "Conta não encontrada." });
+      if (conta.status === "pago")
+        return res
+          .status(400)
+          .json({ message: "Não é possível alterar uma conta já paga." });
 
-exports.excluir = async (req, res) => {
-  try {
-    const db = getDbCliente(req.bancoCliente);
-    const { ContaReceber } = db.models;
+      const {
+        descricao,
+        clienteId,
+        centroCustoId,
+        vencimento,
+        valor = 0,
+        desconto = 0,
+        tipoDesconto = "valor",
+      } = req.body || {};
 
-    const conta = await ContaReceber.findOne({
-      where: { id: req.params.id, empresaId: req.empresaId },
-    });
-    if (!conta) return res.status(404).json({ error: "Conta não encontrada." });
+      const updates = {
+        descricao: (descricao ?? "").trim() || null,
+        clienteId: clienteId ?? conta.clienteId,
+        centroCustoId: centroCustoId ?? conta.centroCustoId,
+        vencimento:
+          vencimento !== undefined
+            ? normalizeDate(vencimento)
+            : conta.vencimento,
+        valor: Number(valor) || 0,
+        desconto: Number(desconto) || 0,
+        tipoDesconto,
+        valorTotal: calcularValorTotal(valor, desconto, tipoDesconto),
+      };
+      Object.keys(updates).forEach(
+        (k) => updates[k] === undefined && delete updates[k]
+      );
 
-    if (conta.status === "pago") {
-      return res
-        .status(400)
-        .json({ error: "Não é possível excluir uma conta já paga." });
+      await conta.update(updates);
+      const atualizada = await ContaReceber.findOne({
+        where: scopedWhere(ContaReceber, req, { id: conta.id }),
+        include: includesDetail(db, ContaReceber),
+      });
+
+      res.json(atualizada);
+    } catch (e) {
+      console.error("Erro ao atualizar conta a receber:", e);
+      res.status(500).json({ message: "Erro ao atualizar conta a receber." });
     }
+  },
 
-    await conta.destroy();
-    res.sendStatus(204);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Erro ao excluir conta." });
-  }
-};
+  async receber(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
 
-exports.getFormasPagamento = (req, res) => {
-  try {
-    const formasPagamento = [
-      { id: 1, nome: "Dinheiro" },
-      { id: 2, nome: "Cartão de Crédito" },
-      { id: 3, nome: "Cartão de Débito" },
-      { id: 4, nome: "Pix" },
-      { id: 5, nome: "Transferência" },
-      { id: 6, nome: "Boleto" },
-    ];
-    res.json(formasPagamento);
-  } catch (err) {
-    console.error("Erro ao obter formas de pagamento:", err);
-    res.status(500).json({ error: "Erro ao obter formas de pagamento." });
-  }
+      const { id } = req.params;
+      const where = scopedWhere(ContaReceber, req, { id: Number(id) });
+      const conta = await ContaReceber.findOne({ where });
+      if (!conta)
+        return res.status(404).json({ message: "Conta não encontrada." });
+      if (conta.status === "pago")
+        return res
+          .status(400)
+          .json({ message: "Conta já está recebida/paga." });
+
+      const {
+        dataRecebimento,
+        formaPagamento,
+        contaBancariaId,
+        tipoCredito,
+        parcelas,
+        valorRecebido,
+        novaDataVencimento,
+        cartaoId,
+        taxaRepassada,
+        maquina,
+      } = req.body || {};
+
+      const recebido = Number(valorRecebido || 0);
+      const total = Number(conta.valorTotal || 0);
+      if (recebido <= 0)
+        return res.status(400).json({ message: "Valor recebido inválido." });
+
+      // valida conta bancária, se houver model e id
+      let contaBancariaValida = null;
+      if (contaBancariaId && db.ContaBancaria) {
+        const cb = await db.ContaBancaria.findOne({
+          where: scopedWhere(db.ContaBancaria, req, {
+            id: Number(contaBancariaId),
+          }),
+        });
+        if (!cb)
+          return res.status(400).json({ message: "Conta bancária inválida." });
+        contaBancariaValida = cb.id;
+      }
+
+      const updateData = {
+        dataRecebimento: dataRecebimento
+          ? new Date(normalizeDate(dataRecebimento))
+          : new Date(),
+        formaPagamento: formaPagamento || null,
+        contaBancariaId: contaBancariaValida || null,
+        cartaoId: cartaoId || null,
+        valorRecebido: recebido,
+        tipoCredito: formaPagamento === "credito" ? tipoCredito || null : null,
+        parcelas:
+          formaPagamento === "credito" && tipoCredito === "parcelado"
+            ? Number(parcelas || 1)
+            : null,
+        taxaRepassada: !!taxaRepassada,
+        status: "pago",
+      };
+      if (ContaReceber.rawAttributes?.maquina)
+        updateData.maquina = maquina || null;
+
+      await conta.update(updateData);
+
+      // Parcial -> cria novo título
+      const resto = Number((total - recebido).toFixed(2));
+      if (resto > 0) {
+        if (!novaDataVencimento) {
+          return res.status(400).json({
+            message:
+              "Nova data de vencimento é obrigatória para recebimento parcial.",
+          });
+        }
+        const novoPayload = {
+          descricao: `${conta.descricao} (Parcial - Restante)`,
+          valor: resto,
+          desconto: 0,
+          tipoDesconto: "valor",
+          valorTotal: resto,
+          vencimento: normalizeDate(novaDataVencimento),
+          centroCustoId: conta.centroCustoId || null,
+          clienteId: conta.clienteId || null,
+          contratoId: conta.contratoId || null,
+          status: "aberto",
+          referenciaId: conta.id,
+        };
+        if (ContaReceber?.rawAttributes?.empresaId && req.empresaId)
+          novoPayload.empresaId = req.empresaId;
+        await ContaReceber.create(novoPayload);
+      }
+
+      // Atualiza contrato se houver
+      if (conta.contratoId) {
+        try {
+          await atualizarStatusContratoSePago(conta.contratoId, req);
+        } catch {}
+      }
+
+      const devolve = await ContaReceber.findOne({
+        where: scopedWhere(ContaReceber, req, { id: conta.id }),
+        include: includesDetail(db, ContaReceber),
+      });
+
+      res.json(devolve);
+    } catch (e) {
+      console.error("Erro ao receber conta a receber:", e);
+      res.status(500).json({ message: "Erro ao receber conta a receber." });
+    }
+  },
+
+  async estornar(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
+
+      const { id } = req.params;
+      const where = scopedWhere(ContaReceber, req, { id: Number(id) });
+      const conta = await ContaReceber.findOne({ where });
+      if (!conta)
+        return res.status(404).json({ message: "Conta não encontrada." });
+      if (conta.status !== "pago")
+        return res
+          .status(400)
+          .json({ message: "Só é possível estornar uma conta já paga." });
+
+      const resetData = {
+        dataRecebimento: null,
+        formaPagamento: null,
+        contaBancariaId: null,
+        cartaoId: null,
+        valorRecebido: null,
+        tipoCredito: null,
+        parcelas: null,
+        taxaRepassada: false,
+        status: "aberto",
+      };
+      if (ContaReceber.rawAttributes?.maquina) resetData.maquina = null;
+
+      await conta.update(resetData);
+
+      const devolve = await ContaReceber.findOne({
+        where: scopedWhere(ContaReceber, req, { id: conta.id }),
+        include: includesDetail(db, ContaReceber),
+      });
+
+      res.json(devolve);
+    } catch (e) {
+      console.error("Erro ao estornar conta a receber:", e);
+      res.status(500).json({ message: "Erro ao estornar conta a receber." });
+    }
+  },
+
+  async excluir(req, res) {
+    try {
+      const db = await getDbFromReq(req);
+      const ContaReceber = db.ContaReceber;
+      if (!ContaReceber)
+        return res
+          .status(500)
+          .json({ message: "Modelo ContaReceber não carregado no tenant." });
+
+      const { id } = req.params;
+      const where = scopedWhere(ContaReceber, req, { id: Number(id) });
+      const conta = await ContaReceber.findOne({ where });
+      if (!conta)
+        return res.status(404).json({ message: "Conta não encontrada." });
+      if (conta.status === "pago")
+        return res
+          .status(400)
+          .json({ message: "Não é possível excluir uma conta já paga." });
+
+      await conta.destroy();
+      return res.sendStatus(204);
+    } catch (e) {
+      console.error("Erro ao excluir conta a receber:", e);
+      res.status(500).json({ message: "Erro ao excluir conta a receber." });
+    }
+  },
+
+  getFormasPagamento(_req, res) {
+    try {
+      res.json([
+        { id: "dinheiro", nome: "dinheiro" },
+        { id: "credito", nome: "credito" },
+        { id: "debito", nome: "debito" },
+        { id: "pix", nome: "pix" },
+        { id: "transferencia", nome: "transferencia" },
+        { id: "boleto", nome: "boleto" },
+      ]);
+    } catch (err) {
+      console.error("Erro ao obter formas de pagamento:", err);
+      res.status(500).json({ message: "Erro ao obter formas de pagamento." });
+    }
+  },
 };

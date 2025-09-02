@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function ContaReceberForm({ onClose, onSave, onPagar }) {
+  const { api } = useAuth();
+
   const [descricao, setDescricao] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [clientes, setClientes] = useState([]);
@@ -12,26 +15,29 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
   const [tipoDesconto, setTipoDesconto] = useState("valor");
   const [valorTotal, setValorTotal] = useState("0.00");
 
-  // 🔁 Carregar clientes
   useEffect(() => {
-    fetch("http://localhost:5000/api/clientes")
-      .then((res) => res.json())
-      .then(setClientes)
-      .catch((err) => console.error("Erro ao carregar clientes", err));
-  }, []);
+    let alive = true;
+    (async () => {
+      try {
+        const [{ data: cli }, { data: cc }] = await Promise.all([
+          api.get("/api/clientes"),
+          api.get("/api/centrocusto"),
+        ]);
+        if (!alive) return;
+        setClientes(cli);
+        const receitas = (cc || []).filter(
+          (c) => c.tipo === "Receita" || c.tipo === "Ambos"
+        );
+        setCentros(receitas);
+      } catch (e) {
+        // silencioso no modal
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [api]);
 
-  // 🔁 Carregar centro de custo
-  useEffect(() => {
-    fetch("http://localhost:5000/api/centrocusto")
-      .then((res) => res.json())
-      .then((data) => {
-        const custos = data.filter((c) => c.tipo === "Receita" || c.tipo === "Ambos");
-        setCentros(custos);
-      })
-      .catch((err) => console.error("Erro ao carregar centros de custo", err));
-  }, []);
-
-  // 🔁 Recalcular valor total
   useEffect(() => {
     const v = parseFloat(valor) || 0;
     const d = parseFloat(desconto) || 0;
@@ -39,46 +45,38 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
     setValorTotal(total >= 0 ? total.toFixed(2) : "0.00");
   }, [valor, desconto, tipoDesconto]);
 
-  // Função para salvar conta e, opcionalmente, abrir form de pagamento
   const salvarConta = async (depoisSalvar) => {
     try {
       const novaConta = {
         descricao,
-        clienteId,
-        centroCustoId,
-        vencimento,
-        valor: parseFloat(valor),
-        desconto: parseFloat(desconto),
+        clienteId: clienteId || null,
+        centroCustoId: centroCustoId || null,
+        vencimento: vencimento || null,
+        valor: parseFloat(valor) || 0,
+        desconto: parseFloat(desconto) || 0,
         tipoDesconto,
-        valorTotal: parseFloat(valorTotal),
+        valorTotal: parseFloat(valorTotal) || 0,
       };
 
-      const res = await fetch("http://localhost:5000/api/contas-receber", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(novaConta),
-      });
+      const { data } = await api.post("/api/contas-receber", novaConta);
 
-      if (!res.ok) throw new Error("Erro ao salvar conta");
-
-      const data = await res.json();
-
-      if (onSave) onSave(data);
-      onClose();
+      onSave && onSave(data);
+      onClose && onClose();
 
       if (depoisSalvar === "pagar" && onPagar) {
-        onPagar(data); // abre o formulário de pagamento com a conta criada
+        onPagar(data);
       }
     } catch (error) {
-      console.error("Erro ao salvar conta:", error);
-      alert("Erro ao salvar conta. Veja o console para mais detalhes.");
+      alert(error?.response?.data?.error || "Erro ao salvar conta.");
     }
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-xl">
-        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Nova Conta a Receber</h2>
+        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">
+          Nova Conta a Receber
+        </h2>
 
         <div className="grid grid-cols-2 gap-4">
           <input
@@ -87,6 +85,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
             className="input input-bordered w-full"
             value={descricao}
             onChange={(e) => setDescricao(e.target.value)}
+            autoFocus
           />
 
           <select
@@ -178,7 +177,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
             style={{ backgroundColor: "#7ed900" }}
             onClick={() => salvarConta("pagar")}
           >
-            Salvar e Pagar
+            Salvar e Receber
           </button>
         </div>
       </div>

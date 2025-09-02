@@ -5,12 +5,11 @@ import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import MainLayout from "./layout/MainLayout";
-import Dashboard from "./pages/Dashboard";
-
-// Auth
 import { AuthProvider } from "/src/contexts/authContext.jsx";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginCliente from "./pages/LoginCliente";
+
+import Dashboard from "./pages/Dashboard";
 
 // Cadastros
 import Clientes from "./pages/Cadastros/Clientes";
@@ -52,69 +51,54 @@ export default function App() {
     <AuthProvider>
       <Router>
         <Routes>
-          {/* Rota pública: login */}
+          {/* Rota pública */}
           <Route path="/login" element={<LoginCliente />} />
 
-          {/* Rotas protegidas: tudo dentro do MainLayout */}
+          {/* Rotas protegidas */}
           <Route element={<ProtectedRoute />}>
             <Route element={<MainLayout />}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/cadastros/clientes" element={<Clientes />} />
-              <Route
-                path="/cadastros/fornecedores"
-                element={<Fornecedores />}
-              />
-              <Route
-                path="/cadastros/funcionarios"
-                element={<Funcionarios />}
-              />
-              <Route path="/cadastros/produtos" element={<Produtos />} />
+              <Route index element={<Dashboard />} />
+              <Route path="cadastros/clientes" element={<Clientes />} />
+              <Route path="cadastros/fornecedores" element={<Fornecedores />} />
+              <Route path="cadastros/funcionarios" element={<Funcionarios />} />
+              <Route path="cadastros/produtos" element={<Produtos />} />
 
-              <Route path="/estoque" element={<Estoque />} />
-              <Route path="/contratos" element={<Contratos />} />
-              <Route path="/agenda" element={<Agenda />} />
-              <Route path="/crm" element={<Crm />} />
+              <Route path="estoque" element={<Estoque />} />
+              <Route path="contratos" element={<Contratos />} />
+              <Route path="agenda" element={<Agenda />} />
+              <Route path="crm" element={<Crm />} />
 
-              <Route path="/financeiro/caixa" element={<Caixa />} />
-              <Route path="/financeiro/pagar" element={<ContasPagar />} />
-              <Route path="/financeiro/receber" element={<ContasReceber />} />
+              <Route path="financeiro/caixa" element={<Caixa />} />
+              <Route path="financeiro/pagar" element={<ContasPagar />} />
+              <Route path="financeiro/receber" element={<ContasReceber />} />
               <Route
-                path="/financeiro/contas-bancarias"
+                path="financeiro/contas-bancarias"
                 element={<ContasBancarias />}
               />
-              <Route path="/financeiro/cartoes" element={<CartoesCredito />} />
-              <Route
-                path="/financeiro/centro-custo"
-                element={<CentroCusto />}
-              />
+              <Route path="financeiro/cartoes" element={<CartoesCredito />} />
+              <Route path="financeiro/centro-custo" element={<CentroCusto />} />
 
               <Route
-                path="/relatorios/clientes"
+                path="relatorios/clientes"
                 element={<ClientesRelatorio />}
               />
               <Route
-                path="/relatorios/contratos"
+                path="relatorios/contratos"
                 element={<ContratosRelatorio />}
               />
-              <Route path="/relatorios/agenda" element={<AgendaRelatorio />} />
-              <Route path="/relatorios/fluxo-caixa" element={<FluxoCaixa />} />
+              <Route path="relatorios/agenda" element={<AgendaRelatorio />} />
+              <Route path="relatorios/fluxo-caixa" element={<FluxoCaixa />} />
               <Route
-                path="/relatorios/financeiro"
+                path="relatorios/financeiro"
                 element={<FinanceiroRelatorio />}
               />
-              <Route
-                path="/relatorios/estoque"
-                element={<EstoqueRelatorio />}
-              />
+              <Route path="relatorios/estoque" element={<EstoqueRelatorio />} />
 
-              <Route path="/configuracoes/empresa" element={<Empresa />} />
-              <Route path="/configuracoes/usuarios" element={<Usuarios />} />
-              <Route
-                path="/configuracoes/permissoes"
-                element={<Permissoes />}
-              />
-              <Route path="/configuracoes/faturas" element={<Faturas />} />
-              <Route path="/configuracoes/contrato" element={<Contrato />} />
+              <Route path="configuracoes/empresa" element={<Empresa />} />
+              <Route path="configuracoes/usuarios" element={<Usuarios />} />
+              <Route path="configuracoes/permissoes" element={<Permissoes />} />
+              <Route path="configuracoes/faturas" element={<Faturas />} />
+              <Route path="configuracoes/contrato" element={<Contrato />} />
             </Route>
           </Route>
         </Routes>

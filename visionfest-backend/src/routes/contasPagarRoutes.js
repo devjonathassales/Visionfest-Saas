@@ -1,15 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// CONTAS PAGAR
 const contaPagarController = require("../controllers/contaPagarController");
-router.get("/contas-pagar", authEmpresa, contaPagarController.listar);
-router.get("/contas-pagar/:id", authEmpresa, contaPagarController.obterPorId);
-router.post("/contas-pagar", authEmpresa, contaPagarController.criar);
-router.put("/contas-pagar/:id", authEmpresa, contaPagarController.atualizar);
-router.put("/contas-pagar/:id/baixa", authEmpresa, contaPagarController.baixar);
-router.put("/contas-pagar/:id/estorno", authEmpresa, contaPagarController.estornar);
-router.delete("/contas-pagar/:id", authEmpresa, contaPagarController.excluir);
+
+// NADA de authCliente aqui; já vem do app.js (multiTenantMiddleware, authCliente)
+router.get("/", contaPagarController.listar);
+router.get("/:id", contaPagarController.obterPorId);
+router.post("/", contaPagarController.criar);
+router.put("/:id", contaPagarController.atualizar);
+router.put("/:id/baixa", contaPagarController.baixar);
+router.put("/:id/estorno", contaPagarController.estornar);
+router.delete("/:id", contaPagarController.excluir);
 
 module.exports = router;

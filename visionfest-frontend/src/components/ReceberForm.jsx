@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from "react";
-const API_URL = "http://localhost:5000/api";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function ReceberForm({ conta, onClose, onBaixa }) {
-  const [dataRecebimento, setDataRecebimento] = useState(new Date().toISOString().slice(0, 10));
+  const { api } = useAuth();
+
+  const [dataRecebimento, setDataRecebimento] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
   const [formaPagamento, setFormaPagamento] = useState("");
   const [contaBancaria, setContaBancaria] = useState("");
   const [maquina, setMaquina] = useState("");
@@ -16,16 +20,24 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
   const [cartoes, setCartoes] = useState([]);
 
   useEffect(() => {
-    const carregarDados = async () => {
-      const [resContas, resCartoes] = await Promise.all([
-        fetch(`${API_URL}/contas-bancarias`),
-        fetch(`${API_URL}/cartoes-credito`)
-      ]);
-      setContasBancarias(await resContas.json());
-      setCartoes(await resCartoes.json());
+    let alive = true;
+    (async () => {
+      try {
+        const [{ data: contas }, { data: cards }] = await Promise.all([
+          api.get("/api/contas-bancarias"),
+          api.get("/api/cartoes-credito"),
+        ]);
+        if (!alive) return;
+        setContasBancarias(contas || []);
+        setCartoes(cards || []);
+      } catch (e) {
+        // silencioso
+      }
+    })();
+    return () => {
+      alive = false;
     };
-    carregarDados();
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     let valor = parseFloat(conta?.valorTotal || 0);
@@ -34,14 +46,17 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
       if (cartao && !taxaRepassada) {
         let taxa = 0;
         if (formaPagamento === "credito") {
-          taxa = tipoCredito === "parcelado" ? cartao.taxaParcelado || 0 : cartao.taxaVista || 0;
+          taxa =
+            tipoCredito === "parcelado"
+              ? cartao.taxaParcelado || 0
+              : cartao.taxaVista || 0;
         } else if (formaPagamento === "debito") {
           taxa = cartao.taxaDebito || 0;
         }
-        valor = valor * (1 - taxa / 100);
+        valor = valor * (1 - (parseFloat(taxa) || 0) / 100);
       }
     }
-    setValorRecebido(valor.toFixed(2));
+    setValorRecebido((valor || 0).toFixed(2));
   }, [
     formaPagamento,
     cartaoId,
@@ -55,35 +70,26 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
     const recebido = parseFloat(valorRecebido);
     const total = parseFloat(conta.valorTotal || 0);
 
-    // Validações obrigatórias
-    if (!formaPagamento) {
-      alert("Selecione a forma de pagamento.");
-      return;
-    }
+    if (!formaPagamento) return alert("Selecione a forma de pagamento.");
 
     if (["pix", "transferencia"].includes(formaPagamento) && !contaBancaria) {
-      alert("Selecione a conta bancária.");
-      return;
+      return alert("Selecione a conta bancária.");
     }
-
     if (["credito", "debito"].includes(formaPagamento) && !cartaoId) {
-      alert("Selecione o cartão.");
-      return;
+      return alert("Selecione o cartão.");
     }
-
     if (formaPagamento === "credito" && !tipoCredito) {
-      alert("Selecione o tipo de crédito.");
-      return;
+      return alert("Selecione o tipo de crédito.");
     }
-
-    if (formaPagamento === "credito" && tipoCredito === "parcelado" && parcelas < 1) {
-      alert("Informe a quantidade de parcelas.");
-      return;
+    if (
+      formaPagamento === "credito" &&
+      tipoCredito === "parcelado" &&
+      parcelas < 1
+    ) {
+      return alert("Informe a quantidade de parcelas.");
     }
-
     if (recebido < total && !novaDataVencimento) {
-      alert("Informe a nova data de vencimento para o valor restante.");
-      return;
+      return alert("Informe a nova data de vencimento para o valor restante.");
     }
 
     const payload = {
@@ -99,7 +105,7 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
       tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
       parcelas:
         formaPagamento === "credito" && tipoCredito === "parcelado"
-          ? parcelas
+          ? Number(parcelas)
           : null,
       taxaRepassada,
       valorRecebido: recebido,
@@ -107,17 +113,14 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
     };
 
     try {
-      const res = await fetch(`${API_URL}/contas-receber/${conta.id}/receber`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error("Erro ao receber");
-      const data = await res.json();
-      onBaixa(data);
-      onClose();
+      const { data } = await api.put(
+        `/api/contas-receber/${conta.id}/receber`,
+        payload
+      );
+      onBaixa && onBaixa(data);
+      onClose && onClose();
     } catch (err) {
-      alert("Erro: " + err.message);
+      alert(err?.response?.data?.error || "Erro ao receber.");
     }
   };
 
@@ -127,8 +130,12 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
         <h2 className="text-xl font-bold text-[#7ED957] mb-4">Receber Conta</h2>
 
         <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm border">
-          <div><strong>{conta.descricao || "-"}</strong></div>
-          <div>Vencimento: {new Date(conta.vencimento).toLocaleDateString()}</div>
+          <div>
+            <strong>{conta.descricao || "-"}</strong>
+          </div>
+          <div>
+            Vencimento: {new Date(conta.vencimento).toLocaleDateString()}
+          </div>
           <div>Total: R$ {parseFloat(conta.valorTotal || 0).toFixed(2)}</div>
         </div>
 
@@ -248,7 +255,9 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
 
         {parseFloat(valorRecebido) < parseFloat(conta.valorTotal || 0) && (
           <>
-            <label className="block mb-1">Nova Data de Vencimento (Restante)</label>
+            <label className="block mb-1">
+              Nova Data de Vencimento (Restante)
+            </label>
             <input
               type="date"
               className="input input-bordered w-full mb-4"

@@ -1,13 +1,15 @@
+// src/routes/funcionarioRoutes.js
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
 
-// FUNCIONÁRIOS
+const authCliente = require("../middlewares/authCliente");
 const funcionarioController = require("../controllers/funcionarioController");
-router.get("/funcionarios", authEmpresa, funcionarioController.listar);
-router.get("/funcionarios/:id", authEmpresa, funcionarioController.buscarPorId);
-router.post("/funcionarios", authEmpresa, funcionarioController.criar);
-router.put("/funcionarios/:id", authEmpresa, funcionarioController.atualizar);
-router.delete("/funcionarios/:id", authEmpresa, funcionarioController.excluir);
+
+// Este router é montado em /api/funcionarios no app.js
+router.get("/", authCliente, funcionarioController.listar);
+router.get("/:id", authCliente, funcionarioController.buscarPorId);
+router.post("/", authCliente, funcionarioController.criar);
+router.put("/:id", authCliente, funcionarioController.atualizar);
+router.delete("/:id", authCliente, funcionarioController.excluir);
 
 module.exports = router;

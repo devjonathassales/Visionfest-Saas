@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function PagamentoContaForm({
   conta,
@@ -6,6 +7,7 @@ export default function PagamentoContaForm({
   onConfirm,
   disabled,
 }) {
+  const { api } = useAuth();
   const [formaPagamento, setFormaPagamento] = useState("");
   const [contaBancaria, setContaBancaria] = useState("");
   const [tipoCredito, setTipoCredito] = useState("");
@@ -15,11 +17,15 @@ export default function PagamentoContaForm({
   const [contasBancarias, setContasBancarias] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/contas-bancarias")
-      .then((res) => res.json())
-      .then(setContasBancarias)
-      .catch((err) => console.error("Erro ao carregar contas bancárias:", err));
-  }, []);
+    (async () => {
+      try {
+        const { data } = await api.get("/api/contas-bancarias");
+        setContasBancarias(data || []);
+      } catch {
+        // silencioso
+      }
+    })();
+  }, [api]);
 
   useEffect(() => {
     if (formaPagamento === "dinheiro") {
@@ -27,16 +33,14 @@ export default function PagamentoContaForm({
       setTipoCredito("");
       setParcelas(1);
     }
-
     if (formaPagamento !== "credito") {
       setTipoCredito("");
       setParcelas(1);
     }
-
     if (formaPagamento !== "pix" && formaPagamento !== "debito") {
       setContaBancaria("");
     }
-  }, [formaPagamento, conta]);
+  }, [formaPagamento]);
 
   const handleSubmit = () => {
     if (!formaPagamento) return alert("Selecione a forma de pagamento.");
@@ -51,15 +55,15 @@ export default function PagamentoContaForm({
         return alert("Informe a quantidade de parcelas.");
     }
 
-    const valorPagoNum = parseFloat(valorPago);
-    const valorTotalNum = parseFloat(conta.valorTotal);
+    const valorPagoNum = parseFloat(valorPago || 0);
+    const valorTotalNum = parseFloat(conta?.valorTotal || 0);
 
     if (valorPagoNum < valorTotalNum && !novaDataVencimento) {
       return alert("Informe a nova data de vencimento para o valor restante.");
     }
 
     const contaSelecionadaObj = contasBancarias.find(
-      (cb) => cb.id === parseInt(contaBancaria)
+      (cb) => String(cb.id) === String(contaBancaria)
     );
 
     const dadosPagamento = {
@@ -72,7 +76,7 @@ export default function PagamentoContaForm({
       tipoCredito: formaPagamento === "credito" ? tipoCredito : null,
       parcelas:
         formaPagamento === "credito" && tipoCredito === "parcelado"
-          ? parcelas
+          ? Number(parcelas)
           : null,
       valorPago: valorPagoNum,
       novaDataVencimento:
@@ -82,12 +86,19 @@ export default function PagamentoContaForm({
     onConfirm && onConfirm(dadosPagamento);
   };
 
+  // ESC fecha
+  useEffect(() => {
+    const h = (e) => e.key === "Escape" && onClose && onClose();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Baixar Conta</h2>
 
-        {/* Informações da conta */}
+        {/* Info conta */}
         <div className="bg-gray-50 p-4 rounded-md mb-4 text-sm space-y-1 border">
           <div>
             <strong>Descrição:</strong> {conta?.descricao}
@@ -98,18 +109,20 @@ export default function PagamentoContaForm({
           </div>
           <div>
             <strong>Vencimento:</strong>{" "}
-            {new Date(conta?.vencimento).toLocaleDateString()}
+            {conta?.vencimento
+              ? new Date(conta.vencimento).toLocaleDateString()
+              : "-"}
           </div>
           <div>
             <strong>Valor Total:</strong> R${" "}
-            {parseFloat(conta?.valorTotal).toFixed(2)}
+            {Number(conta?.valorTotal || 0).toFixed(2)}
           </div>
           <div>
             <strong>Status:</strong> {conta?.status}
           </div>
         </div>
 
-        {/* Formulário */}
+        {/* Form */}
         <div className="grid grid-cols-1 gap-4">
           <div>
             <label className="text-sm font-semibold block mb-1">
@@ -144,7 +157,7 @@ export default function PagamentoContaForm({
                 <option value="">Selecione</option>
                 {contasBancarias.map((cb) => (
                   <option key={cb.id} value={cb.id}>
-                    {cb.banco} - Ag. {cb.agencia} / Cc. {cb.conta}
+                    {cb.banco} - Ag. {cb.agencia} / Cc. {cb.conta || "-"}
                   </option>
                 ))}
               </select>
@@ -196,10 +209,12 @@ export default function PagamentoContaForm({
               value={valorPago}
               onChange={(e) => setValorPago(e.target.value)}
               disabled={disabled || formaPagamento === "dinheiro"}
+              min="0"
+              step="0.01"
             />
           </div>
 
-          {parseFloat(valorPago) < parseFloat(conta?.valorTotal) && (
+          {parseFloat(valorPago || 0) < parseFloat(conta?.valorTotal || 0) && (
             <div>
               <label className="text-sm font-semibold block mb-1">
                 Nova Data de Vencimento

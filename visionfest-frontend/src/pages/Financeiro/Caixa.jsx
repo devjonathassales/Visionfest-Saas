@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
-import ModalEntradaManual from "../../components/ModalEntradaManual";
-import ModalSaidaManual from "../../components/ModalSaidaManual";
-
-const API_BASE = "http://localhost:5000/api";
+import ModalEntradaManual from "/src/components/ModalEntradaManual.jsx";
+import ModalSaidaManual from "/src/components/ModalSaidaManual.jsx";
 
 export default function Caixa() {
+  const { api } = useAuth();
+
   const [contasPagar, setContasPagar] = useState([]);
   const [contasReceber, setContasReceber] = useState([]);
   const [entradasManuais, setEntradasManuais] = useState([]);
@@ -30,6 +31,7 @@ export default function Caixa() {
   useEffect(() => {
     carregarDados();
     carregarEstadoCaixa();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Carrega contas, totais e lançamentos manuais
@@ -37,18 +39,18 @@ export default function Caixa() {
     try {
       const [resPagar, resReceber, resContas, resEntradas, resSaidas] =
         await Promise.all([
-          fetch(`${API_BASE}/contas-pagar`),
-          fetch(`${API_BASE}/contas-receber`),
-          fetch(`${API_BASE}/contas-bancarias`),
-          fetch(`${API_BASE}/caixa/entradas`),
-          fetch(`${API_BASE}/caixa/saidas`),
+          api.get("/api/contas-pagar"),
+          api.get("/api/contas-receber"),
+          api.get("/api/contas-bancarias"),
+          api.get("/api/caixa/entradas"),
+          api.get("/api/caixa/saidas"),
         ]);
 
-      const dataPagar = await resPagar.json();
-      const dataReceber = await resReceber.json();
-      const dataContas = await resContas.json();
-      const dataEntradas = await resEntradas.json();
-      const dataSaidas = await resSaidas.json();
+      const dataPagar = resPagar.data || [];
+      const dataReceber = resReceber.data || [];
+      const dataContas = resContas.data || [];
+      const dataEntradas = resEntradas.data || [];
+      const dataSaidas = resSaidas.data || [];
 
       setContasBancarias(dataContas);
 
@@ -62,14 +64,14 @@ export default function Caixa() {
 
       pagas.forEach((c) => {
         const f = c.formaPagamento || "outros";
-        const v = parseFloat(c.valorPago || 0);
+        const v = Number(c.valorPago) || 0;
         totaisP[f] = (totaisP[f] || 0) + v;
         totalP += v;
       });
 
       recebidas.forEach((c) => {
         const f = c.formaPagamento || "outros";
-        const v = parseFloat(c.valorRecebido || 0);
+        const v = Number(c.valorRecebido) || 0;
         totaisR[f] = (totaisR[f] || 0) + v;
         totalR += v;
       });
@@ -84,25 +86,22 @@ export default function Caixa() {
       setEntradasManuais(dataEntradas);
       setSaidasManuais(dataSaidas);
       setTotalEntradas(
-        dataEntradas.reduce((sum, e) => sum + parseFloat(e.valor), 0)
+        dataEntradas.reduce((sum, e) => sum + (Number(e.valor) || 0), 0)
       );
       setTotalSaidas(
-        dataSaidas.reduce((sum, s) => sum + parseFloat(s.valor), 0)
+        dataSaidas.reduce((sum, s) => sum + (Number(s.valor) || 0), 0)
       );
     } catch (err) {
-      console.error("Erro ao carregar dados:", err);
+      console.error("Erro ao carregar dados do caixa:", err);
     }
   };
 
   // Carrega estado atual do caixa do backend
   const carregarEstadoCaixa = async () => {
     try {
-      const res = await fetch(`${API_BASE}/caixa/atual`);
-      if (!res.ok)
-        throw new Error("Não foi possível carregar o estado do caixa");
-      const caixa = await res.json();
-
-      setCaixaAberto(caixa.aberto);
+      const res = await api.get("/api/caixa/atual");
+      const caixa = res.data || {};
+      setCaixaAberto(!!caixa.aberto);
       setDataAbertura(caixa.dataAbertura ? new Date(caixa.dataAbertura) : null);
       setUltimoFechamento(
         caixa.dataFechamento ? new Date(caixa.dataFechamento) : null
@@ -115,11 +114,10 @@ export default function Caixa() {
   // Abrir caixa via API
   const abrirCaixaHandler = async () => {
     try {
-      const res = await fetch(`${API_BASE}/caixa/abrir`, { method: "POST" });
-      if (!res.ok) throw new Error("Erro ao abrir caixa");
-      const caixa = await res.json();
-      setCaixaAberto(caixa.aberto);
-      setDataAbertura(new Date(caixa.dataAbertura));
+      const res = await api.post("/api/caixa/abrir");
+      const caixa = res.data;
+      setCaixaAberto(!!caixa.aberto);
+      setDataAbertura(caixa.dataAbertura ? new Date(caixa.dataAbertura) : null);
       alert("Caixa aberto com sucesso!");
     } catch (error) {
       alert("Erro ao abrir caixa");
@@ -130,19 +128,19 @@ export default function Caixa() {
   // Fechar caixa via API
   const fecharCaixaHandler = async () => {
     try {
-      const res = await fetch(`${API_BASE}/caixa/fechar`, { method: "POST" });
-      if (!res.ok) throw new Error("Erro ao fechar caixa");
-      const caixa = await res.json();
-      setCaixaAberto(caixa.aberto);
-      setUltimoFechamento(new Date(caixa.dataFechamento));
+      const res = await api.post("/api/caixa/fechar");
+      const caixa = res.data;
+      setCaixaAberto(!!caixa.aberto);
+      setUltimoFechamento(
+        caixa.dataFechamento ? new Date(caixa.dataFechamento) : null
+      );
 
-      // Pergunta se deseja fazer retirada de dinheiro
       const desejaRetirada = window.confirm(
         "Deseja fazer alguma retirada em dinheiro do caixa?"
       );
 
       if (desejaRetirada) {
-        setMostrarSaidaModal(true); // abrir modal de saída manual
+        setMostrarSaidaModal(true);
       } else {
         alert("Caixa fechado com sucesso!");
       }
@@ -155,15 +153,10 @@ export default function Caixa() {
   // Salvar entrada manual via API
   const handleSalvarEntrada = async (entrada) => {
     try {
-      const res = await fetch(`${API_BASE}/caixa/entrada-manual`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(entrada),
-      });
-      if (!res.ok) throw new Error("Erro ao salvar entrada manual");
-      const novaEntrada = await res.json();
+      const res = await api.post("/api/caixa/entrada-manual", entrada);
+      const novaEntrada = res.data;
       setEntradasManuais((old) => [...old, novaEntrada]);
-      setTotalEntradas((old) => old + parseFloat(novaEntrada.valor));
+      setTotalEntradas((old) => old + (Number(novaEntrada.valor) || 0));
       setMostrarEntradaModal(false);
     } catch (error) {
       alert("Erro ao salvar entrada manual");
@@ -174,21 +167,27 @@ export default function Caixa() {
   // Salvar saída manual via API
   const handleSalvarSaida = async (saida) => {
     try {
-      const res = await fetch(`${API_BASE}/caixa/saida-manual`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(saida),
-      });
-      if (!res.ok) throw new Error("Erro ao salvar saída manual");
-      const novaSaida = await res.json();
+      const res = await api.post(
+        "/api/caixa/saida-manual",
+        saídaNormalizada(saida)
+      );
+      const novaSaida = res.data;
       setSaidasManuais((old) => [...old, novaSaida]);
-      setTotalSaidas((old) => old + parseFloat(novaSaida.valor));
+      setTotalSaidas((old) => old + (Number(novaSaida.valor) || 0));
       setMostrarSaidaModal(false);
     } catch (error) {
       alert("Erro ao salvar saída manual");
       console.error(error);
     }
   };
+
+  // (Se quiser normalizar algo específico para saida)
+  function saídaNormalizada(s) {
+    return {
+      ...s,
+      valor: Number(s.valor) || 0,
+    };
+  }
 
   return (
     <div className="p-6 space-y-6">
@@ -314,12 +313,14 @@ function Totais({ title, dados, total }) {
             className="flex justify-between text-sm border-b py-1"
           >
             <span className="capitalize">{forma}</span>
-            <span className="font-semibold">R$ {valor.toFixed(2)}</span>
+            <span className="font-semibold">
+              R$ {(Number(valor) || 0).toFixed(2)}
+            </span>
           </li>
         ))}
         <li className="flex justify-between font-bold text-black pt-2 border-t">
           <span>Total</span>
-          <span>R$ {total.toFixed(2)}</span>
+          <span>R$ {(Number(total) || 0).toFixed(2)}</span>
         </li>
       </ul>
     </div>
@@ -341,13 +342,14 @@ function ListaLancamentos({ title, lista, total }) {
             >
               <span>{item.descricao}</span>
               <span>
-                R$ {parseFloat(item.valor).toFixed(2)} ({item.formaPagamento})
+                R$ {(Number(item.valor) || 0).toFixed(2)} ({item.formaPagamento}
+                )
               </span>
             </li>
           ))}
           <li className="flex justify-between font-bold border-t pt-2">
             <span>Total</span>
-            <span>R$ {total.toFixed(2)}</span>
+            <span>R$ {(Number(total) || 0).toFixed(2)}</span>
           </li>
         </ul>
       )}
@@ -372,9 +374,9 @@ function TabelaContas({ title, contas, tipo, valorField }) {
           {contas.map((c) => (
             <tr key={c.id} className="border-t">
               <td>{c.descricao}</td>
-              <td>{c[tipo]?.nome || "-"}</td>
+              <td>{(c[tipo] && c[tipo].nome) || "-"}</td>
               <td className="capitalize">{c.formaPagamento}</td>
-              <td>R$ {parseFloat(c[valorField]).toFixed(2)}</td>
+              <td>R$ {(Number(c[valorField]) || 0).toFixed(2)}</td>
             </tr>
           ))}
         </tbody>

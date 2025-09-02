@@ -1,29 +1,51 @@
-const { getDbCliente } = require("../utils/tenant");
+// src/controllers/clienteController.js
 const { Op } = require("sequelize");
+const { resolveEmpresaFromReq, getTenantDb } = require("../utils/tenant");
+
+// tenta usar o db já colocado pelo middleware; se não, resolve na hora
+async function getDbFromReq(req) {
+  if (req.tenantDb) return req.tenantDb;
+  const empresa = await resolveEmpresaFromReq(req);
+  if (!empresa) throw new Error("empresa_nao_identificada");
+  return getTenantDb(empresa.bancoDados);
+}
+
+// dd/mm/aaaa -> aaaa-mm-dd (ou mantém como veio se já estiver ISO)
+function normalizeDate(d) {
+  if (!d || typeof d !== "string") return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d; // já ISO
+  const [dd, mm, yyyy] = d.split("/");
+  if (dd && mm && yyyy)
+    return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  return d;
+}
+
+// aplica escopo por empresaId somente se o campo existir no model
+function scopedWhere(Model, req, base = {}) {
+  const where = { ...base };
+  if (Model?.rawAttributes?.empresaId && req.empresaId) {
+    where.empresaId = req.empresaId;
+  }
+  return where;
+}
 
 module.exports = {
   async listar(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Cliente } = db.models;
+      const db = await getDbFromReq(req);
+      const Cliente = db.Cliente;
 
       const { busca } = req.query;
 
-      const where = busca
-        ? {
-            [Op.and]: [
-              { empresaId: req.empresaId },
-              {
-                [Op.or]: [
-                  { nome: { [Op.iLike]: `%${busca}%` } },
-                  { cpf: { [Op.iLike]: `%${busca}%` } },
-                  { email: { [Op.iLike]: `%${busca}%` } },
-                  { whatsapp: { [Op.iLike]: `%${busca}%` } },
-                ],
-              },
-            ],
-          }
-        : { empresaId: req.empresaId };
+      const where = scopedWhere(Cliente, req);
+      if (busca && String(busca).trim() !== "") {
+        where[Op.or] = [
+          { nome: { [Op.iLike]: `%${busca}%` } },
+          { cpf: { [Op.iLike]: `%${busca}%` } },
+          { email: { [Op.iLike]: `%${busca}%` } },
+          { whatsapp: { [Op.iLike]: `%${busca}%` } },
+        ];
+      }
 
       const clientes = await Cliente.findAll({
         where,
@@ -38,15 +60,15 @@ module.exports = {
 
   async buscarPorId(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Cliente } = db.models;
+      const db = await getDbFromReq(req);
+      const Cliente = db.Cliente;
 
       const { id } = req.params;
-      const cliente = await Cliente.findOne({
-        where: { id, empresaId: req.empresaId },
-      });
+      const where = scopedWhere(Cliente, req, { id: Number(id) });
 
-      if (!cliente) return res.status(404).json({ message: "Cliente não encontrado." });
+      const cliente = await Cliente.findOne({ where });
+      if (!cliente)
+        return res.status(404).json({ message: "Cliente não encontrado." });
 
       return res.json(cliente);
     } catch (error) {
@@ -57,33 +79,64 @@ module.exports = {
 
   async criar(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Cliente } = db.models;
+      const db = await getDbFromReq(req);
+      const Cliente = db.Cliente;
 
       const {
-        nome, cpf, whatsapp, celular, dataNascimento,
-        email, instagram, cep, logradouro, numero,
-        complemento, bairro, cidade, estado,
-      } = req.body;
+        nome,
+        cpf,
+        whatsapp,
+        celular,
+        dataNascimento,
+        email,
+        instagram,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro,
+        cidade,
+        estado,
+      } = req.body || {};
 
-      const cpfExistente = await Cliente.findOne({
-        where: { cpf, empresaId: req.empresaId },
-      });
-      if (cpfExistente) return res.status(400).json({ message: "CPF já cadastrado." });
+      // unicidade por CPF/email dentro da empresa, se houver coluna empresaId
+      if (cpf) {
+        const cpfWhere = scopedWhere(Cliente, req, { cpf });
+        const cpfExistente = await Cliente.findOne({ where: cpfWhere });
+        if (cpfExistente)
+          return res.status(400).json({ message: "CPF já cadastrado." });
+      }
 
-      const emailExistente = await Cliente.findOne({
-        where: { email, empresaId: req.empresaId },
-      });
-      if (emailExistente) return res.status(400).json({ message: "Email já cadastrado." });
+      if (email) {
+        const emailWhere = scopedWhere(Cliente, req, { email });
+        const emailExistente = await Cliente.findOne({ where: emailWhere });
+        if (emailExistente)
+          return res.status(400).json({ message: "Email já cadastrado." });
+      }
 
-      const novoCliente = await Cliente.create({
-        nome, cpf, whatsapp, celular,
-        dataNascimento: dataNascimento ? dataNascimento.split("/").reverse().join("-") : null,
-        email, instagram, cep, logradouro, numero,
-        complemento, bairro, cidade, estado,
-        empresaId: req.empresaId,
-      });
+      const payload = {
+        nome,
+        cpf,
+        whatsapp,
+        celular,
+        dataNascimento: normalizeDate(dataNascimento),
+        email,
+        instagram,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro,
+        cidade,
+        estado,
+      };
 
+      // injeta empresaId se existir a coluna
+      if (Cliente?.rawAttributes?.empresaId && req.empresaId) {
+        payload.empresaId = req.empresaId;
+      }
+
+      const novoCliente = await Cliente.create(payload);
       return res.status(201).json(novoCliente);
     } catch (error) {
       console.error("Erro criar cliente:", error);
@@ -93,38 +146,78 @@ module.exports = {
 
   async atualizar(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Cliente } = db.models;
+      const db = await getDbFromReq(req);
+      const Cliente = db.Cliente;
 
       const { id } = req.params;
-      const cliente = await Cliente.findOne({
-        where: { id, empresaId: req.empresaId },
-      });
-      if (!cliente) return res.status(404).json({ message: "Cliente não encontrado." });
+      const where = scopedWhere(Cliente, req, { id: Number(id) });
+      const cliente = await Cliente.findOne({ where });
+      if (!cliente)
+        return res.status(404).json({ message: "Cliente não encontrado." });
 
       const {
-        nome, cpf, whatsapp, celular, dataNascimento,
-        email, instagram, cep, logradouro, numero,
-        complemento, bairro, cidade, estado,
-      } = req.body;
+        nome,
+        cpf,
+        whatsapp,
+        celular,
+        dataNascimento,
+        email,
+        instagram,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro,
+        cidade,
+        estado,
+      } = req.body || {};
 
-      const cpfExistente = await Cliente.findOne({
-        where: { cpf, empresaId: req.empresaId, id: { [Op.ne]: id } },
-      });
-      if (cpfExistente) return res.status(400).json({ message: "CPF já cadastrado." });
+      if (cpf) {
+        const cpfWhere = scopedWhere(Cliente, req, {
+          cpf,
+          id: { [Op.ne]: Number(id) },
+        });
+        const cpfExistente = await Cliente.findOne({ where: cpfWhere });
+        if (cpfExistente)
+          return res.status(400).json({ message: "CPF já cadastrado." });
+      }
 
-      const emailExistente = await Cliente.findOne({
-        where: { email, empresaId: req.empresaId, id: { [Op.ne]: id } },
-      });
-      if (emailExistente) return res.status(400).json({ message: "Email já cadastrado." });
+      if (email) {
+        const emailWhere = scopedWhere(Cliente, req, {
+          email,
+          id: { [Op.ne]: Number(id) },
+        });
+        const emailExistente = await Cliente.findOne({ where: emailWhere });
+        if (emailExistente)
+          return res.status(400).json({ message: "Email já cadastrado." });
+      }
 
-      await cliente.update({
-        nome, cpf, whatsapp, celular,
-        dataNascimento: dataNascimento ? dataNascimento.split("/").reverse().join("-") : null,
-        email, instagram, cep, logradouro, numero,
-        complemento, bairro, cidade, estado,
-      });
+      const updates = {
+        nome,
+        cpf,
+        whatsapp,
+        celular,
+        dataNascimento:
+          dataNascimento !== undefined
+            ? normalizeDate(dataNascimento)
+            : cliente.dataNascimento,
+        email,
+        instagram,
+        cep,
+        logradouro,
+        numero,
+        complemento,
+        bairro,
+        cidade,
+        estado,
+      };
 
+      // remove undefined para não sobrescrever com undefined
+      Object.keys(updates).forEach(
+        (k) => updates[k] === undefined && delete updates[k]
+      );
+
+      await cliente.update(updates);
       return res.json(cliente);
     } catch (error) {
       console.error("Erro atualizar cliente:", error);
@@ -134,14 +227,14 @@ module.exports = {
 
   async deletar(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Cliente } = db.models;
+      const db = await getDbFromReq(req);
+      const Cliente = db.Cliente;
 
       const { id } = req.params;
-      const cliente = await Cliente.findOne({
-        where: { id, empresaId: req.empresaId },
-      });
-      if (!cliente) return res.status(404).json({ message: "Cliente não encontrado." });
+      const where = scopedWhere(Cliente, req, { id: Number(id) });
+      const cliente = await Cliente.findOne({ where });
+      if (!cliente)
+        return res.status(404).json({ message: "Cliente não encontrado." });
 
       await cliente.destroy();
       return res.json({ message: "Cliente deletado com sucesso." });

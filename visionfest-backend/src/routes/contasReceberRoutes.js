@@ -1,16 +1,16 @@
+// src/routes/contasReceberRoutes.js
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// CONTAS RECEBER
 const contaReceberController = require("../controllers/contaReceberController");
-router.get("/contas-receber/formas-pagamento", authEmpresa, contaReceberController.getFormasPagamento);
-router.get("/contas-receber", authEmpresa, contaReceberController.listar);
-router.get("/contas-receber/:id", authEmpresa, contaReceberController.obterPorId);
-router.post("/contas-receber", authEmpresa, contaReceberController.criar);
-router.put("/contas-receber/:id", authEmpresa, contaReceberController.atualizar);
-router.put("/contas-receber/:id/receber", authEmpresa, contaReceberController.receber);
-router.put("/contas-receber/:id/estorno", authEmpresa, contaReceberController.estornar);
-router.delete("/contas-receber/:id", authEmpresa, contaReceberController.excluir);
+
+// authCliente + multiTenant já são aplicados no app.js
+router.get("/formas-pagamento", contaReceberController.getFormasPagamento);
+router.get("/", contaReceberController.listar);
+router.get("/:id", contaReceberController.obterPorId);
+router.post("/", contaReceberController.criar);
+router.put("/:id", contaReceberController.atualizar);
+router.put("/:id/receber", contaReceberController.receber);
+router.put("/:id/estorno", contaReceberController.estornar);
+router.delete("/:id", contaReceberController.excluir);
 
 module.exports = router;

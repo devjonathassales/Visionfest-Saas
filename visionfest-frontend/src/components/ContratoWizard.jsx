@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import ContratoForm from "./ContratoForm";
 import ContratoFinanceiroForm from "./ContratoFinanceiroForm";
-
-const API_BASE = "http://localhost:5000/api";
+import { useAuth } from "../contexts/authContext.jsx";
 
 export default function ContratoWizard({ onFinalizar, contratoId = null }) {
+  const { apiCliente } = useAuth();
+
   const [etapa, setEtapa] = useState("cadastro"); // 'cadastro' | 'financeiro'
   const [contratoCarregado, setContratoCarregado] = useState(null);
   const [modalAberto, setModalAberto] = useState(true);
@@ -12,17 +13,14 @@ export default function ContratoWizard({ onFinalizar, contratoId = null }) {
 
   const modoEdicao = !!contratoId;
 
-  // 🔄 Carrega contrato da API quando contratoId é passado
   useEffect(() => {
     const carregarContrato = async () => {
       if (modoEdicao && contratoId) {
         setLoading(true);
         try {
-          const response = await fetch(`${API_BASE}/contratos/${contratoId}`);
-          if (!response.ok) throw new Error("Erro ao buscar contrato.");
-          const data = await response.json();
+          const { data } = await apiCliente.get(`/contratos/${contratoId}`);
           setContratoCarregado(data);
-          setEtapa("cadastro"); // começa pelo cadastro para permitir ajustes
+          setEtapa("cadastro");
         } catch (err) {
           console.error("Erro ao carregar contrato:", err);
           alert("Não foi possível carregar o contrato para edição.");
@@ -32,16 +30,14 @@ export default function ContratoWizard({ onFinalizar, contratoId = null }) {
         }
       }
     };
-
     carregarContrato();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modoEdicao, contratoId]);
+  }, [apiCliente, modoEdicao, contratoId]);
 
   const fecharTudo = () => {
     setModalAberto(false);
     setEtapa("cadastro");
     setContratoCarregado(null);
-    if (onFinalizar) onFinalizar(); // Atualiza lista
+    onFinalizar && onFinalizar();
   };
 
   const handleContratoSalvo = (contrato) => {

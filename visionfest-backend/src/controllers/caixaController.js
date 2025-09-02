@@ -1,151 +1,214 @@
-const { getDbCliente } = require("../utils/tenant");
+// src/controllers/caixaController.js
+const { resolveEmpresaFromReq, getTenantDb } = require("../utils/tenant");
+
+// Usa o db já injetado pelo authCliente quando houver; senão resolve pelo host/header/query
+async function getDbFromReq(req) {
+  if (req.tenantDb) return req.tenantDb;
+  const empresa = await resolveEmpresaFromReq(req);
+  if (!empresa) throw new Error("empresa_nao_identificada");
+  return getTenantDb(empresa.bancoDados);
+}
+
+// Aplica empresaId no where apenas se a coluna existir no Model
+function scopedWhere(Model, req, base = {}) {
+  const where = { ...base };
+  if (Model?.rawAttributes?.empresaId && req.empresaId) {
+    where.empresaId = req.empresaId;
+  }
+  return where;
+}
+
+// Injeta empresaId no payload somente se a coluna existir
+function withEmpresaId(Model, req, payload = {}) {
+  if (Model?.rawAttributes?.empresaId && req.empresaId) {
+    return { ...payload, empresaId: req.empresaId };
+  }
+  return payload;
+}
 
 module.exports = {
   async abrirCaixa(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Caixa } = db.models;
+      const db = await getDbFromReq(req);
+      const Caixa = db.Caixa;
 
-      // Fecha caixas abertos (se houver) desta empresa
+      // fecha qualquer caixa aberto deste tenant/empresa (quando coluna existir)
       await Caixa.update(
         { aberto: false, dataFechamento: new Date() },
-        { where: { aberto: true, empresaId: req.empresaId } }
+        { where: scopedWhere(Caixa, req, { aberto: true }) }
       );
 
-      const caixa = await Caixa.create({
+      const payload = withEmpresaId(Caixa, req, {
         aberto: true,
         dataAbertura: new Date(),
         dataFechamento: null,
-        empresaId: req.empresaId,
       });
 
-      res.status(201).json(caixa);
+      const caixa = await Caixa.create(payload);
+      return res.status(201).json(caixa);
     } catch (error) {
-      console.error("Erro ao abrir caixa:", error);
-      res.status(500).json({ error: "Erro ao abrir caixa." });
+      console.error("[caixaController] abrirCaixa:", error);
+      return res.status(500).json({ message: "Erro ao abrir caixa." });
     }
   },
 
   async fecharCaixa(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Caixa } = db.models;
+      const db = await getDbFromReq(req);
+      const Caixa = db.Caixa;
 
       const caixaAberto = await Caixa.findOne({
-        where: { aberto: true, empresaId: req.empresaId },
+        where: scopedWhere(Caixa, req, { aberto: true }),
       });
+
       if (!caixaAberto) {
-        return res.status(400).json({ error: "Nenhum caixa aberto encontrado." });
+        return res
+          .status(400)
+          .json({ message: "Nenhum caixa aberto encontrado." });
       }
 
-      caixaAberto.aberto = false;
-      caixaAberto.dataFechamento = new Date();
-      await caixaAberto.save();
+      await caixaAberto.update({
+        aberto: false,
+        dataFechamento: new Date(),
+      });
 
-      res.json(caixaAberto);
+      return res.json(caixaAberto);
     } catch (error) {
-      console.error("Erro ao fechar caixa:", error);
-      res.status(500).json({ error: "Erro ao fechar caixa." });
+      console.error("[caixaController] fecharCaixa:", error);
+      return res.status(500).json({ message: "Erro ao fechar caixa." });
     }
   },
 
   async getCaixaAtual(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { Caixa } = db.models;
+      const db = await getDbFromReq(req);
+      const Caixa = db.Caixa;
 
       const caixaAberto = await Caixa.findOne({
-        where: { aberto: true, empresaId: req.empresaId },
+        where: scopedWhere(Caixa, req, { aberto: true }),
       });
+
       if (!caixaAberto) {
-        return res.status(404).json({ error: "Nenhum caixa aberto." });
+        // Sem caixa aberto: retorna objeto padrão
+        return res.json({
+          aberto: false,
+          dataAbertura: null,
+          dataFechamento: null,
+        });
       }
-      res.json(caixaAberto);
+
+      return res.json(caixaAberto);
     } catch (error) {
-      console.error("Erro ao obter caixa atual:", error);
-      res.status(500).json({ error: "Erro ao obter caixa atual." });
+      console.error("[caixaController] getCaixaAtual:", error);
+      return res.status(500).json({ message: "Erro ao obter caixa atual." });
     }
   },
 
   async addEntradaManual(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { EntradaManual } = db.models;
+      const db = await getDbFromReq(req);
+      const EntradaManual = db.EntradaManual;
 
-      const { descricao, valor, formaPagamento } = req.body;
-      if (!descricao || !valor || !formaPagamento) {
-        return res.status(400).json({ error: "Campos obrigatórios não preenchidos." });
+      let { descricao, valor, formaPagamento } = req.body || {};
+      if (!descricao || valor === undefined || !formaPagamento) {
+        return res
+          .status(400)
+          .json({ message: "Campos obrigatórios não preenchidos." });
       }
 
-      const entrada = await EntradaManual.create({
-        descricao,
-        valor,
-        formaPagamento,
-        data: new Date(),
-        empresaId: req.empresaId,
-      });
+      valor = Number(valor);
+      if (!Number.isFinite(valor) || valor <= 0) {
+        return res.status(400).json({ message: "Valor inválido." });
+      }
 
-      res.status(201).json(entrada);
+      const entrada = await EntradaManual.create(
+        withEmpresaId(EntradaManual, req, {
+          descricao: String(descricao).trim(),
+          valor,
+          formaPagamento: String(formaPagamento).trim().toLowerCase(),
+          data: new Date(),
+        })
+      );
+
+      return res.status(201).json(entrada);
     } catch (error) {
-      console.error("Erro ao adicionar entrada manual:", error);
-      res.status(500).json({ error: "Erro ao adicionar entrada manual." });
+      console.error("[caixaController] addEntradaManual:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao adicionar entrada manual." });
     }
   },
 
   async addSaidaManual(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { SaidaManual } = db.models;
+      const db = await getDbFromReq(req);
+      const SaidaManual = db.SaidaManual;
 
-      const { descricao, valor, formaPagamento } = req.body;
-      if (!descricao || !valor || !formaPagamento) {
-        return res.status(400).json({ error: "Campos obrigatórios não preenchidos." });
+      let { descricao, valor, formaPagamento } = req.body || {};
+      if (!descricao || valor === undefined || !formaPagamento) {
+        return res
+          .status(400)
+          .json({ message: "Campos obrigatórios não preenchidos." });
       }
 
-      const saida = await SaidaManual.create({
-        descricao,
-        valor,
-        formaPagamento,
-        data: new Date(),
-        empresaId: req.empresaId,
-      });
+      valor = Number(valor);
+      if (!Number.isFinite(valor) || valor <= 0) {
+        return res.status(400).json({ message: "Valor inválido." });
+      }
 
-      res.status(201).json(saida);
+      const saida = await SaidaManual.create(
+        withEmpresaId(SaidaManual, req, {
+          descricao: String(descricao).trim(),
+          valor,
+          formaPagamento: String(formaPagamento).trim().toLowerCase(),
+          data: new Date(),
+        })
+      );
+
+      return res.status(201).json(saida);
     } catch (error) {
-      console.error("Erro ao adicionar saída manual:", error);
-      res.status(500).json({ error: "Erro ao adicionar saída manual." });
+      console.error("[caixaController] addSaidaManual:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao adicionar saída manual." });
     }
   },
 
   async listarEntradas(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { EntradaManual } = db.models;
+      const db = await getDbFromReq(req);
+      const EntradaManual = db.EntradaManual;
 
       const entradas = await EntradaManual.findAll({
-        where: { empresaId: req.empresaId },
+        where: scopedWhere(EntradaManual, req),
         order: [["data", "DESC"]],
       });
-      res.json(entradas);
+
+      return res.json(entradas);
     } catch (error) {
-      console.error("Erro ao listar entradas manuais:", error);
-      res.status(500).json({ error: "Erro ao listar entradas manuais." });
+      console.error("[caixaController] listarEntradas:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao listar entradas manuais." });
     }
   },
 
   async listarSaidas(req, res) {
     try {
-      const db = getDbCliente(req.bancoCliente);
-      const { SaidaManual } = db.models;
+      const db = await getDbFromReq(req);
+      const SaidaManual = db.SaidaManual;
 
       const saidas = await SaidaManual.findAll({
-        where: { empresaId: req.empresaId },
+        where: scopedWhere(SaidaManual, req),
         order: [["data", "DESC"]],
       });
-      res.json(saidas);
+
+      return res.json(saidas);
     } catch (error) {
-      console.error("Erro ao listar saídas manuais:", error);
-      res.status(500).json({ error: "Erro ao listar saídas manuais." });
+      console.error("[caixaController] listarSaidas:", error);
+      return res
+        .status(500)
+        .json({ message: "Erro ao listar saídas manuais." });
     }
   },
 };

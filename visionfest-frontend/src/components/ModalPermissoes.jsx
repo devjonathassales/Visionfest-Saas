@@ -1,87 +1,92 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
+import { toast } from "react-toastify";
 
-const API_BASE = "http://localhost:5000/api";
-
-const modulosBase = [
-  "Contratos",
-  "Estoque",
-  "Financeiro",
-  "Clientes",
-  "Contratos",
-  "Fornecedores",
-  "Agenda",
-  "CRM",
-  "Relatórios",
-  "Configurações",
+// Chaves (keys) padronizadas que vão para o backend; labels são só para exibir
+const MODULOS = [
+  { key: "contratos", label: "Contratos" },
+  { key: "estoque", label: "Estoque" },
+  { key: "financeiro", label: "Financeiro" },
+  { key: "clientes", label: "Clientes" },
+  { key: "fornecedores", label: "Fornecedores" },
+  { key: "agenda", label: "Agenda" },
+  { key: "crm", label: "CRM" },
+  { key: "relatorios", label: "Relatórios" },
+  { key: "usuarios", label: "Usuários" },
+  { key: "permissoes", label: "Permissões" },
+  { key: "configuracoes", label: "Configurações Gerais" },
 ];
 
-export default function ModalPermissoes({ usuario, onClose, onSave }) {
+export default function ModalPermissoes({
+  usuario,
+  permissoesIniciais = null,
+  onClose,
+  onSave,
+}) {
+  const { apiCliente } = useAuth();
   const [permissoes, setPermissoes] = useState({});
   const [loadingPermissoes, setLoadingPermissoes] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
-  // Ajuste para separar "Usuários" dentro de Configurações
-  const modulos = modulosBase.map((modulo) =>
-    modulo === "Configurações" ? ["Usuários", "Permissões", "Configurações Gerais"] : modulo
-  ).flat();
-
-  // Carregar permissões do usuário do backend
+  // Carrega permissões locais: usa 'permissoesIniciais' se vierem, senão busca
   useEffect(() => {
-    if (!usuario) return;
-    setLoadingPermissoes(true);
-    fetch(`${API_BASE}/permissoes/${usuario.id}`)
-      .then(async (res) => {
-        if (!res.ok) {
-          throw new Error("Erro ao carregar permissões");
+    let ativo = true;
+    const hydrate = async () => {
+      if (!usuario) return;
+      setLoadingPermissoes(true);
+      try {
+        if (permissoesIniciais) {
+          if (ativo) setPermissoes(permissoesIniciais);
+        } else if (apiCliente) {
+          const { data } = await apiCliente.get(`/permissoes/${usuario.id}`);
+          if (ativo) setPermissoes(data?.permissoes || {});
         }
-        const data = await res.json();
-        setPermissoes(data.permissoes || {});
-      })
-      .catch((err) => {
-        alert(err.message);
-        setPermissoes({});
-      })
-      .finally(() => {
-        setLoadingPermissoes(false);
-      });
-  }, [usuario]);
+      } catch (err) {
+        console.error(err);
+        toast.error("Erro ao carregar permissões");
+        if (ativo) setPermissoes({});
+      } finally {
+        if (ativo) setLoadingPermissoes(false);
+      }
+    };
+    hydrate();
+    return () => {
+      ativo = false;
+    };
+  }, [usuario, permissoesIniciais, apiCliente]);
 
-  // Toggle permissão individual
-  const togglePermissao = (modulo, tipo) => {
+  const togglePermissao = (moduloKey, tipo) => {
     setPermissoes((prev) => ({
       ...prev,
-      [modulo]: {
-        ...prev[modulo],
-        [tipo]: !prev[modulo]?.[tipo],
+      [moduloKey]: {
+        visualizar: !!prev[moduloKey]?.visualizar,
+        criarEditar: !!prev[moduloKey]?.criarEditar,
+        excluir: !!prev[moduloKey]?.excluir,
+        [tipo]: !prev[moduloKey]?.[tipo],
       },
     }));
   };
 
-  // Marcar tudo
   const marcarTudo = () => {
-    const todasPermissoes = {};
-    modulos.forEach((modulo) => {
-      todasPermissoes[modulo] = { visualizar: true, criarEditar: true, excluir: true };
+    const todas = {};
+    MODULOS.forEach(({ key }) => {
+      todas[key] = { visualizar: true, criarEditar: true, excluir: true };
     });
-    setPermissoes(todasPermissoes);
+    setPermissoes(todas);
   };
 
-  // Desmarcar tudo
   const desmarcarTudo = () => {
-    const todasPermissoes = {};
-    modulos.forEach((modulo) => {
-      todasPermissoes[modulo] = { visualizar: false, criarEditar: false, excluir: false };
+    const todas = {};
+    MODULOS.forEach(({ key }) => {
+      todas[key] = { visualizar: false, criarEditar: false, excluir: false };
     });
-    setPermissoes(todasPermissoes);
+    setPermissoes(todas);
   };
 
-  // Salvar permissões no backend
   const salvar = async () => {
     setSalvando(true);
     try {
       await onSave(permissoes);
-    } catch (err) {
-      alert(err.message);
     } finally {
       setSalvando(false);
     }
@@ -101,7 +106,6 @@ export default function ModalPermissoes({ usuario, onClose, onSave }) {
         className="bg-white w-full max-w-3xl p-6 rounded-lg shadow-xl relative max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Botão Fechar */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-600 hover:text-gray-800 text-xl"
@@ -143,19 +147,19 @@ export default function ModalPermissoes({ usuario, onClose, onSave }) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {modulos.map((modulo) => (
+              {MODULOS.map(({ key, label }) => (
                 <div
-                  key={modulo}
+                  key={key}
                   className="border border-gray-200 rounded-md p-4 shadow-sm"
                 >
-                  <h3 className="font-semibold text-gray-700 mb-3">{modulo}</h3>
+                  <h3 className="font-semibold text-gray-700 mb-3">{label}</h3>
 
                   <label className="flex items-center space-x-2 mb-2">
                     <input
                       type="checkbox"
                       className="form-checkbox text-[#7ED957]"
-                      checked={permissoes[modulo]?.visualizar || false}
-                      onChange={() => togglePermissao(modulo, "visualizar")}
+                      checked={!!permissoes[key]?.visualizar}
+                      onChange={() => togglePermissao(key, "visualizar")}
                     />
                     <span>Visualizar</span>
                   </label>
@@ -164,18 +168,20 @@ export default function ModalPermissoes({ usuario, onClose, onSave }) {
                     <input
                       type="checkbox"
                       className="form-checkbox text-[#7ED957]"
-                      checked={permissoes[modulo]?.criarEditar || false}
-                      onChange={() => togglePermissao(modulo, "criarEditar")}
+                      checked={!!permissoes[key]?.criarEditar}
+                      onChange={() => togglePermissao(key, "criarEditar")}
                     />
-                    <span>{modulo === "Estoque" ? "Movimentar" : "Criar / Editar"}</span>
+                    <span>
+                      {label === "Estoque" ? "Movimentar" : "Criar / Editar"}
+                    </span>
                   </label>
 
                   <label className="flex items-center space-x-2">
                     <input
                       type="checkbox"
                       className="form-checkbox text-[#7ED957]"
-                      checked={permissoes[modulo]?.excluir || false}
-                      onChange={() => togglePermissao(modulo, "excluir")}
+                      checked={!!permissoes[key]?.excluir}
+                      onChange={() => togglePermissao(key, "excluir")}
                     />
                     <span>Excluir</span>
                   </label>

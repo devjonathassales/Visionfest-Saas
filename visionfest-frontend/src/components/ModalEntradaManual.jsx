@@ -1,6 +1,10 @@
 import React, { useState } from "react";
 
-export default function ModalEntradaManual({ isOpen, onClose, onSalvar }) {
+export default function ModalEntradaManual({
+  isOpen,
+  onClose,
+  onSalvar /*, contasBancarias*/,
+}) {
   const [descricao, setDescricao] = useState("");
   const [valor, setValor] = useState("");
   const [formaPagamento, setFormaPagamento] = useState("dinheiro");
@@ -13,7 +17,7 @@ export default function ModalEntradaManual({ isOpen, onClose, onSalvar }) {
 
     onSalvar({
       descricao,
-      valor: parseFloat(valor),
+      valor: Number(valor) || 0,
       formaPagamento,
     });
 

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import PagamentoEntrada from "./PagamentoEntrada";
-
-const API_BASE = "http://localhost:5000/api";
+import { useAuth } from "../contexts/authContext.jsx";
 
 export default function ContratoFinanceiroForm({
   contrato,
@@ -9,6 +8,8 @@ export default function ContratoFinanceiroForm({
   onClose,
   onSalvar,
 }) {
+  const { apiCliente } = useAuth();
+
   const [formasPagamento, setFormasPagamento] = useState([]);
   const [contasBancarias, setContasBancarias] = useState([]);
   const [cartoes, setCartoes] = useState([]);
@@ -30,20 +31,20 @@ export default function ContratoFinanceiroForm({
     async function carregarDados() {
       try {
         const [resFp, resCb, resCt] = await Promise.all([
-          fetch(`${API_BASE}/contas-receber/formas-pagamento`),
-          fetch(`${API_BASE}/contas-bancarias`),
-          fetch(`${API_BASE}/cartoes-credito`),
+          apiCliente.get("/contas-receber/formas-pagamento"),
+          apiCliente.get("/contas-bancarias"),
+          apiCliente.get("/cartoes-credito"),
         ]);
-        setFormasPagamento(await resFp.json());
-        setContasBancarias(await resCb.json());
-        setCartoes(await resCt.json());
+        setFormasPagamento(resFp.data);
+        setContasBancarias(resCb.data);
+        setCartoes(resCt.data);
       } catch (err) {
         console.error(err);
         alert("Erro ao carregar dados financeiros.");
       }
     }
     carregarDados();
-  }, []);
+  }, [apiCliente]);
 
   useEffect(() => {
     if (contrato) {
@@ -195,15 +196,11 @@ export default function ContratoFinanceiroForm({
     };
 
     try {
-      const res = await fetch(`${API_BASE}/contratos/${contrato.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) throw new Error("Erro ao salvar financeiro.");
-      const data = await res.json();
-      onSalvar(data);
+      const { data } = await apiCliente.put(
+        `/contratos/${contrato.id}`,
+        payload
+      );
+      onSalvar && onSalvar(data);
     } catch (err) {
       console.error(err);
       alert("Erro ao salvar informações financeiras.");
@@ -217,7 +214,7 @@ export default function ContratoFinanceiroForm({
           {modoEdicao ? "Editar Financeiro" : "Financeiro do Contrato"}
         </h2>
 
-        {/* Campos de desconto e entrada */}
+        {/* Desconto & Entrada */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="font-semibold">Tipo de Desconto</label>
@@ -325,7 +322,6 @@ export default function ContratoFinanceiroForm({
           </button>
         </div>
 
-        {/* Botões */}
         <div className="flex justify-end gap-4 pt-4">
           <button onClick={onClose} className="px-4 py-2 border rounded">
             Cancelar

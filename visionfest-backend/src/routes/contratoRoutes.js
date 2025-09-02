@@ -1,14 +1,15 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// CONTRATOS
+const authCliente = require("../middlewares/authCliente");
 const contratoController = require("../controllers/contratoController");
-router.get("/contratos", authEmpresa, contratoController.listar);
-router.get("/contratos/agenda", authEmpresa, contratoController.listarAgenda);
-router.get("/contratos/:id", authEmpresa, contratoController.buscarPorId);
-router.post("/contratos", authEmpresa, contratoController.criar);
-router.put("/contratos/:id", authEmpresa, contratoController.atualizar);
-router.delete("/contratos/:id", authEmpresa, contratoController.excluir);
+
+// O app monta assim: app.use("/api/contratos", contratoRoutes)
+// Portanto, aqui NÃO repita "/contratos"
+router.get("/", authCliente, contratoController.listar);
+router.get("/agenda", authCliente, contratoController.listarAgenda);
+router.get("/:id", authCliente, contratoController.buscarPorId);
+router.post("/", authCliente, contratoController.criar);
+router.put("/:id", authCliente, contratoController.atualizar);
+router.delete("/:id", authCliente, contratoController.excluir);
 
 module.exports = router;

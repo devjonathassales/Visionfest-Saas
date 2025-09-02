@@ -3,21 +3,20 @@ import MovimentarEstoqueForm from "../components/MovimentarEstoqueForm";
 import dayjs from "dayjs";
 import "dayjs/locale/pt-br";
 import { toast } from "react-toastify";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 dayjs.locale("pt-br");
-const API_BASE_URL = "http://localhost:5000/api";
 
 function getSemanaAtual() {
   const hoje = dayjs();
-  const inicio = hoje.startOf("week");
-  const fim = hoje.endOf("week");
   return {
-    inicio: inicio.format("YYYY-MM-DD"),
-    fim: fim.format("YYYY-MM-DD"),
+    inicio: hoje.startOf("week").format("YYYY-MM-DD"),
+    fim: hoje.endOf("week").format("YYYY-MM-DD"),
   };
 }
 
 export default function EstoquePage() {
+  const { api } = useAuth();
   const [produtos, setProdutos] = useState([]);
   const [filtroTexto, setFiltroTexto] = useState("");
   const [visao, setVisao] = useState("semanal");
@@ -25,9 +24,8 @@ export default function EstoquePage() {
   const [mostrarMovimentacao, setMostrarMovimentacao] = useState(false);
 
   useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") setMostrarMovimentacao(false);
-    };
+    const handleEsc = (e) =>
+      e.key === "Escape" && setMostrarMovimentacao(false);
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
   }, []);
@@ -56,40 +54,39 @@ export default function EstoquePage() {
 
   const fetchEstoque = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/estoque?inicio=${inicio}&fim=${fim}`
-      );
-      if (!res.ok) throw new Error("Erro ao buscar estoque");
-      const data = await res.json();
-      setProdutos(data);
+      // 🔑 sem barra inicial => respeita baseURL "/api"
+      const { data } = await api.get("/api/estoque", {
+        params: { inicio, fim },
+      });
+      setProdutos(data || []);
     } catch (error) {
-      toast.error("Erro ao carregar estoque: " + error.message);
+      toast.error(
+        "Erro ao carregar estoque: " +
+          (error?.response?.data?.erro || error.message)
+      );
     }
-  }, [inicio, fim]);
+  }, [api, inicio, fim]);
 
   useEffect(() => {
     fetchEstoque();
   }, [fetchEstoque]);
 
   const produtosFiltrados = produtos.filter((produto) =>
-    produto.nome.toLowerCase().includes(filtroTexto.toLowerCase())
+    (produto.nome || "").toLowerCase().includes(filtroTexto.toLowerCase())
   );
 
   const onSaveMovimentacao = async (movimentacao) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/estoque/movimentar`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(movimentacao),
-      });
-
-      if (!res.ok) throw new Error("Erro ao movimentar estoque");
-
+      // 🔑 sem barra inicial
+      await api.post("/api/estoque/movimentar", movimentacao);
       toast.success("Movimentação registrada com sucesso!");
       setMostrarMovimentacao(false);
       fetchEstoque();
     } catch (error) {
-      toast.error("Erro ao registrar movimentação: " + error.message);
+      toast.error(
+        "Erro ao registrar movimentação: " +
+          (error?.response?.data?.erro || error.message)
+      );
     }
   };
 
@@ -157,10 +154,11 @@ export default function EstoquePage() {
           </thead>
           <tbody>
             {produtosFiltrados.map((produto) => {
-              const estoqueReal = produto.estoque;
-              const provisionado = produto.provisionado;
+              const estoqueReal = Number(produto.estoque || 0);
+              const provisionado = Number(produto.provisionado || 0);
               const estoqueDisponivel = estoqueReal - provisionado;
-              const atingiuMinimo = estoqueDisponivel <= produto.estoqueMinimo;
+              const estoqueMinimo = Number(produto.estoqueMinimo || 0);
+              const atingiuMinimo = estoqueDisponivel <= estoqueMinimo;
 
               return (
                 <tr key={produto.id} className="border-t hover:bg-gray-50">
@@ -168,7 +166,7 @@ export default function EstoquePage() {
                   <td className="p-2 text-center">{estoqueReal}</td>
                   <td className="p-2 text-center">{provisionado}</td>
                   <td className="p-2 text-center">{estoqueDisponivel}</td>
-                  <td className="p-2 text-center">{produto.estoqueMinimo}</td>
+                  <td className="p-2 text-center">{estoqueMinimo}</td>
                   <td
                     className={`p-2 text-center font-semibold ${
                       atingiuMinimo ? "text-red-500" : "text-green-600"

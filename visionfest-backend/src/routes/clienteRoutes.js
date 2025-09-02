@@ -1,14 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
-
-// CLIENTE CRUD
+const authCliente = require("../middlewares/authCliente");
 const clienteController = require("../controllers/clienteController");
-router.get("/clientes", authEmpresa, clienteController.listar);
-router.get("/clientes/:id", authEmpresa, clienteController.buscarPorId);
-router.post("/clientes", authEmpresa, clienteController.criar);
-router.put("/clientes/:id", authEmpresa, clienteController.atualizar);
-router.delete("/clientes/:id", authEmpresa, clienteController.deletar);
 
+// Agora sem prefixo /clientes aqui (já é montado em /api/clientes no app.js)
+router.get("/", authCliente, clienteController.listar);
+router.get("/:id", authCliente, clienteController.buscarPorId);
+router.post("/", authCliente, clienteController.criar);
+router.put("/:id", authCliente, clienteController.atualizar);
+router.delete("/:id", authCliente, clienteController.deletar);
 
 module.exports = router;

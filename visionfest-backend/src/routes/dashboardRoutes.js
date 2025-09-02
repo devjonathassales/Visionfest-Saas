@@ -1,9 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
+const authCliente = require("../middlewares/authCliente");
 
-// DASHBOARD
 const dashboardController = require("../controllers/dashboardController");
-router.get("/dashboard", authEmpresa, dashboardController.dashboardResumo);
+
+// app.js monta: app.use("/api/dashboard", dashboardRoutes)
+router.get("/", authCliente, dashboardController.dashboardResumo);
 
 module.exports = router;

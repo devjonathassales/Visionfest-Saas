@@ -1,71 +1,71 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
+import { toast } from "react-toastify";
 import ModalPermissoes from "../../components/ModalPermissoes";
 
-const API_BASE = "http://localhost:5000/api";
-
 export default function PermissoesPage() {
+  const { apiCliente } = useAuth();
   const [usuarioSelecionado, setUsuarioSelecionado] = useState(null);
   const [filtro, setFiltro] = useState("");
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(false);
   const [permissoesUsuario, setPermissoesUsuario] = useState(null);
 
-  // Carrega usuários do backend
   const carregarUsuarios = async () => {
+    if (!apiCliente) return; // evita get em undefined
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/usuarios`);
-      if (!res.ok) throw new Error("Erro ao carregar usuários");
-      const data = await res.json();
-      setUsuarios(data);
+      const { data } = await apiCliente.get("/usuarios");
+      setUsuarios(Array.isArray(data) ? data : []);
     } catch (err) {
-      alert(err.message);
+      console.error(err);
+      toast.error(err?.response?.data?.error || "Erro ao carregar usuários");
     } finally {
       setLoading(false);
     }
   };
 
-  // Carrega permissões ao abrir modal
   const carregarPermissoes = async (usuario) => {
+    if (!apiCliente || !usuario?.id) return;
     try {
-      const res = await fetch(`${API_BASE}/permissoes/${usuario.id}`);
-      if (!res.ok) throw new Error("Erro ao carregar permissões do usuário");
-      const data = await res.json();
-      setPermissoesUsuario(data.permissoes || {}); // garantir estrutura
+      const { data } = await apiCliente.get(`/permissoes/${usuario.id}`);
+      setPermissoesUsuario(data?.permissoes || {});
       setUsuarioSelecionado(usuario);
     } catch (err) {
-      alert(err.message);
+      console.error(err);
+      toast.error(
+        err?.response?.data?.error || "Erro ao carregar permissões do usuário"
+      );
     }
   };
 
   useEffect(() => {
     carregarUsuarios();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiCliente]);
 
-  // Filtra usuários conforme texto digitado
-  const usuariosFiltrados = usuarios.filter((usuario) => {
-    const termo = filtro.toLowerCase();
-    return (
-      usuario.nome.toLowerCase().includes(termo) ||
-      usuario.email.toLowerCase().includes(termo)
+  const usuariosFiltrados = useMemo(() => {
+    const termo = filtro.trim().toLowerCase();
+    if (!termo) return usuarios;
+    return usuarios.filter(
+      (u) =>
+        u.nome?.toLowerCase().includes(termo) ||
+        u.email?.toLowerCase().includes(termo)
     );
-  });
+  }, [usuarios, filtro]);
 
-  // Salva permissões via API
   const salvarPermissoes = async (usuarioId, permissoesAtualizadas) => {
+    if (!apiCliente) return;
     try {
-      const res = await fetch(`${API_BASE}/permissoes/${usuarioId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ permissoes: permissoesAtualizadas }),
+      await apiCliente.put(`/permissoes/${usuarioId}`, {
+        permissoes: permissoesAtualizadas,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erro ao salvar permissões");
-      }
-      alert("Permissões salvas com sucesso!");
+      toast.success("Permissões salvas com sucesso!");
     } catch (err) {
-      alert(err.message);
+      console.error(err);
+      const msg = err?.response?.data?.error || "Erro ao salvar permissões";
+      toast.error(msg);
+      throw err; // mantém erro para o Modal exibir estado “Salvando...”
     }
   };
 

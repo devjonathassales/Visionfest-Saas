@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   FaUsers,
   FaBoxOpen,
   FaCashRegister,
   FaShoppingCart,
-  FaChartBar,
 } from "react-icons/fa";
 import {
   BarChart,
@@ -15,28 +14,66 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-
-const API_BASE_URL = "http://localhost:5000/api";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function DashboardPage() {
+  const { apiCliente } = useAuth(); // <- axios do tenant já com baseURL /api
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchDashboard() {
+    let ativo = true;
+    (async () => {
+      if (!apiCliente) return;
       try {
-        const res = await fetch(`${API_BASE_URL}/dashboard`);
-        if (!res.ok) throw new Error("Erro ao carregar dashboard");
-        const data = await res.json();
-        setDados(data);
+        setLoading(true);
+        const { data } = await apiCliente.get("/dashboard");
+        if (ativo) setDados(data);
       } catch (error) {
-        console.error(error);
+        console.error("Erro ao carregar dashboard:", error);
+        if (ativo) setDados(null);
       } finally {
-        setLoading(false);
+        if (ativo) setLoading(false);
       }
-    }
-    fetchDashboard();
-  }, []);
+    })();
+    return () => {
+      ativo = false;
+    };
+  }, [apiCliente]);
+
+  const cards = useMemo(() => {
+    const fmtMoeda = (v) =>
+      `R$ ${Number(v || 0).toLocaleString("pt-BR", {
+        minimumFractionDigits: 2,
+      })}`;
+
+    return [
+      {
+        title: "Clientes",
+        value: dados?.totalClientes ?? 0,
+        icon: <FaUsers size={32} className="text-white" />,
+        bg: "bg-green-500",
+      },
+      {
+        title: "Produtos em Estoque",
+        value: dados?.totalProdutos ?? 0,
+        icon: <FaBoxOpen size={32} className="text-white" />,
+        bg: "bg-gray-400",
+      },
+      {
+        title: "Faturamento do Mês",
+        value: fmtMoeda(dados?.totalFaturamento),
+        icon: <FaCashRegister size={32} className="text-white" />,
+        bg: "bg-green-600",
+      },
+      {
+        title: "Contratos do Mês",
+        value: dados?.totalContratosMes ?? 0,
+        icon: <FaShoppingCart size={32} className="text-white" />,
+        bg: "bg-gray-500",
+      },
+    ];
+  }, [dados]);
 
   if (loading) {
     return (
@@ -56,42 +93,12 @@ export default function DashboardPage() {
     );
   }
 
-  const cards = [
-    {
-      title: "Clientes",
-      value: dados.totalClientes,
-      icon: <FaUsers size={32} className="text-white" />,
-      bg: "bg-green-500",
-    },
-    {
-      title: "Produtos em Estoque",
-      value: dados.totalProdutos,
-      icon: <FaBoxOpen size={32} className="text-white" />,
-      bg: "bg-gray-400",
-    },
-    {
-      title: "Faturamento do Mês",
-      value: `R$ ${Number(dados.totalFaturamento).toLocaleString("pt-BR", {
-        minimumFractionDigits: 2,
-      })}`,
-      icon: <FaCashRegister size={32} className="text-white" />,
-      bg: "bg-green-600",
-    },
-    {
-      title: "Contratos do Mês",
-      value: dados.totalContratosMes,
-      icon: <FaShoppingCart size={32} className="text-white" />,
-      bg: "bg-gray-500",
-    },
-  ];
-
   return (
     <div className="p-8 space-y-8">
       <h1 className="text-4xl font-bold text-[#7ED957] font-montserrat">
         Visão Geral
       </h1>
 
-      {/* Cards principais */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
         {cards.map((card, index) => (
           <div
@@ -109,18 +116,23 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Gráfico faturamento últimos 6 meses */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-2xl text-[#C0C0C0] font-semibold mb-4 font-montserrat">
           Faturamento dos Últimos 6 Meses
         </h2>
 
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={dados.faturamentoUltimos6Meses}>
+          <BarChart data={dados.faturamentoUltimos6Meses || []}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="mes" />
             <YAxis />
-            <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
+            <Tooltip
+              formatter={(value) =>
+                `R$ ${Number(value || 0)
+                  .toFixed(2)
+                  .replace(".", ",")}`
+              }
+            />
             <Bar dataKey="total" fill="#7ED957" />
           </BarChart>
         </ResponsiveContainer>

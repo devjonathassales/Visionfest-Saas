@@ -135,7 +135,7 @@ app.use("/api/clientes", clienteRoutes);
 app.use("/api/fornecedores", fornecedorRoutes);
 app.use("/api/funcionarios", funcionarioRoutes);
 app.use("/api/produtos", produtosRoutes);
-app.use("/api", estoqueRoutes);
+app.use("/api/estoque", estoqueRoutes);
 app.use("/api/centrocusto", centroCustoRoutes);
 app.use("/api/cartoes-credito", cartoesCreditoRoutes);
 app.use("/api/contas-bancarias", contaBancariaRoutes);

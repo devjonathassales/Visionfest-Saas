@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { FiEdit2, FiPlus, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useAuth } from "/src/contexts/authContext.jsx";
 import CartaoCreditoForm from "../../components/CartaoCreditoForm";
 
-const API_URL = "http://localhost:5000/api/cartoes-credito";
-
 export default function CartoesCredito() {
+  const { api } = useAuth(); // axios com Bearer + X-Tenant
   const [cartoes, setCartoes] = useState([]);
   const [busca, setBusca] = useState("");
   const [formAberto, setFormAberto] = useState(false);
@@ -15,12 +15,15 @@ export default function CartoesCredito() {
   const buscarCartoes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(API_URL);
-      if (!res.ok) throw new Error("Erro ao carregar cartões");
-      const data = await res.json();
-      setCartoes(data);
+      const { data } = await api.get("/api/cartoes-credito");
+      // ordena por banco para melhorar a navegação
+      setCartoes(
+        [...data].sort((a, b) => (a.banco || "").localeCompare(b.banco || ""))
+      );
     } catch (err) {
-      toast.error("Erro ao buscar cartões: " + err.message);
+      toast.error(
+        `Erro ao buscar cartões: ${err?.response?.data?.message || err.message}`
+      );
     } finally {
       setLoading(false);
     }
@@ -28,6 +31,7 @@ export default function CartoesCredito() {
 
   useEffect(() => {
     buscarCartoes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const abrirFormNovo = () => {
@@ -42,25 +46,19 @@ export default function CartoesCredito() {
 
   const salvarCartao = async (cartao) => {
     try {
-      const metodo = cartao.id ? "PUT" : "POST";
-      const url = cartao.id ? `${API_URL}/${cartao.id}` : API_URL;
-
-      const res = await fetch(url, {
-        method: metodo,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(cartao),
-      });
-
-      if (!res.ok) throw new Error("Erro ao salvar cartão");
-      toast.success(
-        cartao.id
-          ? "Cartão atualizado com sucesso!"
-          : "Cartão adicionado com sucesso!"
-      );
-      buscarCartoes();
+      if (cartao.id) {
+        await api.put(`/api/cartoes-credito/${cartao.id}`, cartao);
+        toast.success("Cartão atualizado com sucesso!");
+      } else {
+        await api.post(`/api/cartoes-credito`, cartao);
+        toast.success("Cartão adicionado com sucesso!");
+      }
+      await buscarCartoes();
       setFormAberto(false);
     } catch (err) {
-      toast.error("Erro ao salvar: " + err.message);
+      toast.error(
+        `Erro ao salvar: ${err?.response?.data?.message || err.message}`
+      );
     }
   };
 
@@ -71,33 +69,35 @@ export default function CartoesCredito() {
     if (!confirmar) return;
 
     try {
-      const res = await fetch(`${API_URL}/${id}`, { method: "DELETE" });
-
-      if (res.status === 409) {
-        toast.warn(
-          "Este cartão não pode ser excluído pois está vinculado a transações."
-        );
-        return;
-      }
-
-      if (!res.ok) throw new Error("Erro ao excluir cartão");
-
+      await api.delete(`/api/cartoes-credito/${id}`);
       toast.success("Cartão excluído com sucesso!");
       buscarCartoes();
     } catch (err) {
-      toast.error("Erro ao excluir: " + err.message);
+      const status = err?.response?.status;
+      if (status === 409) {
+        toast.warn(
+          "Este cartão não pode ser excluído pois está vinculado a transações."
+        );
+      } else {
+        toast.error(
+          `Erro ao excluir: ${err?.response?.data?.message || err.message}`
+        );
+      }
     }
   };
 
   const cartoesFiltrados = cartoes.filter((c) =>
-    c.banco.toLowerCase().includes(busca.toLowerCase())
+    (c.banco || "").toLowerCase().includes(busca.toLowerCase())
   );
 
   return (
     <div className="p-4">
       <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center">Cartões de Crédito</h1>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center">
+          Cartões de Crédito
+        </h1>
       </div>
+
       <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2 py-5">
         <input
           type="text"
@@ -133,23 +133,17 @@ export default function CartoesCredito() {
                 <tr key={c.id} className="border-t hover:bg-gray-50">
                   <td className="p-2">{c.banco}</td>
                   <td className="p-2">
-                    {c.taxaDebito !== undefined &&
-                    c.taxaDebito !== null &&
-                    c.taxaDebito !== ""
+                    {c.taxaDebito ?? c.taxaDebito === 0
                       ? Number(c.taxaDebito).toFixed(2)
                       : "-"}
                   </td>
                   <td className="p-2">
-                    {c.taxaVista !== undefined &&
-                    c.taxaVista !== null &&
-                    c.taxaVista !== ""
+                    {c.taxaVista ?? c.taxaVista === 0
                       ? Number(c.taxaVista).toFixed(2)
                       : "-"}
                   </td>
                   <td className="p-2">
-                    {c.taxaParcelado !== undefined &&
-                    c.taxaParcelado !== null &&
-                    c.taxaParcelado !== ""
+                    {c.taxaParcelado ?? c.taxaParcelado === 0
                       ? Number(c.taxaParcelado).toFixed(2)
                       : "-"}
                   </td>

@@ -1,10 +1,11 @@
 const express = require("express");
 const router = express.Router();
-const authEmpresa = require("../middlewares/authCliente");
 
-// PERMISSÕES
+const authCliente = require("../middlewares/authCliente");
 const permissaoController = require("../controllers/permissaoController");
-router.get("/permissoes/:id", authEmpresa, permissaoController.buscarPermissoes);
-router.put("/permissoes/:id", authEmpresa, permissaoController.salvarPermissoes);
+
+// O app monta: app.use("/api/permissoes", permissaoRoutes)
+router.get("/:id", authCliente, permissaoController.buscarPermissoes);
+router.put("/:id", authCliente, permissaoController.salvarPermissoes);
 
 module.exports = router;

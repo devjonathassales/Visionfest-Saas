@@ -1,16 +1,16 @@
-import React, { useState, useEffect } from 'react';
-import FuncionarioForm from '../../components/FuncionarioForm';
-import FuncionarioVisualizar from '../../components/FuncionarioVisualizar';
-import { FiPlus, FiEye, FiEdit, FiTrash2 } from 'react-icons/fi';
-
-const API_BASE_URL = 'http://localhost:5000/api';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
+import FuncionarioForm from "/src/components/FuncionarioForm.jsx";
+import FuncionarioVisualizar from "/src/components/FuncionarioVisualizar.jsx";
+import { FiPlus, FiEye, FiEdit, FiTrash2 } from "react-icons/fi";
 
 export default function Funcionarios() {
+  const { api } = useAuth(); // axios com Bearer + X-Tenant
   const [funcionarios, setFuncionarios] = useState([]);
-  const [busca, setBusca] = useState('');
-  const [ordenarPor, setOrdenarPor] = useState('alfabetica');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataFim, setDataFim] = useState('');
+  const [busca, setBusca] = useState("");
+  const [ordenarPor, setOrdenarPor] = useState("alfabetica");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState(null);
   const [funcionarioVisualizar, setFuncionarioVisualizar] = useState(null);
@@ -19,12 +19,11 @@ export default function Funcionarios() {
   const fetchFuncionarios = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/funcionarios`);
-      if (!res.ok) throw new Error('Erro ao buscar funcionários');
-      const data = await res.json();
-      setFuncionarios(data);
-    } catch (error) {
-      alert('Erro ao carregar funcionários: ' + error.message);
+      const { data } = await api.get("/api/funcionarios");
+      setFuncionarios(data || []);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao carregar funcionários");
     } finally {
       setLoading(false);
     }
@@ -32,22 +31,23 @@ export default function Funcionarios() {
 
   useEffect(() => {
     fetchFuncionarios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtrarFuncionarios = () => {
     let lista = [...funcionarios];
     if (busca.length >= 3) {
-      lista = lista.filter(f =>
-        f.nome.toLowerCase().includes(busca.toLowerCase())
+      lista = lista.filter((f) =>
+        (f.nome || "").toLowerCase().includes(busca.toLowerCase())
       );
     }
-    if (ordenarPor === 'alfabetica') {
-      lista.sort((a, b) => a.nome.localeCompare(b.nome));
-    } else if (ordenarPor === 'data' && dataInicio && dataFim) {
+    if (ordenarPor === "alfabetica") {
+      lista.sort((a, b) => (a.nome || "").localeCompare(b.nome || ""));
+    } else if (ordenarPor === "data" && dataInicio && dataFim) {
       const inicio = new Date(dataInicio);
       const fim = new Date(dataFim);
-      lista = lista.filter(f => {
-        const data = new Date(f.dataCadastro);
+      lista = lista.filter((f) => {
+        const data = new Date(f.dataCadastro || f.createdAt || 0);
         return data >= inicio && data <= fim;
       });
     }
@@ -56,26 +56,20 @@ export default function Funcionarios() {
 
   const handleSalvar = async (novoFuncionario) => {
     try {
-      let res;
       if (novoFuncionario.id) {
-        res = await fetch(`${API_BASE_URL}/funcionarios/${novoFuncionario.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoFuncionario),
-        });
+        await api.put(
+          `/api/funcionarios/${novoFuncionario.id}`,
+          novoFuncionario
+        );
       } else {
-        res = await fetch(`${API_BASE_URL}/funcionarios`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(novoFuncionario),
-        });
+        await api.post(`/api/funcionarios`, novoFuncionario);
       }
-      if (!res.ok) throw new Error('Erro ao salvar funcionário');
       await fetchFuncionarios();
       setMostrarFormulario(false);
       setFuncionarioSelecionado(null);
-    } catch (error) {
-      alert('Erro ao salvar funcionário: ' + error.message);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar funcionário");
     }
   };
 
@@ -86,28 +80,23 @@ export default function Funcionarios() {
 
   const handleExcluir = async (id) => {
     if (!window.confirm("Deseja excluir este funcionário?")) return;
-
     try {
-      const res = await fetch(`${API_BASE_URL}/funcionarios/${id}`, { method: 'DELETE' });
-
-      if (res.status === 400) {
-        const err = await res.json();
-        throw new Error(err.error || 'Não é possível excluir este funcionário');
-      }
-
-      if (!res.ok) throw new Error('Erro ao excluir funcionário');
-
-      setFuncionarios(prev => prev.filter(f => f.id !== id));
-    } catch (error) {
-      alert('Erro ao excluir funcionário: ' + error.message);
+      await api.delete(`/api/funcionarios/${id}`);
+      setFuncionarios((prev) => prev.filter((f) => f.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao excluir funcionário");
     }
   };
 
   return (
     <div className="p-4">
       <div>
-        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">Cadastro de Funcionários</h1>
+        <h1 className="text-4xl font-bold text-[#7ED957] text-center mb-5">
+          Cadastro de Funcionários
+        </h1>
       </div>
+
       {funcionarioVisualizar && (
         <FuncionarioVisualizar
           funcionario={funcionarioVisualizar}
@@ -128,6 +117,7 @@ export default function Funcionarios() {
 
       {!mostrarFormulario && !funcionarioVisualizar && (
         <>
+          {/* Filtros */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <div className="flex flex-col md:flex-row gap-2 w-full md:w-2/3">
               <input
@@ -147,7 +137,7 @@ export default function Funcionarios() {
               </select>
             </div>
 
-            {ordenarPor === 'data' && (
+            {ordenarPor === "data" && (
               <div className="flex flex-col md:flex-row gap-2">
                 <input
                   type="date"
@@ -171,10 +161,12 @@ export default function Funcionarios() {
               }}
               className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded shadow hover:bg-green-500"
             >
-              <FiPlus /> <span className="hidden sm:inline">Novo Funcionário</span>
+              <FiPlus />{" "}
+              <span className="hidden sm:inline">Novo Funcionário</span>
             </button>
           </div>
 
+          {/* Tabela */}
           {loading ? (
             <div>Carregando funcionários...</div>
           ) : (
@@ -183,24 +175,32 @@ export default function Funcionarios() {
                 <tr>
                   <th className="p-2 text-left">Nome</th>
                   <th className="p-2 text-left hidden md:table-cell">Email</th>
-                  <th className="p-2 text-left hidden md:table-cell">Cargo</th>
+                  <th className="p-2 text-left hidden md:table-cell">Função</th>
                   <th className="p-2 text-center">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {filtrarFuncionarios().map(funcionario => (
-                  <tr key={funcionario.id} className="border-t hover:bg-gray-50">
-                    <td className="p-2">{funcionario.nome}</td>
-                    <td className="p-2 hidden md:table-cell">{funcionario.email}</td>
-                    <td className="p-2 hidden md:table-cell">{funcionario.cargo}</td>
+                {filtrarFuncionarios().map((f) => (
+                  <tr key={f.id} className="border-t hover:bg-gray-50">
+                    <td className="p-2">{f.nome}</td>
+                    <td className="p-2 hidden md:table-cell">{f.email}</td>
+                    <td className="p-2 hidden md:table-cell">
+                      {f.funcao || f.cargo}
+                    </td>
                     <td className="p-2 flex justify-center gap-2 text-primary">
-                      <button onClick={() => setFuncionarioVisualizar(funcionario)} title="Visualizar">
+                      <button
+                        onClick={() => setFuncionarioVisualizar(f)}
+                        title="Visualizar"
+                      >
                         <FiEye />
                       </button>
-                      <button onClick={() => handleEditar(funcionario)} title="Editar">
+                      <button onClick={() => handleEditar(f)} title="Editar">
                         <FiEdit />
                       </button>
-                      <button onClick={() => handleExcluir(funcionario.id)} title="Excluir">
+                      <button
+                        onClick={() => handleExcluir(f.id)}
+                        title="Excluir"
+                      >
                         <FiTrash2 />
                       </button>
                     </td>

@@ -1,34 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 
 export default function CartaoCreditoForm({ cartao, onSave, onCancel }) {
-  const [banco, setBanco] = useState('');
-  const [taxaVista, setTaxaVista] = useState('');
-  const [taxaParcelado, setTaxaParcelado] = useState('');
-  const [taxaDebito, setTaxaDebito] = useState('');
+  const [banco, setBanco] = useState("");
+  const [taxaVista, setTaxaVista] = useState("");
+  const [taxaParcelado, setTaxaParcelado] = useState("");
+  const [taxaDebito, setTaxaDebito] = useState("");
 
   useEffect(() => {
     if (cartao) {
-      setBanco(cartao.banco || '');
-      setTaxaVista(cartao.taxaVista || '');
-      setTaxaParcelado(cartao.taxaParcelado || '');
-      setTaxaDebito(cartao.taxaDebito || '');
+      setBanco(cartao.banco || "");
+      setTaxaVista(cartao.taxaVista ?? "");
+      setTaxaParcelado(cartao.taxaParcelado ?? "");
+      setTaxaDebito(cartao.taxaDebito ?? "");
     } else {
-      setBanco('');
-      setTaxaVista('');
-      setTaxaParcelado('');
-      setTaxaDebito('');
+      setBanco("");
+      setTaxaVista("");
+      setTaxaParcelado("");
+      setTaxaDebito("");
     }
   }, [cartao]);
 
+  const numOrNull = (v) =>
+    v === "" || v === null || v === undefined ? null : Number(v);
+
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!banco) return;
+    if (!banco.trim()) return;
+
     onSave({
       id: cartao?.id,
-      banco,
-      taxaVista: parseFloat(taxaVista),
-      taxaParcelado: parseFloat(taxaParcelado),
-      taxaDebito: parseFloat(taxaDebito),
+      banco: banco.trim(),
+      taxaVista: numOrNull(taxaVista),
+      taxaParcelado: numOrNull(taxaParcelado),
+      taxaDebito: numOrNull(taxaDebito),
     });
   };
 
@@ -53,17 +57,21 @@ export default function CartaoCreditoForm({ cartao, onSave, onCancel }) {
           value={taxaVista}
           onChange={(e) => setTaxaVista(e.target.value)}
           className="w-full border px-3 py-2 rounded"
+          placeholder="Ex: 3.50"
         />
       </div>
 
       <div>
-        <label className="block font-semibold">Taxa Crédito Parcelado (%)</label>
+        <label className="block font-semibold">
+          Taxa Crédito Parcelado (%)
+        </label>
         <input
           type="number"
           step="0.01"
           value={taxaParcelado}
           onChange={(e) => setTaxaParcelado(e.target.value)}
           className="w-full border px-3 py-2 rounded"
+          placeholder="Ex: 5.20"
         />
       </div>
 
@@ -75,6 +83,7 @@ export default function CartaoCreditoForm({ cartao, onSave, onCancel }) {
           value={taxaDebito}
           onChange={(e) => setTaxaDebito(e.target.value)}
           className="w-full border px-3 py-2 rounded"
+          placeholder="Ex: 1.90"
         />
       </div>
 

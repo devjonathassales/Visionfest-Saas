@@ -1,10 +1,69 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import ContratoVisualiza from "../components/ContratoVisualiza";
 import { toast } from "react-toastify";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
-const API_BASE_URL = "http://localhost:5000/api";
+// Constrói URL com /api no fallback (fetch)
+function buildUrl(path, params = {}) {
+  const clean = path.startsWith("/api")
+    ? path
+    : `/api${path.startsWith("/") ? path : `/${path}`}`;
+  const url = new URL(clean, window.location.origin);
+  Object.entries(params).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, v);
+  });
+  return url.toString();
+}
 
 export default function AgendaPage() {
+  const auth = useAuth();
+  // preferimos apiCliente; se não existir, tenta api
+  const axiosClient = useMemo(
+    () => auth?.apiCliente || auth?.api || null,
+    [auth]
+  );
+
+  // Ref que expõe um GET estável (não muda a cada render)
+  const httpRef = useRef({
+    get: async (path, cfg = {}) => {
+      const url = buildUrl(path, cfg.params);
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Falha ao GET ${url}: ${res.status}`);
+      }
+      const data = await res.json().catch(() => ({}));
+      return { data };
+    },
+  });
+
+  // sempre que o axios mudar, atualizamos a ref — sem quebrar a identidade do GET
+  useEffect(() => {
+    if (axiosClient?.get) {
+      httpRef.current.get = (path, cfg = {}) => {
+        // garante /api se o baseURL não tiver
+        const p = path.startsWith("/") ? path : `/${path}`;
+        const base = axiosClient?.defaults?.baseURL || "";
+        const baseHasApi = /\/api\/?$/.test(base);
+        const pathHasApi = p.startsWith("/api/");
+        const finalPath = baseHasApi || pathHasApi ? p : `/api${p}`;
+        return axiosClient.get(finalPath, cfg);
+      };
+    } else {
+      // fallback fetch
+      httpRef.current.get = async (path, cfg = {}) => {
+        const url = buildUrl(path, cfg.params);
+        const res = await fetch(url, { credentials: "include" });
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `Falha ao GET ${url}: ${res.status}`);
+        }
+        const data = await res.json().catch(() => ({}));
+        return { data };
+      };
+    }
+  }, [axiosClient]);
+
   const [dataInicio, setDataInicio] = useState(() => {
     const hoje = new Date();
     return new Date(hoje.getFullYear(), hoje.getMonth(), 1)
@@ -21,24 +80,40 @@ export default function AgendaPage() {
 
   const [eventos, setEventos] = useState([]);
   const [visualizandoContrato, setVisualizandoContrato] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const fetchEventos = useCallback(async () => {
-    try {
-      const params = new URLSearchParams({ dataInicio, dataFim });
-
-      const res = await fetch(`${API_BASE_URL}/contratos/agenda?${params}`);
-      if (!res.ok) throw new Error("Erro ao buscar eventos");
-
-      const data = await res.json();
-      setEventos(data);
-    } catch (error) {
-      toast.error("Erro ao carregar eventos: " + error.message);
-    }
-  }, [dataInicio, dataFim]);
+  // Evita refetch duplicado em StrictMode / renders consecutivos
+  const lastQueryKeyRef = useRef("");
 
   useEffect(() => {
-    fetchEventos();
-  }, [fetchEventos]);
+    let cancelled = false;
+
+    const run = async () => {
+      const key = `${dataInicio}::${dataFim}`;
+      if (lastQueryKeyRef.current === key) return; // mesma janela = não refaça
+      lastQueryKeyRef.current = key;
+
+      setLoading(true);
+      try {
+        const { data } = await httpRef.current.get("/contratos/agenda", {
+          params: { dataInicio, dataFim },
+        });
+        if (!cancelled) setEventos(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (!cancelled) {
+          console.error(error);
+          toast.error("Erro ao carregar eventos: " + (error?.message || ""));
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [dataInicio, dataFim]);
 
   const diasDoMes = () => {
     const start = new Date(dataInicio);
@@ -57,9 +132,25 @@ export default function AgendaPage() {
     return days;
   };
 
+  const abrirContrato = async (id) => {
+    let cancelled = false;
+    setLoading(true);
+    try {
+      const { data } = await httpRef.current.get(`/contratos/${id}`);
+      if (!cancelled) setVisualizandoContrato(data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao abrir contrato: " + (err?.message || ""));
+    } finally {
+      if (!cancelled) setLoading(false);
+    }
+    return () => {
+      cancelled = true;
+    };
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto font-open">
-      {/* Header */}
       <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6 text-center">
         Agenda de Eventos
       </h1>
@@ -88,6 +179,11 @@ export default function AgendaPage() {
         </div>
       </div>
 
+      {/* Loading simples */}
+      {loading && (
+        <div className="text-center text-gray-500 mb-3">Carregando...</div>
+      )}
+
       {/* Calendário */}
       <div className="overflow-x-auto">
         <div className="grid grid-cols-7 gap-[2px] min-w-[640px]">
@@ -113,18 +209,7 @@ export default function AgendaPage() {
               {eventos.map((evento, i) => (
                 <div
                   key={i}
-                  onClick={async () => {
-                    try {
-                      const res = await fetch(
-                        `${API_BASE_URL}/contratos/${evento.id}`
-                      );
-                      if (!res.ok) throw new Error("Erro ao buscar contrato");
-                      const contrato = await res.json();
-                      setVisualizandoContrato(contrato);
-                    } catch (err) {
-                      toast.error("Erro ao abrir contrato: " + err.message);
-                    }
-                  }}
+                  onClick={() => abrirContrato(evento.id)}
                   className="bg-green-500 text-white text-[10px] sm:text-xs rounded px-1 py-[2px] mb-1 cursor-pointer hover:bg-green-600 truncate"
                   title={`${evento.cliente} - ${evento.tema}`}
                 >

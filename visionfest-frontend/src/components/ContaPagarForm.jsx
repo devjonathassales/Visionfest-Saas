@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 
 export default function ContasPagarForm({ onClose, onSave, onPagar }) {
+  const { api } = useAuth();
   const [descricao, setDescricao] = useState("");
   const [centroCustoId, setCentroCustoId] = useState("");
   const [fornecedorId, setFornecedorId] = useState("");
@@ -9,43 +11,48 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
   const [desconto, setDesconto] = useState("");
   const [tipoDesconto, setTipoDesconto] = useState("valor");
   const [valorTotal, setValorTotal] = useState("0.00");
+
   const [centros, setCentros] = useState([]);
   const [fornecedores, setFornecedores] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/centrocusto")
-      .then((res) => res.json())
-      .then((data) => {
-        const somenteCustos = data.filter(
-          (c) => c.tipo === "Custo" || c.tipo === "Ambos"
+    (async () => {
+      try {
+        const { data: centrosData } = await api.get("/api/centrocusto");
+        setCentros(
+          (centrosData || []).filter(
+            (c) => c.tipo === "Custo" || c.tipo === "Ambos"
+          )
         );
-        setCentros(somenteCustos);
-      })
-      .catch((error) => console.error("Erro ao carregar centros:", error));
-
-    fetch("http://localhost:5000/api/fornecedores")
-      .then((res) => res.json())
-      .then(setFornecedores)
-      .catch((error) => console.error("Erro ao carregar fornecedores:", error));
-  }, []);
+      } catch (e) {
+        // silencioso
+      }
+      try {
+        const { data: fornData } = await api.get("/api/fornecedores");
+        setFornecedores(fornData || []);
+      } catch (e) {
+        // silencioso
+      }
+    })();
+  }, [api]);
 
   useEffect(() => {
     const v = parseFloat(valor) || 0;
     const d = parseFloat(desconto) || 0;
-    const total =
-      tipoDesconto === "percentual" ? v - (v * d) / 100 : v - d;
+    const total = tipoDesconto === "percentual" ? v - (v * d) / 100 : v - d;
     setValorTotal(total >= 0 ? total.toFixed(2) : "0.00");
   }, [valor, desconto, tipoDesconto]);
 
-  const construirPayload = () => ({
-    descricao,
-    centroCustoId,
-    fornecedorId,
-    vencimento,
-    valor: parseFloat(valor),
-    desconto: parseFloat(desconto),
+  const payload = () => ({
+    descricao: descricao.trim(),
+    centroCustoId: centroCustoId || null,
+    fornecedorId: fornecedorId || null,
+    vencimento: vencimento || null,
+    valor: parseFloat(valor) || 0,
+    desconto: parseFloat(desconto) || 0,
     tipoDesconto,
-    valorTotal: parseFloat(valorTotal),
+    valorTotal: parseFloat(valorTotal) || 0,
   });
 
   const handleSalvar = async () => {
@@ -53,20 +60,15 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
       alert("Selecione um fornecedor antes de salvar.");
       return;
     }
-
+    setSaving(true);
     try {
-      const novaConta = construirPayload();
-      const response = await fetch("http://localhost:5000/api/contas-pagar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(novaConta),
-      });
-
-      const data = await response.json();
-      if (onSave) onSave(data);
-      onClose();
-    } catch (error) {
-      console.error("Erro ao salvar conta:", error);
+      const { data } = await api.post("/api/contas-pagar", payload());
+      onSave && onSave(data);
+      onClose && onClose();
+    } catch {
+      alert("Erro ao salvar conta.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -75,27 +77,31 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
       alert("Selecione um fornecedor antes de salvar.");
       return;
     }
-
+    setSaving(true);
     try {
-      const novaConta = construirPayload();
-      const response = await fetch("http://localhost:5000/api/contas-pagar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(novaConta),
-      });
-
-      const data = await response.json();
-      if (onSave) onSave(data);
-      if (onPagar) onPagar(data);
-    } catch (error) {
-      console.error("Erro ao salvar e pagar:", error);
+      const { data } = await api.post("/api/contas-pagar", payload());
+      onSave && onSave(data);
+      onPagar && onPagar(data); // abre modal de pagamento vindo do pai
+    } catch {
+      alert("Erro ao salvar e iniciar pagamento.");
+    } finally {
+      setSaving(false);
     }
   };
+
+  // ESC fecha
+  useEffect(() => {
+    const h = (e) => e.key === "Escape" && onClose && onClose();
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white p-6 rounded-md w-full max-w-xl">
-        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">Nova Conta a Pagar</h2>
+        <h2 className="text-xl font-bold mb-4 text-[#7ED957]">
+          Nova Conta a Pagar
+        </h2>
         <div className="grid grid-cols-2 gap-4">
           <input
             type="text"
@@ -144,6 +150,8 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             className="input input-bordered w-full"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
+            min="0"
+            step="0.01"
           />
 
           <div className="flex gap-2">
@@ -161,6 +169,8 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
               className="input input-bordered w-1/2"
               value={desconto}
               onChange={(e) => setDesconto(e.target.value)}
+              min="0"
+              step="0.01"
             />
           </div>
 
@@ -178,6 +188,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             className="px-5 py-2 rounded-lg text-black"
             style={{ backgroundColor: "#C0C0C0" }}
             onClick={onClose}
+            disabled={saving}
           >
             Cancelar
           </button>
@@ -185,6 +196,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             className="px-5 py-2 rounded-lg text-white"
             style={{ backgroundColor: "#084C61" }}
             onClick={handleSalvarEPagar}
+            disabled={saving}
           >
             Salvar e Pagar
           </button>
@@ -192,6 +204,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
             className="px-5 py-2 rounded-lg text-black"
             style={{ backgroundColor: "#7ED957" }}
             onClick={handleSalvar}
+            disabled={saving}
           >
             Salvar
           </button>

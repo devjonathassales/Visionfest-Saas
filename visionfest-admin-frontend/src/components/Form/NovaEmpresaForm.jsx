@@ -4,28 +4,29 @@ import { X } from "lucide-react";
 import api from "../../utils/api";
 import ReceberForm from "./ReceberForm";
 
+const INITIAL_FORM = {
+  nome: "",
+  cpfCnpj: "",
+  dominio: "",
+  cep: "",
+  endereco: "",
+  numero: "",
+  bairro: "",
+  cidade: "",
+  uf: "",
+  whatsapp: "",
+  instagram: "",
+  email: "",
+  senhaSuperAdmin: "",
+  planoId: "",
+};
+
 export default function NovaEmpresaModalForm({
   onClose,
   onSuccess,
   empresaParaEditar,
 }) {
-  const [form, setForm] = useState({
-    nome: "",
-    cpfCnpj: "",
-    dominio: "",
-    cep: "",
-    endereco: "",
-    numero: "",
-    bairro: "",
-    cidade: "",
-    uf: "",
-    whatsapp: "",
-    instagram: "",
-    email: "",
-    senhaSuperAdmin: "",
-    planoId: "",
-  });
-
+  const [form, setForm] = useState(INITIAL_FORM);
   const [planos, setPlanos] = useState([]);
   const [loading, setLoading] = useState(false);
   const [empresaIdCriada, setEmpresaIdCriada] = useState(null);
@@ -70,7 +71,7 @@ export default function NovaEmpresaModalForm({
     }
   }, []);
 
-  // Se veio empresaParaEditar, preenche o formulário
+  // Preenche ao editar; reseta quando volta para "novo"
   useEffect(() => {
     if (empresaParaEditar) {
       setForm({
@@ -86,9 +87,12 @@ export default function NovaEmpresaModalForm({
         whatsapp: empresaParaEditar.whatsapp || "",
         instagram: empresaParaEditar.instagram || "",
         email: empresaParaEditar.email || "",
-        senhaSuperAdmin: "", // senha não pré-preenchida por segurança
+        senhaSuperAdmin: "",
         planoId: empresaParaEditar.planoId || "",
       });
+      setEmpresaIdCriada(null);
+    } else {
+      setForm(INITIAL_FORM);
       setEmpresaIdCriada(null);
     }
   }, [empresaParaEditar]);
@@ -141,7 +145,6 @@ export default function NovaEmpresaModalForm({
       setLoading(true);
 
       if (empresaParaEditar) {
-        // Edição: não permite editar domínio, email e senha pelo admin
         const updateData = { ...form };
         delete updateData.dominio;
         delete updateData.email;
@@ -149,10 +152,11 @@ export default function NovaEmpresaModalForm({
 
         await api.put(`/empresas/${empresaParaEditar.id}`, updateData);
         alert("Empresa atualizada com sucesso!");
-        if (onSuccess) onSuccess();
+        // 🔄 Atualiza lista + fecha modal
+        await onSuccess?.();
         onClose();
       } else {
-        // Criação
+        // Criação: já atualiza a lista (status: aguardando_pagamento)
         const res = await api.post("/empresas", form);
         const novaEmpresaId = res.data?.empresa?.id || res.data?.id;
         if (!novaEmpresaId) {
@@ -160,15 +164,19 @@ export default function NovaEmpresaModalForm({
           return;
         }
         setEmpresaIdCriada(novaEmpresaId);
+        // 🔄 Atualiza lista imediatamente
+        await onSuccess?.();
       }
     } catch (error) {
       alert("Erro ao salvar empresa");
+      console.error(error);
     } finally {
       setLoading(false);
     }
   }
+
   return (
-    <div className="bg-white rounded-xl shadow-2xl max-w-7xl w-full max-h-screen overflow-y-auto">
+    <div className="bg-white rounded-xl shadow-2xl max-w-7xl w/full max-h-screen overflow-y-auto">
       <div className="flex justify-between items-center px-8 py-4 border-b bg-white sticky top-0 z-10">
         <h2 className="text-3xl font-semibold text-gray-800">
           {empresaParaEditar ? "Editar Empresa" : "Cadastrar Nova Empresa"}
@@ -209,7 +217,7 @@ export default function NovaEmpresaModalForm({
             onChange={() => {}}
             maxLength={18}
             required
-            disabled={!!empresaParaEditar} // bloqueia edição do cpfCnpj na edição
+            disabled={!!empresaParaEditar}
             className="w-full border border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
@@ -224,7 +232,7 @@ export default function NovaEmpresaModalForm({
             onChange={onChange}
             placeholder="Ex: minhaempresa"
             required
-            disabled={!!empresaParaEditar} // bloqueia edição do domínio na edição
+            disabled={!!empresaParaEditar}
             className="w-full border border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
@@ -313,7 +321,7 @@ export default function NovaEmpresaModalForm({
             value={form.planoId}
             onChange={onChange}
             required
-            disabled={!!empresaParaEditar} // não pode alterar o plano no editar
+            disabled={!!empresaParaEditar}
             className="w-full border border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-100 disabled:cursor-not-allowed"
           >
             <option value="">Selecione</option>
@@ -360,7 +368,7 @@ export default function NovaEmpresaModalForm({
             value={form.email}
             onChange={onChange}
             required
-            disabled={!!empresaParaEditar} // não pode editar o email no editar
+            disabled={!!empresaParaEditar}
             className="w-full border border-gray-300 rounded-md px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500 bg-gray-100 disabled:cursor-not-allowed"
           />
         </div>
@@ -404,7 +412,7 @@ export default function NovaEmpresaModalForm({
         </div>
       </form>
 
-      {/* Se criou empresa nova, mostra formulário ReceberForm para pagamento */}
+      {/* Fluxo de pagamento/ativação após criar */}
       {!empresaParaEditar && empresaIdCriada && (
         <div className="p-8 border-t mt-8">
           <h3 className="text-xl font-semibold mb-4">
@@ -420,6 +428,8 @@ export default function NovaEmpresaModalForm({
               try {
                 await api.post(`/empresas/${empresaIdCriada}/ativar`);
                 alert("Pagamento registrado e empresa ativada com sucesso!");
+                // 🔄 garante atualização pós-ativação também
+                await onSuccess?.();
                 onClose();
               } catch (err) {
                 alert(

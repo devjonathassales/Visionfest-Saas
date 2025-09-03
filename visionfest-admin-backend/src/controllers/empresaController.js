@@ -1,9 +1,12 @@
 // controllers/empresaController.js
 const { Empresa, Plano, ContaReceber, sequelize } = require("../models");
 const { gerarParcelasPlanoAnual } = require("../utils/financeiroUtils");
-const { createSchemaAndSyncModels } = require("../utils/dbUtils");
+const { createSchemaAndSyncModels, withTenantDb } = require("../utils/dbUtils"); // <= IMPORT atualizado
 const { verificarEAtivarEmpresa } = require("../utils/empresaUtils");
 const bcrypt = require("bcryptjs");
+
+// helper para checar atributos com segurança
+const hasAttr = (Model, attr) => !!Model?.rawAttributes?.[attr];
 
 async function processarCriacaoEmpresa(req, res) {
   console.log("📩 Dados recebidos:", req.body);
@@ -113,6 +116,131 @@ async function processarCriacaoEmpresa(req, res) {
       plano,
       transaction: t,
     });
+
+    /* ===================== NOVO: semear no schema do cliente ===================== */
+    await withTenantDb(nomeBanco, async ({ models }) => {
+      const {
+        Empresa: EmpresaT,
+        Endereco: EnderecoT,
+        Contrato: ContratoT,
+        ContaReceber: CRT,
+      } = models;
+
+      // 1) Empresa do tenant (mantém o mesmo id se possível)
+      let empresaTenant = null;
+      if (EmpresaT) {
+        const payloadEmpresa = {
+          id: novaEmpresa.id, // se PK permitir
+          nome,
+          // nomes de colunas variam entre apps; preencha onde existir:
+          ...(hasAttr(EmpresaT, "documento") ? { documento: cpfCnpj } : {}),
+          ...(hasAttr(EmpresaT, "cpfCnpj") ? { cpfCnpj } : {}),
+          ...(hasAttr(EmpresaT, "whatsapp") ? { whatsapp } : {}),
+          ...(hasAttr(EmpresaT, "telefone") ? { telefone: null } : {}),
+          ...(hasAttr(EmpresaT, "email") ? { email } : {}),
+          ...(hasAttr(EmpresaT, "instagram") ? { instagram } : {}),
+          ...(hasAttr(EmpresaT, "dominio") ? { dominio } : {}),
+          ...(hasAttr(EmpresaT, "cep") ? { cep } : {}),
+          ...(hasAttr(EmpresaT, "endereco") ? { endereco } : {}),
+          ...(hasAttr(EmpresaT, "numero") ? { numero } : {}),
+          ...(hasAttr(EmpresaT, "bairro") ? { bairro } : {}),
+          ...(hasAttr(EmpresaT, "cidade") ? { cidade } : {}),
+          ...(hasAttr(EmpresaT, "uf") ? { uf } : {}),
+          ...(hasAttr(EmpresaT, "ativo") ? { ativo: true } : {}),
+        };
+
+        try {
+          empresaTenant = await EmpresaT.create(payloadEmpresa);
+        } catch {
+          // se não aceitar setar "id" manualmente
+          delete payloadEmpresa.id;
+          empresaTenant = await EmpresaT.create(payloadEmpresa);
+        }
+      }
+
+      // 2) Endereço padrão
+      if (EnderecoT && empresaTenant) {
+        const endPayload = {
+          ...(hasAttr(EnderecoT, "empresaId")
+            ? { empresaId: empresaTenant.id }
+            : {}),
+          ...(hasAttr(EnderecoT, "cep") ? { cep } : {}),
+          ...(hasAttr(EnderecoT, "logradouro") ? { logradouro: endereco } : {}),
+          ...(hasAttr(EnderecoT, "numero") ? { numero } : {}),
+          ...(hasAttr(EnderecoT, "bairro") ? { bairro } : {}),
+          ...(hasAttr(EnderecoT, "cidade") ? { cidade } : {}),
+          ...(hasAttr(EnderecoT, "estado") ? { estado: uf } : {}),
+          ...(hasAttr(EnderecoT, "padrao") ? { padrao: true } : {}),
+        };
+        await EnderecoT.create(endPayload);
+      }
+
+      // 3) Contrato
+      let contratoId = null;
+      if (ContratoT && empresaTenant) {
+        const agora = new Date();
+        const validade = new Date(agora);
+        validade.setMonth(validade.getMonth() + 12);
+
+        const contratoPayload = {
+          ...(hasAttr(ContratoT, "empresaId")
+            ? { empresaId: empresaTenant.id }
+            : {}),
+          ...(hasAttr(ContratoT, "plano") ? { plano: plano.nome } : {}),
+          ...(hasAttr(ContratoT, "valor") ? { valor: plano.valor } : {}),
+          ...(hasAttr(ContratoT, "dataInicio") ? { dataInicio: agora } : {}),
+          ...(hasAttr(ContratoT, "dataValidade")
+            ? { dataValidade: validade }
+            : {}),
+          ...(hasAttr(ContratoT, "renovacaoAutomatica")
+            ? { renovacaoAutomatica: true }
+            : {}),
+          ...(hasAttr(ContratoT, "status") ? { status: "ativo" } : {}),
+          ...(hasAttr(ContratoT, "dataEvento") ? { dataEvento: agora } : {}),
+        };
+
+        const contrato = await ContratoT.create(contratoPayload);
+        contratoId = contrato.id;
+      }
+
+      // 4) Clonar parcelas (ContaReceber) do PUBLIC -> TENANT
+      if (CRT && empresaTenant) {
+        const publicParcelas = await ContaReceber.findAll({
+          where: { empresaId: novaEmpresa.id },
+          order: [["vencimento", "ASC"]],
+          transaction: t, // lê dentro da transação do public
+        });
+
+        const rows = publicParcelas.map((p) => {
+          const r = {};
+          if (hasAttr(CRT, "empresaId")) r.empresaId = empresaTenant.id;
+          if (hasAttr(CRT, "numero") && p.numero != null) r.numero = p.numero;
+          if (hasAttr(CRT, "descricao"))
+            r.descricao = p.descricao || `Mensalidade do plano ${plano.nome}`;
+          if (hasAttr(CRT, "vencimento")) r.vencimento = p.vencimento;
+
+          // valor
+          if (hasAttr(CRT, "valorTotal"))
+            r.valorTotal = p.valorTotal ?? p.valor ?? plano.valor;
+          if (!hasAttr(CRT, "valorTotal") && hasAttr(CRT, "valor"))
+            r.valor = p.valor ?? p.valorTotal ?? plano.valor;
+
+          // status
+          if (hasAttr(CRT, "status")) r.status = p.status || "aberto";
+
+          // link com contrato, se houver
+          if (hasAttr(CRT, "contratoId") && contratoId)
+            r.contratoId = contratoId;
+
+          return r;
+        });
+
+        if (rows.length) {
+          await CRT.bulkCreate(rows);
+        }
+      }
+    });
+    /* ===================== /NOVO ===================== */
 
     await t.commit();
     return res.status(201).json({

@@ -49,7 +49,8 @@ export default function EmpresasPage() {
 
   async function ativarEmpresa(id) {
     try {
-      const res = await api.pa(`/empresas/${id}/ativar`);
+      // ✅ corrigido: era api.pa
+      const res = await api.patch(`/empresas/${id}/ativar`);
       toast.success(res.data.mensagem);
       carregarEmpresas();
     } catch (err) {
@@ -232,7 +233,12 @@ export default function EmpresasPage() {
           >
             <NovaEmpresaModalForm
               onClose={fecharModal}
-              onSuccess={carregarEmpresas}
+              // ✅ força refresh depois do save + fecha modal
+              onSuccess={async () => {
+                await carregarEmpresas();
+                toast.success("Empresa salva com sucesso!");
+                fecharModal();
+              }}
               empresaParaEditar={empresaParaEditar}
             />
           </div>
@@ -253,7 +259,6 @@ export default function EmpresasPage() {
               Aqui você pode permitir o upgrade da empresa{" "}
               <strong>{upgradeEmpresa.nome}</strong>.
             </p>
-            {/* Adicione lógica para exibir planos superiores e escolher um */}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={fecharUpgradeModal}
@@ -262,10 +267,10 @@ export default function EmpresasPage() {
                 Cancelar
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
                   toast.success("Upgrade realizado com sucesso!");
                   fecharUpgradeModal();
-                  carregarEmpresas();
+                  await carregarEmpresas();
                 }}
                 className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
               >

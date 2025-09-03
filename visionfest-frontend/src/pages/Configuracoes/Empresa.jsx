@@ -1,126 +1,96 @@
+// src/pages/admin/CadastroEmpresa.jsx
 import React, { useEffect, useState } from "react";
+import { useAuth } from "/src/contexts/authContext.jsx";
 import EmpresaCard from "../../components/EmpresaCard";
 import EmpresaForm from "../../components/EmpresaForm";
 import ModalVisualizarEmpresa from "../../components/ModalVisualizarEmpresa";
 
-const API_BASE = "http://localhost:5000/api";
-
 export default function CadastroEmpresa() {
-  const [empresas, setEmpresas] = useState([]);
+  const { apiCliente } = useAuth();
+  const [empresa, setEmpresa] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [empresaSelecionada, setEmpresaSelecionada] = useState(null);
   const [empresaVisualizar, setEmpresaVisualizar] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    carregarEmpresas();
-  }, []);
-
-  const carregarEmpresas = async () => {
+  const carregar = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/empresa/todas`);
-      if (!res.ok) throw new Error("Erro ao carregar empresas");
-      const data = await res.json();
-      setEmpresas(data || []);
+      const { data } = await apiCliente.get("/empresa");
+      setEmpresa(data || null);
     } catch (err) {
-      console.error("Erro ao carregar empresas:", err);
-      alert("Erro ao carregar empresas");
+      console.error("Erro ao carregar empresa:", err);
+      alert(err?.response?.data?.error || "Erro ao carregar empresa");
     } finally {
       setLoading(false);
     }
   };
 
-  const abrirFormulario = (empresa = null) => {
-    setEmpresaSelecionada(
-      empresa || {
-        nome: "",
-        documento: "",
-        whatsapp: "",
-        telefone: "",
-        email: "",
-        instagram: "",
-        logo: null,
-        enderecos: [
-          {
-            logradouro: "",
-            numero: "",
-            bairro: "",
-            cidade: "",
-            estado: "",
-            cep: "",
-            padrao: true,
-          },
-        ],
-      }
-    );
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  const abrirFormulario = () => {
     setMostrarFormulario(true);
   };
 
   const fecharFormulario = () => {
     setMostrarFormulario(false);
-    setEmpresaSelecionada(null);
-    carregarEmpresas();
-  };
-
-  const excluirEmpresa = async (empresa) => {
-    const confirmar = window.confirm(
-      `Tem certeza que deseja excluir a empresa "${empresa.nome}"?`
-    );
-    if (!confirmar) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/empresa/${empresa.id}`, {
-        method: "DELETE",
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || "Erro ao excluir empresa");
-
-      alert("Empresa excluída com sucesso!");
-      carregarEmpresas();
-    } catch (err) {
-      console.error("Erro ao excluir empresa:", err);
-      alert(err.message || "Erro ao excluir empresa");
-    }
+    setEmpresaVisualizar(null);
+    carregar();
   };
 
   return (
     <div className="p-6 font-open max-w-5xl mx-auto">
       <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6">
-        Empresas Cadastradas
+        Dados da Empresa
       </h1>
 
-      {loading && <p>Carregando empresas...</p>}
+      {loading && <p>Carregando...</p>}
 
-      {!loading && empresas.length === 0 && (
-        <p className="text-gray-500 mb-4">Nenhuma empresa cadastrada ainda.</p>
+      {!loading && empresa && !mostrarFormulario && (
+        <EmpresaCard
+          empresa={empresa}
+          onEditar={abrirFormulario}
+          onVisualizar={() => setEmpresaVisualizar(empresa)}
+          onExcluir={null /* não aplicável no tenant */}
+        />
       )}
 
-      {!loading &&
-        empresas.map((empresa, i) => (
-          <EmpresaCard
-            key={empresa.id || i}
-            empresa={empresa}
-            onEditar={() => abrirFormulario(empresa)}
-            onVisualizar={() => setEmpresaVisualizar(empresa)}
-            onExcluir={() => excluirEmpresa(empresa)}
-          />
-        ))}
+      {!loading && !empresa && !mostrarFormulario && (
+        <div className="text-gray-600 mb-4">
+          Nenhuma empresa registrada no tenant ainda.
+        </div>
+      )}
 
       {!mostrarFormulario && (
-        <button
-          onClick={() => abrirFormulario()}
-          className="bg-[#7ED957] text-white px-6 py-2 rounded mt-4 hover:bg-[#65b344]"
-        >
-          Cadastrar Empresa
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={abrirFormulario}
+            className="bg-[#7ED957] text-white px-6 py-2 rounded mt-2 hover:bg-[#65b344]"
+          >
+            {empresa ? "Editar Empresa" : "Cadastrar Empresa"}
+          </button>
+
+          <button
+            onClick={async () => {
+              try {
+                await apiCliente.post("/empresa/importar-admin");
+                alert("Empresa importada do admin!");
+                carregar();
+              } catch (e) {
+                alert(e?.response?.data?.error || "Erro ao importar do admin");
+              }
+            }}
+            className="px-6 py-2 border rounded mt-2"
+          >
+            Reimportar do Admin
+          </button>
+        </div>
       )}
 
-      {mostrarFormulario && empresaSelecionada && (
+      {mostrarFormulario && (
         <EmpresaForm
-          empresa={empresaSelecionada}
+          empresa={empresa}
           onCancelar={fecharFormulario}
           onSalvar={fecharFormulario}
         />

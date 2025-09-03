@@ -1,12 +1,17 @@
 import React from "react";
 
-export default function EmpresaCard({ empresa, onVisualizar, onEditar, onExcluir }) {
+export default function EmpresaCard({
+  empresa,
+  onVisualizar,
+  onEditar,
+  onExcluir,
+}) {
   return (
     <div className="bg-white shadow rounded p-4 flex flex-col md:flex-row items-center justify-between gap-4">
       <div className="flex items-center gap-4">
         {empresa.logo ? (
           <img
-            src={`http://localhost:5000/uploads/${empresa.logo}`}
+            src={`/uploads/${empresa.logo}`}
             alt={`${empresa.nome} Logo`}
             className="w-16 h-16 object-contain rounded"
           />
@@ -15,11 +20,12 @@ export default function EmpresaCard({ empresa, onVisualizar, onEditar, onExcluir
             Sem Logo
           </div>
         )}
-
         <div>
           <h3 className="text-lg font-semibold">{empresa.nome}</h3>
           <p className="text-sm text-gray-600">CNPJ/CPF: {empresa.documento}</p>
-          <p className="text-sm text-gray-600">Whatsapp: {empresa.whatsapp || "-"}</p>
+          <p className="text-sm text-gray-600">
+            Whatsapp: {empresa.whatsapp || "-"}
+          </p>
         </div>
       </div>
 
@@ -36,13 +42,7 @@ export default function EmpresaCard({ empresa, onVisualizar, onEditar, onExcluir
         >
           Editar
         </button>
-        <button
-          className="bg-red-500 hover:bg-red-700 text-white px-4 py-2 rounded"
-          onClick={onExcluir}
-          title="Excluir Empresa"
-        >
-          Excluir
-        </button>
+        {/* Excluir não faz sentido no tenant (removido) */}
       </div>
     </div>
   );

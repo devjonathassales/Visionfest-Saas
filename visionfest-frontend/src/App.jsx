@@ -45,6 +45,8 @@ import Usuarios from "./pages/Configuracoes/Usuarios";
 import Permissoes from "./pages/Configuracoes/Permissoes";
 import Faturas from "./pages/Configuracoes/Faturas";
 import Contrato from "./pages/Configuracoes/Contrato";
+import Suporte from "./pages/Configuracoes/Suporte";
+
 
 export default function App() {
   return (
@@ -99,6 +101,7 @@ export default function App() {
               <Route path="configuracoes/permissoes" element={<Permissoes />} />
               <Route path="configuracoes/faturas" element={<Faturas />} />
               <Route path="configuracoes/contrato" element={<Contrato />} />
+              <Route path="configuracoes/suporte" element={<Suporte />} />
             </Route>
           </Route>
         </Routes>

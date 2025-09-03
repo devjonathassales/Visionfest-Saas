@@ -6,47 +6,56 @@ import {
 } from 'react-icons/fi';
 
 const menuStructure = [
-  { label: 'Dashboard', icon: <FiHome />, path: '/' },
+  { label: "Dashboard", icon: <FiHome />, path: "/" },
   {
-    label: 'Cadastros', icon: <FiUser />, children: [
-      { label: 'Clientes', path: '/cadastros/clientes' },
-      { label: 'Fornecedores', path: '/cadastros/fornecedores' },
-      { label: 'Funcionários', path: '/cadastros/funcionarios' },
-      { label: 'Produtos/Serviços', path: '/cadastros/produtos' },
-    ]
+    label: "Cadastros",
+    icon: <FiUser />,
+    children: [
+      { label: "Clientes", path: "/cadastros/clientes" },
+      { label: "Fornecedores", path: "/cadastros/fornecedores" },
+      { label: "Funcionários", path: "/cadastros/funcionarios" },
+      { label: "Produtos/Serviços", path: "/cadastros/produtos" },
+    ],
   },
-  { label: 'Estoque', icon: <FiBox />, path: '/estoque' },
-  { label: 'Contratos', icon: <FiFileText />, path: '/contratos' },
-  { label: 'Agenda', icon: <FiCalendar />, path: '/agenda' },
-  { label: 'CRM', icon: <FiBarChart2 />, path: '/crm' },
+  { label: "Estoque", icon: <FiBox />, path: "/estoque" },
+  { label: "Contratos", icon: <FiFileText />, path: "/contratos" },
+  { label: "Agenda", icon: <FiCalendar />, path: "/agenda" },
+  { label: "CRM", icon: <FiBarChart2 />, path: "/crm" },
   {
-    label: 'Financeiro', icon: <FiDollarSign />, children: [
-      { label: 'Caixa', path: '/financeiro/caixa' },
-      { label: 'Contas a Pagar', path: '/financeiro/pagar' },
-      { label: 'Contas a Receber', path: '/financeiro/receber' },
-      { label: 'Contas Bancárias', path: '/financeiro/contas-bancarias' },
-      { label: 'Cartões de Crédito', path: '/financeiro/cartoes' },
-      { label: 'Centro de Custo/Receita', path: '/financeiro/centro-custo' },
-    ]
-  },
-  {
-    label: 'Relatórios', icon: <FiFileText />, children: [
-      { label: 'Clientes', path: '/relatorios/clientes' },
-      { label: 'Contratos', path: '/relatorios/contratos' },
-      { label: 'Agenda', path: '/relatorios/agenda' },
-      { label: 'Fluxo de Caixa', path: '/relatorios/fluxo-caixa' },
-      { label: 'Financeiro', path: '/relatorios/financeiro' },
-      { label: 'Estoque', path: '/relatorios/estoque' },
-    ]
+    label: "Financeiro",
+    icon: <FiDollarSign />,
+    children: [
+      { label: "Caixa", path: "/financeiro/caixa" },
+      { label: "Contas a Pagar", path: "/financeiro/pagar" },
+      { label: "Contas a Receber", path: "/financeiro/receber" },
+      { label: "Contas Bancárias", path: "/financeiro/contas-bancarias" },
+      { label: "Cartões de Crédito", path: "/financeiro/cartoes" },
+      { label: "Centro de Custo/Receita", path: "/financeiro/centro-custo" },
+    ],
   },
   {
-    label: 'Configurações', icon: <FiSettings />, children: [
-      { label: 'Empresa', path: '/configuracoes/empresa' },
-      { label: 'Usuários', path: '/configuracoes/usuarios' },
-      { label: 'Permissões de Usuários', path: '/configuracoes/permissoes' },
-      { label: 'Faturas', path: '/configuracoes/faturas' },
-      { label: 'Contrato', path: '/configuracoes/contrato' },
-    ]
+    label: "Relatórios",
+    icon: <FiFileText />,
+    children: [
+      { label: "Clientes", path: "/relatorios/clientes" },
+      { label: "Contratos", path: "/relatorios/contratos" },
+      { label: "Agenda", path: "/relatorios/agenda" },
+      { label: "Fluxo de Caixa", path: "/relatorios/fluxo-caixa" },
+      { label: "Financeiro", path: "/relatorios/financeiro" },
+      { label: "Estoque", path: "/relatorios/estoque" },
+    ],
+  },
+  {
+    label: "Configurações",
+    icon: <FiSettings />,
+    children: [
+      { label: "Empresa", path: "/configuracoes/empresa" },
+      { label: "Usuários", path: "/configuracoes/usuarios" },
+      { label: "Permissões de Usuários", path: "/configuracoes/permissoes" },
+      { label: "Faturas", path: "/configuracoes/faturas" },
+      { label: "Contrato", path: "/configuracoes/contrato" },
+      { label: "Suporte", path: "/configuracoes/suporte" },
+    ],
   },
 ];
 

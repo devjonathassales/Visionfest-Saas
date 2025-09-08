@@ -20,8 +20,8 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
     (async () => {
       try {
         const [{ data: cli }, { data: cc }] = await Promise.all([
-          api.get("/api/clientes"),
-          api.get("/api/centrocusto"),
+          api.get("/clientes"),
+          api.get("/centrocusto"),
         ]);
         if (!alive) return;
         setClientes(cli);
@@ -58,7 +58,7 @@ export default function ContaReceberForm({ onClose, onSave, onPagar }) {
         valorTotal: parseFloat(valorTotal) || 0,
       };
 
-      const { data } = await api.post("/api/contas-receber", novaConta);
+      const { data } = await api.post("/contas-receber", novaConta);
 
       onSave && onSave(data);
       onClose && onClose();

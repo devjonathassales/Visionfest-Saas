@@ -15,7 +15,7 @@ export default function ContasBancarias() {
   const carregarContas = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/contas-bancarias");
+      const { data } = await api.get("/contas-bancarias");
       setContas(data || []);
     } catch (err) {
       toast.error("Erro ao carregar contas");
@@ -58,10 +58,10 @@ export default function ContasBancarias() {
     setLoading(true);
     try {
       if (conta.id) {
-        await api.put(`/api/contas-bancarias/${conta.id}`, conta);
+        await api.put(`contas-bancarias/${conta.id}`, conta);
         toast.success("Conta atualizada com sucesso!");
       } else {
-        await api.post("/api/contas-bancarias", conta);
+        await api.post("contas-bancarias", conta);
         toast.success("Conta adicionada com sucesso!");
       }
       await carregarContas();
@@ -80,7 +80,7 @@ export default function ContasBancarias() {
 
     setLoading(true);
     try {
-      const res = await api.delete(`/api/contas-bancarias/${id}`);
+      const res = await api.delete(`/contas-bancarias/${id}`);
       // Alguns backends retornam 204, outros um JSON de sucesso — cobrimos os dois
       if (res?.status === 204 || res?.data) {
         toast.success("Conta excluída com sucesso!");

@@ -1,116 +1,81 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "/src/contexts/authContext.jsx";
 
-export default function FaturasPage() {
+export default function Faturas() {
   const { apiCliente } = useAuth();
-  const [faturas, setFaturas] = useState([]);
+  const [itens, setItens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [erro, setErro] = useState(null);
 
   useEffect(() => {
-    let ativo = true;
     (async () => {
       setLoading(true);
+      setErro(null);
       try {
         const { data } = await apiCliente.get("/faturas");
-        if (ativo) setFaturas(data || []);
+        setItens(data || []);
       } catch (e) {
-        if (ativo)
-          setErro(e?.response?.data?.error || "Erro ao carregar faturas");
+        setErro(e?.response?.data?.error || "Erro ao carregar faturas");
       } finally {
-        if (ativo) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => {
-      ativo = false;
-    };
-  }, [apiCliente]);
+  }, []);
 
-  const pagar = async (faturaId) => {
-    try {
-      const { data } = await apiCliente.post(`/faturas/${faturaId}/pagar`);
-      alert(data?.message || "Pagamento iniciado.");
-    } catch (e) {
-      alert(e?.response?.data?.error || "Erro ao iniciar pagamento.");
-    }
-  };
-
-  if (loading) return <p>Carregando faturas...</p>;
-  if (erro) return <p className="text-red-600">Erro: {erro}</p>;
-  if (faturas.length === 0) return <p>Você não possui faturas.</p>;
-
-  const formatDate = (iso) =>
-    new Date(iso).toLocaleDateString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  const formatMoney = (v) =>
+  const moeda = (v) =>
     `R$ ${Number(v || 0).toLocaleString("pt-BR", {
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
     })}`;
 
-  const statusClasses = {
-    pago: "text-green-600",
-    pendente: "text-yellow-600",
-    atrasado: "text-red-600",
-  };
+  const fmtData = (iso) =>
+    iso ? new Date(iso).toLocaleDateString("pt-BR") : "-";
 
-  const statusPt = {
-    pago: "Pago",
-    pendente: "A vencer",
-    atrasado: "Em atraso",
-  };
+  if (loading) return <p>Carregando faturas...</p>;
+  if (erro) return <p className="text-red-600">{erro}</p>;
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded shadow font-open">
-      <h1 className="text-3xl font-semibold text-[#7ED957] mb-6 font-montserrat">
-        Minhas Faturas
-      </h1>
-
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-[#7ED957] text-white">
-            <th className="p-3 text-left">Parcela</th>
-            <th className="p-3 text-left">Vencimento</th>
-            <th className="p-3 text-left">Valor</th>
-            <th className="p-3 text-left">Status</th>
-            <th className="p-3 text-left">Ação</th>
-          </tr>
-        </thead>
-        <tbody>
-          {faturas.map((f) => (
-            <tr
-              key={f.id}
-              className="border-b border-gray-200 hover:bg-gray-50"
-            >
-              <td className="p-3">{f.numero}</td>
-              <td className="p-3">{formatDate(f.vencimento)}</td>
-              <td className="p-3">{formatMoney(f.valor)}</td>
-              <td
-                className={`p-3 font-semibold ${statusClasses[f.status] || ""}`}
-              >
-                {statusPt[f.status] || f.status}
-              </td>
-              <td className="p-3">
-                {f.status === "pendente" || f.status === "atrasado" ? (
-                  <button
-                    className="bg-[#7ED957] hover:bg-green-600 text-white px-4 py-1 rounded"
-                    onClick={() => pagar(f.id)}
-                  >
-                    Pagar
-                  </button>
-                ) : (
-                  <span className="text-gray-500 italic">-</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {/* Dica de UX futura: mostrar instruções/linha digitável/2ª via quando pago/pendente */}
+    <div className="max-w-5xl mx-auto p-6 bg-white rounded-xl shadow">
+      <h1 className="text-2xl font-bold mb-4">Faturas</h1>
+      {itens.length === 0 ? (
+        <p>Nenhuma fatura encontrada.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b">
+                <th className="py-2">#</th>
+                <th className="py-2">Descrição</th>
+                <th className="py-2">Vencimento</th>
+                <th className="py-2">Valor</th>
+                <th className="py-2">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itens.map((f) => (
+                <tr key={f.id} className="border-b hover:bg-gray-50">
+                  <td className="py-2">{f.numero ?? "-"}</td>
+                  <td className="py-2">{f.descricao}</td>
+                  <td className="py-2">{fmtData(f.vencimento)}</td>
+                  <td className="py-2">{moeda(f.valor)}</td>
+                  <td className="py-2">
+                    <span
+                      className={`px-2 py-1 rounded-full text-white ${
+                        f.status === "pago"
+                          ? "bg-green-500"
+                          : f.status === "aberto"
+                          ? "bg-yellow-500 text-black"
+                          : "bg-gray-500"
+                      }`}
+                    >
+                      {String(f.status || "").toUpperCase()}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

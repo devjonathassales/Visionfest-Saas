@@ -1,36 +1,21 @@
 // src/routes/empresaRoutes.js
 const express = require("express");
-const path = require("path");
-const multer = require("multer");
 const router = express.Router();
-
-const authCliente = require("../middlewares/authCliente");
 const empresaController = require("../controllers/empresaController");
 
-// multer simples p/ uploads/ (mesmo caminho que você já usa)
-const storage = multer.diskStorage({
-  destination: path.join(__dirname, "..", "uploads"),
-  filename: (_req, file, cb) => {
-    const ts = Date.now();
-    const safe = file.originalname.replace(/\s+/g, "_");
-    cb(null, `${ts}_${safe}`);
-  },
-});
-const upload = multer({ storage });
+// BASE DO ROUTER: /api/empresa
 
-// app.js: app.use("/api/empresa", empresaRoutes)
-router.post("/importar-admin", authCliente, empresaController.importarDoAdmin);
-
-router.get("/", authCliente, empresaController.getEmpresa);
+// --- Rotas corretas na raiz ---
+router.get("/", empresaController.getEmpresa);
 router.put(
   "/",
-  authCliente,
-  upload.single("logo"),
-  empresaController.atualizarEmpresa
+  /* upload.single('logo'), */ empresaController.atualizarEmpresa
 );
+router.post("/importar-admin", empresaController.importarDoAdmin);
+router.post("/enderecos", empresaController.criarEndereco);
+router.put("/enderecos/:id", empresaController.atualizarEndereco);
+router.delete("/enderecos/:id", empresaController.excluirEndereco);
 
-router.post("/enderecos", authCliente, empresaController.criarEndereco);
-router.put("/enderecos/:id", authCliente, empresaController.atualizarEndereco);
-router.delete("/enderecos/:id", authCliente, empresaController.excluirEndereco);
+
 
 module.exports = router;

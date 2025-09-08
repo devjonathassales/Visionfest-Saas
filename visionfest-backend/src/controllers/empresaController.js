@@ -1,7 +1,10 @@
 // src/controllers/empresaController.js
 const path = require("path");
 const fs = require("fs/promises");
-const { getDbCliente, getDbAdmin } = require("../utils/tenant");
+
+// ⛔️ REMOVER: const { getDbAdmin } = require("../utils/tenant");
+// ✅ USAR APENAS O ADMIN DB DIRETO
+const adminDb = require("../lib/adminDb"); // exporta { sequelize?, Empresa, Endereco, ... }
 
 // helper: normaliza string vazia -> null
 const nz = (v) => (v === "" ? null : v);
@@ -9,28 +12,43 @@ const nz = (v) => (v === "" ? null : v);
 async function unlinkIfExists(file) {
   if (!file) return;
   const full = path.join(__dirname, "..", "uploads", file);
-  try { await fs.unlink(full); } catch (_) {}
+  try {
+    await fs.unlink(full);
+  } catch (_) {}
 }
 
 module.exports = {
   // 1) Importa do ADMIN -> TENANT (idempotente)
   async importarDoAdmin(req, res) {
     try {
-      const dbT = await getDbCliente(req.bancoCliente);
-      const dbA = await getDbAdmin();
+      // ❇️ Pega models do admin
+      const { Empresa: EmpresaA, Endereco: EnderecoA } = adminDb;
 
-      const { Empresa: EmpresaA, Endereco: EnderecoA } = dbA.models;
-      const { Empresa: EmpresaT, Endereco: EnderecoT, sequelize } = dbT.models;
+      // tenant vem do middleware
+      const {
+        Empresa: EmpresaT,
+        Endereco: EnderecoT,
+        Sequelize,
+      } = req.models || {};
+      if (!EmpresaT)
+        return res
+          .status(500)
+          .json({ error: "Model Empresa indisponível no tenant." });
 
       const empresaId = req.empresaId;
-      if (!empresaId) return res.status(400).json({ error: "empresaId ausente." });
+      if (!empresaId)
+        return res.status(400).json({ error: "empresaId ausente." });
 
       // carrega do admin
-      const adm = await EmpresaA.findByPk(empresaId, { include: [{ model: EnderecoA, as: "enderecos" }] });
-      if (!adm) return res.status(404).json({ error: "Empresa não encontrada no admin." });
+      const adm = await EmpresaA.findByPk(empresaId, {
+        include: EnderecoA ? [{ model: EnderecoA, as: "enderecos" }] : [],
+      });
+      if (!adm)
+        return res
+          .status(404)
+          .json({ error: "Empresa não encontrada no admin." });
 
-      await sequelize.transaction(async (t) => {
-        // upsert empresa no tenant
+      await EmpresaT.sequelize.transaction(async (t) => {
         const payloadEmpresa = {
           adminEmpresaId: adm.id,
           nome: adm.nome || "",
@@ -43,7 +61,7 @@ module.exports = {
         };
 
         const [emp, created] = await EmpresaT.findOrCreate({
-          where: { id: empresaId }, // se no tenant a PK for o mesmo id do admin
+          where: { id: empresaId },
           defaults: payloadEmpresa,
           transaction: t,
         });
@@ -52,47 +70,56 @@ module.exports = {
           await emp.update(payloadEmpresa, { transaction: t });
         }
 
-        // endereços: apaga somente os que são espelho do admin e recria
-        await EnderecoT.destroy({
-          where: { empresaId: emp.id, adminEnderecoId: { [dbT.Sequelize.Op.ne]: null } },
-          transaction: t,
-        });
+        if (EnderecoT) {
+          // apaga espelhos e recria
+          await EnderecoT.destroy({
+            where: {
+              empresaId: emp.id,
+              adminEnderecoId: { [Sequelize.Op.ne]: null },
+            },
+            transaction: t,
+          });
 
-        const ends = (adm.enderecos || []).map((e) => ({
-          empresaId: emp.id,
-          adminEnderecoId: e.id,
-          logradouro: e.logradouro || "",
-          numero: e.numero || "",
-          bairro: e.bairro || "",
-          cidade: e.cidade || "",
-          estado: e.estado || "",
-          cep: e.cep || "",
-          padrao: !!e.padrao,
-        }));
+          const ends = (adm.enderecos || []).map((e) => ({
+            empresaId: emp.id,
+            adminEnderecoId: e.id,
+            logradouro: e.logradouro || "",
+            numero: e.numero || "",
+            bairro: e.bairro || "",
+            cidade: e.cidade || "",
+            estado: e.estado || "",
+            cep: e.cep || "",
+            padrao: !!e.padrao,
+          }));
 
-        if (ends.length) {
-          await EnderecoT.bulkCreate(ends, { transaction: t });
+          if (ends.length) {
+            await EnderecoT.bulkCreate(ends, { transaction: t });
+          }
         }
       });
 
       return res.json({ ok: true, message: "Importado do admin." });
     } catch (err) {
       console.error("[empresaController] importarDoAdmin:", err);
-      return res.status(500).json({ error: "Erro ao importar empresa do admin." });
+      return res
+        .status(500)
+        .json({ error: "Erro ao importar empresa do admin." });
     }
   },
 
   // 2) GET empresa do tenant (com endereços)
   async getEmpresa(req, res) {
     try {
-      const db = await getDbCliente(req.bancoCliente);
-      const { Empresa, Endereco } = db.models;
+      const { Empresa, Endereco } = req.models || {};
+      if (!Empresa)
+        return res
+          .status(500)
+          .json({ error: "Model Empresa indisponível no tenant." });
+
       const id = req.empresaId;
+      const include = Endereco ? [{ model: Endereco, as: "enderecos" }] : [];
 
-      const empresa = await Empresa.findByPk(id, {
-        include: [{ model: Endereco, as: "enderecos" }],
-      });
-
+      const empresa = await Empresa.findByPk(id, { include });
       if (!empresa) {
         // retorna shape vazio amigável
         return res.json({
@@ -119,15 +146,21 @@ module.exports = {
   // 3) PUT empresa (TENANT -> ADMIN) — aceita multipart (logo)
   async atualizarEmpresa(req, res) {
     try {
-      const dbT = await getDbCliente(req.bancoCliente);
-      const dbA = await getDbAdmin();
+      const { Empresa, Endereco } = req.models || {};
+      if (!Empresa)
+        return res
+          .status(500)
+          .json({ error: "Model Empresa indisponível no tenant." });
 
-      const { Empresa: EmpresaT, Endereco: EnderecoT } = dbT.models;
-      const { Empresa: EmpresaA } = dbA.models;
+      // ❇️ Admin Empresa (se existir)
+      const EmpresaA = adminDb?.Empresa;
 
       const id = req.empresaId;
-      const empresa = await EmpresaT.findByPk(id);
-      if (!empresa) return res.status(404).json({ error: "Empresa não encontrada no tenant." });
+      const empresa = await Empresa.findByPk(id);
+      if (!empresa)
+        return res
+          .status(404)
+          .json({ error: "Empresa não encontrada no tenant." });
 
       const oldLogo = empresa.logo;
       const newLogo = req.file ? req.file.filename : oldLogo;
@@ -144,18 +177,18 @@ module.exports = {
 
       await empresa.update(payload);
 
-      // se trocou logo, remove antiga
       if (req.file && oldLogo && oldLogo !== newLogo) {
         await unlinkIfExists(oldLogo);
       }
 
-      // espelha no admin
-      const adminId = empresa.adminEmpresaId || id; // fallback pelo id
-      await EmpresaA.update(payload, { where: { id: adminId } });
+      // espelha no admin se possível
+      if (EmpresaA) {
+        const adminId = empresa.adminEmpresaId || id; // fallback pelo id
+        await EmpresaA.update(payload, { where: { id: adminId } });
+      }
 
-      // se vier "enderecos" no mesmo PUT, trate aqui opcionalmente
-      // (mantive CRUD de endereço separado)
-      res.json(await EmpresaT.findByPk(id, { include: ["enderecos"] }));
+      const include = Endereco ? ["enderecos"] : [];
+      res.json(await Empresa.findByPk(id, { include }));
     } catch (err) {
       console.error("[empresaController] atualizarEmpresa:", err);
       res.status(500).json({ error: "Erro ao atualizar empresa." });
@@ -165,15 +198,20 @@ module.exports = {
   // 4) POST /enderecos (TENANT -> ADMIN)
   async criarEndereco(req, res) {
     try {
-      const dbT = await getDbCliente(req.bancoCliente);
-      const dbA = await getDbAdmin();
+      const { Empresa, Endereco } = req.models || {};
+      if (!Empresa || !Endereco)
+        return res
+          .status(500)
+          .json({ error: "Models Empresa/Endereco indisponíveis no tenant." });
 
-      const { Empresa: EmpresaT, Endereco: EnderecoT } = dbT.models;
-      const { Endereco: EnderecoA } = dbA.models;
+      const EnderecoA = adminDb?.Endereco;
 
       const empresaId = req.empresaId;
-      const emp = await EmpresaT.findByPk(empresaId);
-      if (!emp) return res.status(404).json({ error: "Empresa não encontrada no tenant." });
+      const emp = await Empresa.findByPk(empresaId);
+      if (!emp)
+        return res
+          .status(404)
+          .json({ error: "Empresa não encontrada no tenant." });
 
       const dados = {
         empresaId,
@@ -186,13 +224,16 @@ module.exports = {
         padrao: !!req.body.padrao,
       };
 
-      const created = await EnderecoT.create(dados);
+      const created = await Endereco.create(dados);
 
-      // espelha no admin
-      const adminEmpresaId = emp.adminEmpresaId || empresaId;
-      const criadoAdmin = await EnderecoA.create({ ...dados, empresaId: adminEmpresaId });
-
-      await created.update({ adminEnderecoId: criadoAdmin.id });
+      if (EnderecoA) {
+        const adminEmpresaId = emp.adminEmpresaId || empresaId;
+        const criadoAdmin = await EnderecoA.create({
+          ...dados,
+          empresaId: adminEmpresaId,
+        });
+        await created.update({ adminEnderecoId: criadoAdmin.id });
+      }
 
       res.status(201).json(created);
     } catch (err) {
@@ -204,17 +245,20 @@ module.exports = {
   // 5) PUT /enderecos/:id (TENANT -> ADMIN)
   async atualizarEndereco(req, res) {
     try {
-      const dbT = await getDbCliente(req.bancoCliente);
-      const dbA = await getDbAdmin();
+      const { Endereco, Sequelize } = req.models || {};
+      if (!Endereco)
+        return res
+          .status(500)
+          .json({ error: "Model Endereco indisponível no tenant." });
 
-      const { Endereco: EnderecoT } = dbT.models;
-      const { Endereco: EnderecoA } = dbA.models;
+      const EnderecoA = adminDb?.Endereco;
 
       const empresaId = req.empresaId;
       const { id } = req.params;
 
-      const end = await EnderecoT.findOne({ where: { id, empresaId } });
-      if (!end) return res.status(404).json({ error: "Endereço não encontrado." });
+      const end = await Endereco.findOne({ where: { id, empresaId } });
+      if (!end)
+        return res.status(404).json({ error: "Endereço não encontrado." });
 
       const patch = {
         logradouro: nz(req.body.logradouro),
@@ -226,14 +270,16 @@ module.exports = {
         padrao: req.body.padrao !== undefined ? !!req.body.padrao : end.padrao,
       };
 
-      // se marcar padrao, desmarca os demais
       if (patch.padrao === true) {
-        await EnderecoT.update({ padrao: false }, { where: { empresaId, id: { [dbT.Sequelize.Op.ne]: id } } });
+        await Endereco.update(
+          { padrao: false },
+          { where: { empresaId, id: { [Sequelize.Op.ne]: id } } }
+        );
       }
 
       await end.update(patch);
 
-      if (end.adminEnderecoId) {
+      if (EnderecoA && end.adminEnderecoId) {
         await EnderecoA.update(patch, { where: { id: end.adminEnderecoId } });
       }
 
@@ -247,19 +293,22 @@ module.exports = {
   // 6) DELETE /enderecos/:id (TENANT -> ADMIN)
   async excluirEndereco(req, res) {
     try {
-      const dbT = await getDbCliente(req.bancoCliente);
-      const dbA = await getDbAdmin();
+      const { Endereco } = req.models || {};
+      if (!Endereco)
+        return res
+          .status(500)
+          .json({ error: "Model Endereco indisponível no tenant." });
 
-      const { Endereco: EnderecoT } = dbT.models;
-      const { Endereco: EnderecoA } = dbA.models;
+      const EnderecoA = adminDb?.Endereco;
 
       const empresaId = req.empresaId;
       const { id } = req.params;
 
-      const end = await EnderecoT.findOne({ where: { id, empresaId } });
-      if (!end) return res.status(404).json({ error: "Endereço não encontrado." });
+      const end = await Endereco.findOne({ where: { id, empresaId } });
+      if (!end)
+        return res.status(404).json({ error: "Endereço não encontrado." });
 
-      if (end.adminEnderecoId) {
+      if (EnderecoA && end.adminEnderecoId) {
         await EnderecoA.destroy({ where: { id: end.adminEnderecoId } });
       }
 

@@ -18,7 +18,7 @@ export default function ClienteVisualizar({ cliente, onClose }) {
       setLoading(true);
       setErro(null);
       try {
-        const { data } = await api.get(`/api/clientes/${cliente.id}`);
+        const { data } = await api.get(`/clientes/${cliente.id}`);
         if (alive) setDadosCliente(data);
       } catch (e) {
         if (alive)

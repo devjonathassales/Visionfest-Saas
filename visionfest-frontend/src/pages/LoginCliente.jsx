@@ -1,10 +1,10 @@
 import React, { useState } from "react";
 import { useAuth } from "/src/contexts/authContext.jsx";
 import { useNavigate } from "react-router-dom";
-import logo from "/src/assets/visionfest-logo.svg"; // coloque seu arquivo aqui (veja nota abaixo)
+import logo from "/src/assets/visionfest-logo.svg";
 
-export default function LoginPage() {
-  const { login, loading } = useAuth();
+export default function LoginCliente() {
+  const { login, loading, tenant } = useAuth();
   const nav = useNavigate();
   const [form, setForm] = useState({ email: "", senha: "" });
   const [erro, setErro] = useState("");
@@ -13,25 +13,35 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setErro("");
+
     const res = await login(form);
     if (res.ok) {
-      nav("/", { replace: true });
+      nav("/dashboard", { replace: true });
     } else {
       setErro(res.error || "Não foi possível entrar.");
     }
   }
 
   return (
-    <div className="min-h-screen w-full flex bg-slate-50 md:bg-gradient-to-br md:from-[#0A1F16] md:via-[#084C61] md:to-[#0A1F16]">
+    <div className="min-h-screen w-full flex bg-slate-50 md:bg-gradient-to-br md:from-[#8B2C6F] md:via-[#000000] md:to-[#8B2C6F]">
       {/* Vitrine (desktop) */}
       <aside className="hidden md:flex w-1/2 relative items-center justify-center p-12">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_1px_1px,#7ED957_1px,transparent_1px)] [background-size:24px_24px]" />
         <div className="relative z-10 text-center text-white max-w-md">
-          <img src={logo} alt="VisionFest" className="h-14 mx-auto mb-6" />
+          <img src={logo} alt="VisionFest" className="h-20 rounded-lg mx-auto mb-5" />
           <h1 className="text-3xl font-bold">Bem-vindo ao VisionFest</h1>
           <p className="mt-2 text-slate-200">
             Acesse o painel e gerencie seus contratos, financeiro e estoque em
             um só lugar.
+          </p>
+          <p className="mt-4 text-slate-300 text-sm">
+            {tenant ? (
+              <>
+                Conectando no tenant: <b>{tenant}</b>
+              </>
+            ) : (
+              "Tenant não detectado — abra via /cliente_<slug> ou use ?dominio=<slug>."
+            )}
           </p>
         </div>
       </aside>
@@ -39,10 +49,6 @@ export default function LoginPage() {
       {/* Formulário */}
       <main className="flex w-full md:w-1/2 items-center justify-center p-6">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 sm:p-8">
-          <div className="md:hidden text-center mb-6">
-            <img src={logo} alt="VisionFest" className="h-10 mx-auto" />
-          </div>
-
           <h2 className="text-2xl font-bold text-slate-800">Entrar</h2>
           <p className="text-slate-500 text-sm mb-6">
             Use seu e-mail e sua senha de acesso.

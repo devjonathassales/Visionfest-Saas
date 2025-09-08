@@ -1,101 +1,140 @@
 // src/middlewares/multiTenantMiddleware.js
-require("dotenv").config();
-const { Sequelize } = require("sequelize");
+const { Sequelize, DataTypes } = require("sequelize");
+const path = require("path");
+const fs = require("fs");
 
-// Conexão do painel (schema public)
-const { sequelize: adminSequelize, Empresa } = require("../lib/adminDb");
+const TENANT_CACHE = new Map();
 
-// Inicializador de models do tenant (src/models/index.js exporta uma função (sequelize, schema) => db)
-const initModels = require("../models");
+/** Carrega models puros da pasta /src/models, ignorando index.js */
+function loadModels(sequelize) {
+  const models = {};
+  const modelsDir = path.join(__dirname, "..", "models");
 
-const tenantsCache = new Map();
+  for (const file of fs.readdirSync(modelsDir)) {
+    if (!file.endsWith(".js")) continue;
 
-/** Descobre o tenant a partir de header/host. (sem DEFAULT_TENANT aqui) */
-function getTenantFromRequest(req) {
-  // 1) Header explícito
-  const explicit = req.headers["x-tenant"];
-  if (explicit && typeof explicit === "string" && explicit.trim()) {
-    return explicit.trim().toLowerCase();
-  }
+    // ❗️Ignora agregadores ou helpers que não são models puros
+    if (file.toLowerCase() === "index.js") continue;
 
-  // 2) Subdomínio
-  const host = (req.headers.host || "").split(":")[0];
-  const [sub] = host.split(".");
-  if (sub && sub.toLowerCase() !== "localhost") {
-    return sub.toLowerCase();
-  }
+    const full = path.join(modelsDir, file);
+    const mod = require(full);
+    const def = mod?.default || mod;
 
-  return null;
-}
-
-/** Abre/recupera conexão do schema do cliente a partir do domínio */
-async function getTenantDbByDomain(dominio) {
-  if (!dominio) throw new Error("Domínio do tenant não informado.");
-
-  // cache
-  if (tenantsCache.has(dominio)) return tenantsCache.get(dominio);
-
-  // garante conexão com painel
-  await adminSequelize.authenticate();
-
-  // empresa no painel (schema public)
-  const empresa = await Empresa.findOne({ where: { dominio } });
-  if (!empresa || !empresa.bancoDados) {
-    throw new Error("Empresa não encontrada ou bancoDados ausente.");
-  }
-
-  const schemaName = empresa.bancoDados; // ex.: "cliente_visionware"
-
-  // cria conexão para o schema do cliente
-  const tenantSequelize = new Sequelize(process.env.DATABASE_URL, {
-    dialect: "postgres",
-    logging: false,
-    define: { schema: schemaName },
-  });
-
-  // inicializa models do tenant
-  const db = await initModels(tenantSequelize, schemaName);
-  await tenantSequelize.authenticate();
-
-  const tenantObj = {
-    sequelize: tenantSequelize,
-    db,
-    schema: schemaName,
-    empresa,
-  };
-  tenantsCache.set(dominio, tenantObj);
-  return tenantObj;
-}
-
-/** 🔐 Middleware multi-tenant (usar APÓS rotas públicas) */
-async function multiTenantMiddleware(req, res, next) {
-  try {
-    const dominio = getTenantFromRequest(req);
-    if (!dominio) {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Domínio do tenant não identificado (use subdomínio ou header X-Tenant).",
-        });
+    if (typeof def !== "function") {
+      console.warn(
+        `[multiTenant] Ignorando "${file}" (export não é função de model).`
+      );
+      continue;
     }
 
-    const tenant = await getTenantDbByDomain(dominio);
+    let model;
+    try {
+      // maioria dos seus models usa (sequelize, DataTypes)
+      model = def(sequelize, DataTypes);
+    } catch (e) {
+      console.warn(
+        `[multiTenant] Falha ao inicializar model de "${file}": ${e.message}`
+      );
+      continue;
+    }
 
-    req.tenant = {
-      dominio,
-      schema: tenant.schema,
-      empresa: tenant.empresa,
-      sequelize: tenant.sequelize,
-    };
-    req.db = tenant.db; // models do cliente
+    if (!model || !model.name) {
+      console.warn(`[multiTenant] Model inválido em "${file}" (sem name).`);
+      continue;
+    }
 
-    return next();
-  } catch (err) {
-    console.error("Erro no multiTenantMiddleware:", err.message);
-    return res.status(401).json({ error: "Acesso não autorizado ao tenant." });
+    models[model.name] = model;
+  }
+
+  // associações (se existirem)
+  Object.values(models).forEach((m) => m.associate && m.associate(models));
+  return models;
+}
+
+/** Garante schema, move models p/ schema e cria tabelas faltantes */
+async function bindSchemaAndEnsure(sequelize, models, schema) {
+  // cria schema (se não existir)
+  await sequelize.query(`CREATE SCHEMA IF NOT EXISTS "${schema}"`);
+
+  // opcional: ajustar search_path (models já estarão qualificados por schema)
+  await sequelize.query(`SET search_path TO "${schema}", public`);
+
+  // move todos os models para o schema do tenant
+  for (const m of Object.values(models)) {
+    if (typeof m.schema === "function") m.schema(schema);
+  }
+
+  // cria tabelas que faltarem
+  await sequelize.sync();
+
+  // sanity check específico p/ "Usuarios" (case-sensitive com aspas)
+  const [rows] = await sequelize.query(
+    `SELECT to_regclass('"${schema}"."Usuarios"') AS reg;`
+  );
+  if (!rows?.[0]?.reg && models.Usuario) {
+    await models.Usuario.sync();
   }
 }
 
-// ✅ export como FUNÇÃO (default do CommonJS)
-module.exports = multiTenantMiddleware;
+/** Inicializa (e cacheia) o bundle do tenant */
+async function getOrInitTenant(dominio) {
+  const tenantKey = String(dominio).trim().toLowerCase();
+  if (!tenantKey) throw new Error("Domínio/tenant vazio.");
+
+  const schema = `cliente_${tenantKey.replace(/\W/g, "_")}`;
+
+  if (TENANT_CACHE.has(schema)) return TENANT_CACHE.get(schema);
+
+  const sequelize = new Sequelize(process.env.DATABASE_URL, {
+    logging: false,
+    dialect: "postgres",
+  });
+  await sequelize.authenticate();
+
+  const models = loadModels(sequelize);
+  await bindSchemaAndEnsure(sequelize, models, schema);
+
+  const bundle = { sequelize, models, schema };
+  TENANT_CACHE.set(schema, bundle);
+  return bundle;
+}
+
+/** Middleware: resolve tenant, anexa req.db/req.models/req.bancoCliente */
+module.exports = async function multiTenantMiddleware(req, res, next) {
+  try {
+    let dominio =
+      (req.headers["x-tenant"] || "").toString().trim().toLowerCase() ||
+      (req.query?.dominio || "").toString().trim().toLowerCase() ||
+      (req.query?.tenant || "").toString().trim().toLowerCase() ||
+      (process.env.DEFAULT_TENANT || "").toString().trim().toLowerCase();
+
+    // fallback: subdomínio do origin/referer
+    if (!dominio) {
+      try {
+        const host = new URL(req.headers.origin || req.headers.referer || "")
+          .hostname;
+        const parts = host.split(".");
+        if (parts.length > 2) dominio = parts[0];
+      } catch {}
+    }
+
+    if (!dominio) {
+      return res.status(400).json({
+        mensagem:
+          "Tenant não informado (use X-Tenant, ?dominio ou DEFAULT_TENANT).",
+      });
+    }
+
+    const { sequelize, models, schema } = await getOrInitTenant(dominio);
+    req.db = sequelize;
+    req.models = models;
+    req.bancoCliente = schema;
+
+    next();
+  } catch (err) {
+    console.error("[multiTenantMiddleware] Error:", err);
+    return res
+      .status(500)
+      .json({ mensagem: "Falha no contexto do tenant.", detalhe: err.message });
+  }
+};

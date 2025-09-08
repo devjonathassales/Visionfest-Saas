@@ -15,7 +15,7 @@ export default function CartoesCredito() {
   const buscarCartoes = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/cartoes-credito");
+      const { data } = await api.get("/cartoes-credito");
       // ordena por banco para melhorar a navegação
       setCartoes(
         [...data].sort((a, b) => (a.banco || "").localeCompare(b.banco || ""))
@@ -47,10 +47,10 @@ export default function CartoesCredito() {
   const salvarCartao = async (cartao) => {
     try {
       if (cartao.id) {
-        await api.put(`/api/cartoes-credito/${cartao.id}`, cartao);
+        await api.put(`/cartoes-credito/${cartao.id}`, cartao);
         toast.success("Cartão atualizado com sucesso!");
       } else {
-        await api.post(`/api/cartoes-credito`, cartao);
+        await api.post(`/cartoes-credito`, cartao);
         toast.success("Cartão adicionado com sucesso!");
       }
       await buscarCartoes();
@@ -69,7 +69,7 @@ export default function CartoesCredito() {
     if (!confirmar) return;
 
     try {
-      await api.delete(`/api/cartoes-credito/${id}`);
+      await api.delete(`/cartoes-credito/${id}`);
       toast.success("Cartão excluído com sucesso!");
       buscarCartoes();
     } catch (err) {

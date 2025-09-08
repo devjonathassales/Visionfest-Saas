@@ -14,7 +14,7 @@ export default function CentroCustoReceita() {
   const fetchCentros = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/centrocusto");
+      const { data } = await api.get("/centrocusto");
       setCentros(data || []);
     } catch (error) {
       console.error(error);
@@ -36,9 +36,9 @@ export default function CentroCustoReceita() {
   const handleSalvar = async (dados) => {
     try {
       if (dados.id) {
-        await api.put(`/api/centrocusto/${dados.id}`, dados);
+        await api.put(`/centrocusto/${dados.id}`, dados);
       } else {
-        await api.post(`/api/centrocusto`, dados);
+        await api.post(`/centrocusto`, dados);
       }
       await fetchCentros();
       setFormAberto(false);
@@ -52,7 +52,7 @@ export default function CentroCustoReceita() {
   const handleExcluir = async (id) => {
     if (!window.confirm("Tem certeza que deseja excluir este centro?")) return;
     try {
-      await api.delete(`/api/centrocusto/${id}`);
+      await api.delete(`/centrocusto/${id}`);
       await fetchCentros();
     } catch (err) {
       // se o backend retornar 400/409 com mensagem, tente exibir

@@ -52,7 +52,7 @@ export default function ContasReceber() {
         dataInicio: format(dataInicial, "yyyy-MM-dd"),
         dataFim: format(dataFinal, "yyyy-MM-dd"),
       };
-      const { data } = await api.get("/api/contas-receber", { params });
+      const { data } = await api.get("/contas-receber", { params });
       setContas(data);
     } catch (e) {
       toast.error(e?.response?.data?.error || "Erro ao carregar contas.");
@@ -77,7 +77,7 @@ export default function ContasReceber() {
   const abrirDetalhes = async (conta) => {
     try {
       setLoading(true);
-      const { data } = await api.get(`/api/contas-receber/${conta.id}`);
+      const { data } = await api.get(`/contas-receber/${conta.id}`);
       setContaSel(data);
     } catch {
       toast.error("Erro ao buscar detalhes.");
@@ -98,7 +98,7 @@ export default function ContasReceber() {
     if (!confirm("Excluir esta conta?")) return;
     try {
       setLoading(true);
-      await api.delete(`/api/contas-receber/${id}`);
+      await api.delete(`/contas-receber/${id}`);
       toast.success("Excluído com sucesso.");
       loadContas();
     } catch (e) {
@@ -112,7 +112,7 @@ export default function ContasReceber() {
     if (!confirm("Estornar esta conta?")) return;
     try {
       setLoading(true);
-      await api.put(`/api/contas-receber/${id}/estorno`);
+      await api.put(`/contas-receber/${id}/estorno`);
       toast.success("Estornado.");
       loadContas();
     } catch (e) {

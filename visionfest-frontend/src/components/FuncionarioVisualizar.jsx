@@ -17,7 +17,7 @@ export default function FuncionarioVisualizar({ funcionario, onClose }) {
       setLoading(true);
       setErro(null);
       try {
-        const { data } = await api.get(`/api/funcionarios/${funcionario.id}`);
+        const { data } = await api.get(`/funcionarios/${funcionario.id}`);
         if (alive) setDados(data);
       } catch (e) {
         if (alive)

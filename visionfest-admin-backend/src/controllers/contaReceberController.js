@@ -82,7 +82,7 @@ exports.criar = async (req, res) => {
       if (!centroReceita) {
         centroReceita = await CentroCusto.create({
           descricao: centroCustoDescricao,
-          tipo: "Receita",
+          tipo: "Ambos",
         });
       }
 

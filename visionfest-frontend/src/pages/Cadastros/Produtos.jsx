@@ -17,7 +17,7 @@ export default function Produtos() {
   async function fetchProdutos() {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/produtos");
+      const { data } = await api.get("/produtos");
       setProdutos(data || []);
     } catch (e) {
       console.error(e);
@@ -49,9 +49,9 @@ export default function Produtos() {
   async function handleSalvar(novoProduto) {
     try {
       if (novoProduto.id) {
-        await api.put(`/api/produtos/${novoProduto.id}`, novoProduto);
+        await api.put(`/produtos/${novoProduto.id}`, novoProduto);
       } else {
-        await api.post(`/api/produtos`, novoProduto);
+        await api.post(`/produtos`, novoProduto);
       }
       await fetchProdutos();
       setMostrarFormulario(false);
@@ -65,7 +65,7 @@ export default function Produtos() {
   async function handleExcluir(id) {
     if (!window.confirm("Deseja excluir este produto?")) return;
     try {
-      await api.delete(`/api/produtos/${id}`);
+      await api.delete(`/produtos/${id}`);
       setProdutos((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
       console.error(e);

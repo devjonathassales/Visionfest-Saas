@@ -4,14 +4,13 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 
-// ✅ IMPORTS
-const multiTenantMiddleware = require("./middlewares/multiTenantMiddleware"); // export default (module.exports = fn)
+const multiTenantMiddleware = require("./middlewares/multiTenantMiddleware");
 const authCliente = require("./middlewares/authCliente");
 
-// ✅ use somente o router unificado de auth
-const authRoutes = require("./routes/authRoutes");
+// 🔐 rotas de auth do CLIENTE (tenant)
+const authClienteRoutes = require("./routes/authClienteRoutes");
 
-// Demais rotas protegidas
+// Demais rotas protegidas (NOMES sem colisão com “clientes” do negócio)
 const clienteRoutes = require("./routes/clienteRoutes");
 const fornecedorRoutes = require("./routes/fornecedorRoutes");
 const funcionarioRoutes = require("./routes/funcionarioRoutes");
@@ -27,7 +26,10 @@ const empresaRoutes = require("./routes/empresaRoutes");
 const usuarioRoutes = require("./routes/usuarioRoutes");
 const permissoesRoutes = require("./routes/permissoesRoutes");
 const contratosRouter = require("./routes/contratoRoutes");
+const contratoClienteRoutes = require("./routes/contratoClienteRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const faturasRoutes = require("./routes/faturasRoutes");
+const perfilRoutes = require("./routes/perfilRoutes");
 
 const app = express();
 
@@ -50,7 +52,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Health
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Debug do tenant (DEV)
+// Debug do tenant
 app.get("/debug/tenant", async (req, res) => {
   try {
     const { Empresa } = require("./lib/adminDb");
@@ -85,8 +87,9 @@ app.get("/debug/tenant", async (req, res) => {
   }
 });
 
-// 🔑 Fallback de tenant só para /api/cliente (login/refresh/me/logout)
-app.use("/api/cliente", (req, _res, next) => {
+// 🔑 Fallback de tenant SÓ para /api/cliente (login/refresh/me/logout)
+// — garante que sempre exista X-Tenant vindo de ?dominio=, subdomínio ou DEFAULT_TENANT
+function tenantHeaderFallback(req, _res, next) {
   if ((req.headers["x-tenant"] ?? "").toString().trim()) return next();
 
   let dominio =
@@ -101,37 +104,39 @@ app.use("/api/cliente", (req, _res, next) => {
       const host = new URL(req.headers.origin || req.headers.referer || "")
         .hostname;
       const parts = host.split(".");
-      if (parts.length > 2) dominio = parts[0];
+      if (parts.length > 2) dominio = parts[0]; // subdomínio
     } catch {}
   }
 
   if (!dominio && process.env.DEFAULT_TENANT)
     dominio = process.env.DEFAULT_TENANT;
-
-  if (dominio) {
-    req.headers["x-tenant"] = String(dominio).trim().toLowerCase();
-  }
+  if (dominio) req.headers["x-tenant"] = String(dominio).trim().toLowerCase();
 
   console.log(
     "[/api/cliente fallback] x-tenant =",
     req.headers["x-tenant"] || null
   );
   next();
-});
+}
 
-// 🔓 Rotas públicas de autenticação (únicas)
-app.use("/api/cliente", authRoutes);
+// 🔓 Rotas públicas de autenticação do CLIENTE (mas já resolvem tenant)
+app.use(
+  "/api/cliente",
+  tenantHeaderFallback,
+  multiTenantMiddleware,
+  authClienteRoutes
+);
 
 // 🔐 Tudo abaixo exige tenant + token
 if (typeof multiTenantMiddleware !== "function") {
   console.error(
-    "ERRO: multiTenantMiddleware não é uma função. Verifique o export em src/middlewares/multiTenantMiddleware.js"
+    "ERRO: multiTenantMiddleware não é uma função. Verifique export em src/middlewares/multiTenantMiddleware.js"
   );
 }
 app.use(multiTenantMiddleware, authCliente);
 
 // Rotas protegidas
-app.use("/api/clientes", clienteRoutes);
+app.use("/api/clientes", clienteRoutes); // (evita colisão de nome “clientes”)
 app.use("/api/fornecedores", fornecedorRoutes);
 app.use("/api/funcionarios", funcionarioRoutes);
 app.use("/api/produtos", produtosRoutes);
@@ -146,6 +151,9 @@ app.use("/api/empresa", empresaRoutes);
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/permissoes", permissoesRoutes);
 app.use("/api/contratos", contratosRouter);
+app.use("/api/contrato", contratoClienteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/faturas", faturasRoutes);
+app.use("/api/perfil", perfilRoutes);
 
 module.exports = app;

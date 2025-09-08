@@ -19,7 +19,7 @@ export default function PagamentoContaForm({
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await api.get("/api/contas-bancarias");
+        const { data } = await api.get("/contas-bancarias");
         setContasBancarias(data || []);
       } catch {
         // silencioso

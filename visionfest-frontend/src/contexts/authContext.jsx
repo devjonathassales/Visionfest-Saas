@@ -10,7 +10,32 @@ import apiCliente, { API_BASE } from "/src/utils/apiCliente.js";
 
 const AuthCtx = createContext(null);
 
+// Resolve o tenant por ordem:
+// 1) ?dominio= / ?tenant=
+// 2) /cliente_<slug>/ na URL
+// 3) localStorage('tenant')
+// 4) VITE_TENANT
+function resolveTenant() {
+  try {
+    const qs = new URLSearchParams(window.location.search);
+    const byQS = (qs.get("dominio") || qs.get("tenant") || "").trim();
+    if (byQS) return byQS.toLowerCase();
+
+    const seg1 = window.location.pathname.split("/").filter(Boolean)[0] || "";
+    const m = seg1.match(/^cliente[_-]([a-z0-9-]+)$/i);
+    if (m && m[1]) return m[1].toLowerCase();
+
+    const byLS = (localStorage.getItem("tenant") || "").trim();
+    if (byLS) return byLS.toLowerCase();
+
+    const byEnv = (import.meta.env.VITE_TENANT || "").trim();
+    if (byEnv) return byEnv.toLowerCase();
+  } catch {}
+  return "";
+}
+
 export function AuthProvider({ children }) {
+  const [tenant, setTenant] = useState(() => resolveTenant());
   const [accessToken, setAccessToken] = useState(
     () => localStorage.getItem("vf_client_access") || ""
   );
@@ -29,101 +54,81 @@ export function AuthProvider({ children }) {
 
   const isAuthenticated = !!accessToken;
 
-  // Garante X-Tenant (pode vir de env, query ?dominio= ou localStorage)
+  // Configura X-Tenant no axios compartilhado
   useEffect(() => {
-    try {
-      const byEnv = (import.meta.env.VITE_TENANT || "").trim();
-      const byQS = new URLSearchParams(window.location.search).get("dominio");
-      const byLS = localStorage.getItem("tenant");
-      const tenant =
-        (byEnv && byEnv) ||
-        (byQS && String(byQS).trim()) ||
-        (byLS && String(byLS).trim()) ||
-        null;
-
-      if (tenant) {
-        apiCliente.defaults.headers.common["X-Tenant"] = tenant;
-        localStorage.setItem("tenant", tenant);
-      }
-    } catch {}
+    const t = resolveTenant();
+    if (t) {
+      setTenant(t);
+      apiCliente.defaults.headers.common["X-Tenant"] = t;
+      localStorage.setItem("tenant", t);
+    } else {
+      delete apiCliente.defaults.headers.common["X-Tenant"];
+      localStorage.removeItem("tenant");
+    }
   }, []);
 
-  // Interceptores: injeta Bearer e tenta refresh em 401 (uma vez)
+  // Injeta Authorization em TODAS as requests do apiCliente.
+  // (o apiCliente já tem o interceptor de refresh automático)
   useEffect(() => {
-    const reqId = apiCliente.interceptors.request.use((config) => {
+    const id = apiCliente.interceptors.request.use((config) => {
+      if (tenant) config.headers["X-Tenant"] = tenant;
       if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
       return config;
     });
-
-    const respId = apiCliente.interceptors.response.use(
-      (res) => res,
-      async (error) => {
-        const original = error.config;
-        if (
-          error?.response?.status === 401 &&
-          !original?._retry &&
-          refreshToken
-        ) {
-          original._retry = true;
-          try {
-            const tenant = apiCliente.defaults.headers.common["X-Tenant"];
-            const { data } = await axios.post(
-              `${API_BASE}/api/cliente/refresh`,
-              { refreshToken },
-              { headers: tenant ? { "X-Tenant": tenant } : {} }
-            );
-
-            const newAccess = data.accessToken;
-            const newRefresh = data.refreshToken || refreshToken;
-
-            setAccessToken(newAccess);
-            setRefreshToken(newRefresh);
-            localStorage.setItem("vf_client_access", newAccess);
-            localStorage.setItem("vf_client_refresh", newRefresh);
-
-            original.headers = original.headers || {};
-            original.headers.Authorization = `Bearer ${newAccess}`;
-            return apiCliente.request(original);
-          } catch {
-            logout();
-          }
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    return () => {
-      apiCliente.interceptors.request.eject(reqId);
-      apiCliente.interceptors.response.eject(respId);
-    };
-  }, [accessToken, refreshToken]);
+    return () => apiCliente.interceptors.request.eject(id);
+  }, [accessToken, tenant]);
 
   async function login({ email, senha }) {
     setLoading(true);
     try {
-      const tenant = apiCliente.defaults.headers.common["X-Tenant"];
-      // usa axios "cru" para evitar o interceptor de refresh durante o login
+      const t = resolveTenant();
+      if (!t) {
+        return {
+          ok: false,
+          error:
+            "Tenant não identificado. Acesse via /cliente_<seu-dominio> ou informe ?dominio= na URL.",
+        };
+      }
+
+      // Login direto na rota pública do backend
+      const url = `${API_BASE}/api/cliente/login?dominio=${encodeURIComponent(
+        t
+      )}`;
       const { data } = await axios.post(
-        `${API_BASE}/api/cliente/login`,
-        { email, senha },
-        { headers: tenant ? { "X-Tenant": tenant } : {} }
+        url,
+        { email, senha, password: senha, dominio: t },
+        { headers: { "Content-Type": "application/json", "X-Tenant": t } }
       );
 
+      // Persiste
       setAccessToken(data.accessToken);
       setRefreshToken(data.refreshToken);
-      setUsuario(data.usuario);
-      setEmpresa(data.empresa);
+      setUsuario(data.usuario || null);
+      setEmpresa(data.empresa || null);
 
       localStorage.setItem("vf_client_access", data.accessToken);
       localStorage.setItem("vf_client_refresh", data.refreshToken);
-      localStorage.setItem("vf_client_user", JSON.stringify(data.usuario));
-      localStorage.setItem("vf_client_empresa", JSON.stringify(data.empresa));
+      localStorage.setItem(
+        "vf_client_user",
+        JSON.stringify(data.usuario || {})
+      );
+      localStorage.setItem(
+        "vf_client_empresa",
+        JSON.stringify(data.empresa || {})
+      );
+      localStorage.setItem("tenant", t);
+
+      // Prepara defaults para as próximas requests
+      apiCliente.defaults.headers.common["X-Tenant"] = t;
 
       return { ok: true };
     } catch (e) {
       return {
         ok: false,
-        error: e?.response?.data?.mensagem || "Falha no login",
+        error:
+          e?.response?.data?.mensagem ||
+          e?.response?.data?.error ||
+          "Falha no login",
       };
     } finally {
       setLoading(false);
@@ -139,6 +144,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("vf_client_refresh");
     localStorage.removeItem("vf_client_user");
     localStorage.removeItem("vf_client_empresa");
+    // mantém o tenant no LS para continuar no mesmo subdomínio
   }
 
   const value = useMemo(
@@ -151,8 +157,9 @@ export function AuthProvider({ children }) {
       login,
       logout,
       loading,
+      tenant,
     }),
-    [isAuthenticated, accessToken, usuario, empresa, loading]
+    [isAuthenticated, accessToken, usuario, empresa, loading, tenant]
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

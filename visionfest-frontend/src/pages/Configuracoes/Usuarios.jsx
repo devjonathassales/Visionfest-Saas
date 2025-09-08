@@ -1,3 +1,4 @@
+// src/pages/Usuarios.jsx
 import React, {
   useState,
   useEffect,
@@ -9,20 +10,20 @@ import { FaEdit, FaEye, FaTrash, FaPlus } from "react-icons/fa";
 import { MdToggleOn, MdToggleOff } from "react-icons/md";
 import { useAuth } from "/src/contexts/authContext.jsx";
 
-// Garante o prefixo /api mesmo se o axios não tiver baseURL configurado
+// ajuda a padronizar as rotas
+const ensureLeadingSlash = (p) => (p.startsWith("/") ? p : `/${p}`);
+
+// para o fallback com fetch (sem baseURL), garantimos /api
 function withApiPrefix(path) {
-  const p = path.startsWith("/") ? path : `/${path}`;
+  const p = ensureLeadingSlash(path);
   return p.startsWith("/api/") ? p : `/api${p}`;
 }
 
 export default function CadastroUsuarios() {
-  const auth = useAuth();
-  const axiosClient = useMemo(
-    () => auth?.apiCliente || auth?.api || null,
-    [auth]
-  );
+  const { api } = useAuth(); // AuthProvider expõe { api: apiCliente }
+  const axiosClient = useMemo(() => api || null, [api]);
 
-  // Cliente HTTP estável por ref (axios se existir; fallback fetch)
+  // cliente HTTP (axios se existir; senão, fetch)
   const httpRef = useRef({
     get: async (path) => {
       const res = await fetch(withApiPrefix(path), { credentials: "include" });
@@ -85,15 +86,15 @@ export default function CadastroUsuarios() {
     },
   });
 
-  // Se existir axios configurado, usa ele (com prefixo /api garantido)
+  // quando axios existir, usa baseURL dele (NÃO prefixa /api aqui!)
   useEffect(() => {
     if (!axiosClient) return;
     httpRef.current = {
-      get: (path) => axiosClient.get(withApiPrefix(path)),
-      post: (path, body) => axiosClient.post(withApiPrefix(path), body),
-      put: (path, body) => axiosClient.put(withApiPrefix(path), body),
-      patch: (path, body) => axiosClient.patch(withApiPrefix(path), body),
-      delete: (path) => axiosClient.delete(withApiPrefix(path)),
+      get: (path) => axiosClient.get(ensureLeadingSlash(path)),
+      post: (path, body) => axiosClient.post(ensureLeadingSlash(path), body),
+      put: (path, body) => axiosClient.put(ensureLeadingSlash(path), body),
+      patch: (path, body) => axiosClient.patch(ensureLeadingSlash(path), body),
+      delete: (path) => axiosClient.delete(ensureLeadingSlash(path)),
     };
   }, [axiosClient]);
 
@@ -108,7 +109,7 @@ export default function CadastroUsuarios() {
   });
   const [loading, setLoading] = useState(false);
 
-  // Evita o duplo fetch em dev (StrictMode)
+  // evita duplo fetch no StrictMode (dev)
   const hasFetchedRef = useRef(false);
 
   const carregarUsuarios = useCallback(async () => {
@@ -168,10 +169,7 @@ export default function CadastroUsuarios() {
     }
 
     try {
-      const body = {
-        nome: form.nome,
-        email: form.email,
-      };
+      const body = { nome: form.nome, email: form.email };
       if (form.senha) {
         body.senha = form.senha;
         body.confirmarSenha = form.confirmarSenha;

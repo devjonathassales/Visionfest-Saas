@@ -19,7 +19,7 @@ export default function Fornecedores() {
   const fetchFornecedores = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/fornecedores");
+      const { data } = await api.get("/fornecedores");
       setFornecedores(data || []);
     } catch (e) {
       alert("Erro ao carregar fornecedores.");
@@ -58,9 +58,9 @@ export default function Fornecedores() {
   const handleSalvar = async (payload) => {
     try {
       if (payload.id) {
-        await api.put(`/api/fornecedores/${payload.id}`, payload);
+        await api.put(`/fornecedores/${payload.id}`, payload);
       } else {
-        await api.post(`/api/fornecedores`, payload);
+        await api.post(`/fornecedores`, payload);
       }
       await fetchFornecedores();
       setMostrarFormulario(false);
@@ -79,7 +79,7 @@ export default function Fornecedores() {
   const handleExcluir = async (id) => {
     if (!window.confirm("Deseja excluir este fornecedor?")) return;
     try {
-      await api.delete(`/api/fornecedores/${id}`);
+      await api.delete(`/fornecedores/${id}`);
       setFornecedores((prev) => prev.filter((f) => f.id !== id));
     } catch (e) {
       alert("Erro ao excluir fornecedor.");

@@ -19,7 +19,7 @@ export default function Funcionarios() {
   const fetchFuncionarios = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/funcionarios");
+      const { data } = await api.get("/funcionarios");
       setFuncionarios(data || []);
     } catch (err) {
       console.error(err);
@@ -58,11 +58,11 @@ export default function Funcionarios() {
     try {
       if (novoFuncionario.id) {
         await api.put(
-          `/api/funcionarios/${novoFuncionario.id}`,
+          `/funcionarios/${novoFuncionario.id}`,
           novoFuncionario
         );
       } else {
-        await api.post(`/api/funcionarios`, novoFuncionario);
+        await api.post(`/funcionarios`, novoFuncionario);
       }
       await fetchFuncionarios();
       setMostrarFormulario(false);
@@ -81,7 +81,7 @@ export default function Funcionarios() {
   const handleExcluir = async (id) => {
     if (!window.confirm("Deseja excluir este funcionário?")) return;
     try {
-      await api.delete(`/api/funcionarios/${id}`);
+      await api.delete(`/funcionarios/${id}`);
       setFuncionarios((prev) => prev.filter((f) => f.id !== id));
     } catch (err) {
       console.error(err);

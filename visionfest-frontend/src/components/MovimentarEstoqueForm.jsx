@@ -13,7 +13,7 @@ export default function MovimentarEstoqueForm({ onClose, onSave }) {
     (async () => {
       try {
         // 🔑 sem barra inicial => respeita baseURL "/api"
-        const { data } = await api.get("/api/produtos");
+        const { data } = await api.get("/produtos");
         setProdutos(data || []);
       } catch (err) {
         console.error("Erro ao carregar produtos:", err);

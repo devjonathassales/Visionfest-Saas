@@ -24,8 +24,8 @@ export default function ReceberForm({ conta, onClose, onBaixa }) {
     (async () => {
       try {
         const [{ data: contas }, { data: cards }] = await Promise.all([
-          api.get("/api/contas-bancarias"),
-          api.get("/api/cartoes-credito"),
+          api.get("/contas-bancarias"),
+          api.get("/cartoes-credito"),
         ]);
         if (!alive) return;
         setContasBancarias(contas || []);

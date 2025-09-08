@@ -19,7 +19,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
   useEffect(() => {
     (async () => {
       try {
-        const { data: centrosData } = await api.get("/api/centrocusto");
+        const { data: centrosData } = await api.get("/centrocusto");
         setCentros(
           (centrosData || []).filter(
             (c) => c.tipo === "Custo" || c.tipo === "Ambos"
@@ -29,7 +29,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
         // silencioso
       }
       try {
-        const { data: fornData } = await api.get("/api/fornecedores");
+        const { data: fornData } = await api.get("/fornecedores");
         setFornecedores(fornData || []);
       } catch (e) {
         // silencioso
@@ -62,7 +62,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/api/contas-pagar", payload());
+      const { data } = await api.post("/contas-pagar", payload());
       onSave && onSave(data);
       onClose && onClose();
     } catch {
@@ -79,7 +79,7 @@ export default function ContasPagarForm({ onClose, onSave, onPagar }) {
     }
     setSaving(true);
     try {
-      const { data } = await api.post("/api/contas-pagar", payload());
+      const { data } = await api.post("/contas-pagar", payload());
       onSave && onSave(data);
       onPagar && onPagar(data); // abre modal de pagamento vindo do pai
     } catch {

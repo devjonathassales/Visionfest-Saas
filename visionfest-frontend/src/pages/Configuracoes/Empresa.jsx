@@ -1,21 +1,28 @@
 // src/pages/admin/CadastroEmpresa.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useAuth } from "/src/contexts/authContext.jsx";
 import EmpresaCard from "../../components/EmpresaCard";
 import EmpresaForm from "../../components/EmpresaForm";
 import ModalVisualizarEmpresa from "../../components/ModalVisualizarEmpresa";
 
 export default function CadastroEmpresa() {
-  const { apiCliente } = useAuth();
+  const { api, apiCliente } = useAuth();
+  const http = api || apiCliente;
+
   const [empresa, setEmpresa] = useState(null);
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [empresaVisualizar, setEmpresaVisualizar] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const carregar = async () => {
+  const [loading, setLoading] = useState(false);
+  const [importingAdmin, setImportingAdmin] = useState(false);
+  const [importingFin, setImportingFin] = useState(false);
+
+  const carregar = useCallback(async () => {
+    if (!http) return;
     setLoading(true);
     try {
-      const { data } = await apiCliente.get("/empresa");
+      // ✅ rota correta do tenant (o app.js monta em /api/empresa e a route expõe /empresa)
+      const { data } = await http.get("/empresa");
       setEmpresa(data || null);
     } catch (err) {
       console.error("Erro ao carregar empresa:", err);
@@ -23,21 +30,60 @@ export default function CadastroEmpresa() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [http]);
 
   useEffect(() => {
-    carregar();
-  }, []);
+    if (http) carregar();
+  }, [http, carregar]);
 
-  const abrirFormulario = () => {
-    setMostrarFormulario(true);
-  };
+  const abrirFormulario = () => setMostrarFormulario(true);
 
   const fecharFormulario = () => {
     setMostrarFormulario(false);
     setEmpresaVisualizar(null);
     carregar();
   };
+
+  async function handleImportAdmin() {
+    if (!http) return;
+    setImportingAdmin(true);
+    try {
+      await http.post("/empresa/importar-admin");
+      alert("Empresa importada/atualizada a partir do Admin com sucesso!");
+      await carregar();
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.error || "Erro ao importar do admin");
+    } finally {
+      setImportingAdmin(false);
+    }
+  }
+
+  async function handleImportFinanceiro() {
+    if (!http) return;
+    setImportingFin(true);
+    try {
+      const { data } = await http.post("/empresa/importar-financeiro");
+      // Monta um resumo amigável do resultado
+      const cr = data?.contasReceber || {};
+      const ft = data?.faturas || {};
+      const resumo =
+        `Financeiro sincronizado!\n\n` +
+        `Contas a Receber — importados: ${cr.imported ?? 0}, atualizados: ${
+          cr.updated ?? 0
+        }\n` +
+        `Faturas — importadas: ${ft.imported ?? 0}, atualizadas: ${
+          ft.updated ?? 0
+        }, itens recriados: ${ft.items ?? 0}`;
+      alert(resumo);
+      await carregar();
+    } catch (e) {
+      console.error(e);
+      alert(e?.response?.data?.error || "Erro ao importar financeiro do admin");
+    } finally {
+      setImportingFin(false);
+    }
+  }
 
   return (
     <div className="p-6 font-open max-w-5xl mx-auto">
@@ -63,27 +109,33 @@ export default function CadastroEmpresa() {
       )}
 
       {!mostrarFormulario && (
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={abrirFormulario}
-            className="bg-[#7ED957] text-white px-6 py-2 rounded mt-2 hover:bg-[#65b344]"
+            disabled={loading || importingAdmin || importingFin}
+            className="bg-[#7ED957] text-white px-6 py-2 rounded mt-2 hover:bg-[#65b344] disabled:opacity-60"
           >
             {empresa ? "Editar Empresa" : "Cadastrar Empresa"}
           </button>
 
           <button
-            onClick={async () => {
-              try {
-                await apiCliente.post("/empresa/importar-admin");
-                alert("Empresa importada do admin!");
-                carregar();
-              } catch (e) {
-                alert(e?.response?.data?.error || "Erro ao importar do admin");
-              }
-            }}
-            className="px-6 py-2 border rounded mt-2"
+            onClick={handleImportAdmin}
+            disabled={!http || loading || importingAdmin || importingFin}
+            className="px-6 py-2 border rounded mt-2 disabled:opacity-60"
+            title="Importa/atualiza os dados da empresa do Admin para este tenant"
           >
-            Reimportar do Admin
+            {importingAdmin ? "Importando do Admin..." : "Reimportar do Admin"}
+          </button>
+
+          <button
+            onClick={handleImportFinanceiro}
+            disabled={!http || loading || importingFin || importingAdmin}
+            className="px-6 py-2 border rounded mt-2 disabled:opacity-60"
+            title="Espelha Contas a Receber e Faturas do Admin para o tenant"
+          >
+            {importingFin
+              ? "Sincronizando financeiro..."
+              : "Sincronizar Financeiro"}
           </button>
         </div>
       )}

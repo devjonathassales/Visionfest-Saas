@@ -55,7 +55,7 @@ export default function EstoquePage() {
   const fetchEstoque = useCallback(async () => {
     try {
       // 🔑 sem barra inicial => respeita baseURL "/api"
-      const { data } = await api.get("/api/estoque", {
+      const { data } = await api.get("/estoque", {
         params: { inicio, fim },
       });
       setProdutos(data || []);
@@ -78,7 +78,7 @@ export default function EstoquePage() {
   const onSaveMovimentacao = async (movimentacao) => {
     try {
       // 🔑 sem barra inicial
-      await api.post("/api/estoque/movimentar", movimentacao);
+      await api.post("/estoque/movimentar", movimentacao);
       toast.success("Movimentação registrada com sucesso!");
       setMostrarMovimentacao(false);
       fetchEstoque();

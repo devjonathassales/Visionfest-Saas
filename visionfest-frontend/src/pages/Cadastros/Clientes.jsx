@@ -19,7 +19,7 @@ export default function Clientes() {
   const fetchClientes = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/clientes");
+      const { data } = await api.get("/clientes");
       setClientes(data);
     } catch (err) {
       console.error(err);
@@ -56,9 +56,9 @@ export default function Clientes() {
   const handleSalvar = async (novoCliente) => {
     try {
       if (novoCliente.id) {
-        await api.put(`/api/clientes/${novoCliente.id}`, novoCliente);
+        await api.put(`/clientes/${novoCliente.id}`, novoCliente);
       } else {
-        await api.post(`/api/clientes`, novoCliente);
+        await api.post(`/clientes`, novoCliente);
       }
       await fetchClientes();
       setMostrarFormulario(false);
@@ -77,7 +77,7 @@ export default function Clientes() {
   const handleExcluir = async (id) => {
     if (!window.confirm("Deseja excluir este cliente?")) return;
     try {
-      await api.delete(`/api/clientes/${id}`);
+      await api.delete(`/clientes/${id}`);
       setClientes((prev) => prev.filter((c) => c.id !== id));
     } catch (err) {
       console.error(err);

@@ -39,11 +39,11 @@ export default function Caixa() {
     try {
       const [resPagar, resReceber, resContas, resEntradas, resSaidas] =
         await Promise.all([
-          api.get("/api/contas-pagar"),
-          api.get("/api/contas-receber"),
-          api.get("/api/contas-bancarias"),
-          api.get("/api/caixa/entradas"),
-          api.get("/api/caixa/saidas"),
+          api.get("/contas-pagar"),
+          api.get("/contas-receber"),
+          api.get("/contas-bancarias"),
+          api.get("/caixa/entradas"),
+          api.get("/caixa/saidas"),
         ]);
 
       const dataPagar = resPagar.data || [];
@@ -99,7 +99,7 @@ export default function Caixa() {
   // Carrega estado atual do caixa do backend
   const carregarEstadoCaixa = async () => {
     try {
-      const res = await api.get("/api/caixa/atual");
+      const res = await api.get("/caixa/atual");
       const caixa = res.data || {};
       setCaixaAberto(!!caixa.aberto);
       setDataAbertura(caixa.dataAbertura ? new Date(caixa.dataAbertura) : null);
@@ -114,7 +114,7 @@ export default function Caixa() {
   // Abrir caixa via API
   const abrirCaixaHandler = async () => {
     try {
-      const res = await api.post("/api/caixa/abrir");
+      const res = await api.post("/caixa/abrir");
       const caixa = res.data;
       setCaixaAberto(!!caixa.aberto);
       setDataAbertura(caixa.dataAbertura ? new Date(caixa.dataAbertura) : null);
@@ -128,7 +128,7 @@ export default function Caixa() {
   // Fechar caixa via API
   const fecharCaixaHandler = async () => {
     try {
-      const res = await api.post("/api/caixa/fechar");
+      const res = await api.post("/caixa/fechar");
       const caixa = res.data;
       setCaixaAberto(!!caixa.aberto);
       setUltimoFechamento(
@@ -153,7 +153,7 @@ export default function Caixa() {
   // Salvar entrada manual via API
   const handleSalvarEntrada = async (entrada) => {
     try {
-      const res = await api.post("/api/caixa/entrada-manual", entrada);
+      const res = await api.post("/caixa/entrada-manual", entrada);
       const novaEntrada = res.data;
       setEntradasManuais((old) => [...old, novaEntrada]);
       setTotalEntradas((old) => old + (Number(novaEntrada.valor) || 0));
@@ -168,7 +168,7 @@ export default function Caixa() {
   const handleSalvarSaida = async (saida) => {
     try {
       const res = await api.post(
-        "/api/caixa/saida-manual",
+        "/caixa/saida-manual",
         saídaNormalizada(saida)
       );
       const novaSaida = res.data;

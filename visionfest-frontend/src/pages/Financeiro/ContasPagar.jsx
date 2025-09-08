@@ -56,7 +56,7 @@ export default function ContasPagar() {
   // fornecedores para filtro
   const carregarFornecedores = useCallback(async () => {
     try {
-      const { data } = await api.get("/api/fornecedores");
+      const { data } = await api.get("/fornecedores");
       setFornecedores(data || []);
     } catch (err) {
       toast.error("Erro ao carregar fornecedores.");
@@ -71,7 +71,7 @@ export default function ContasPagar() {
   const carregarContas = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/api/contas-pagar", {
+      const { data } = await api.get("/contas-pagar", {
         params: {
           dataInicio,
           dataFim,
@@ -110,7 +110,7 @@ export default function ContasPagar() {
     setPagamentoAberto(false);
     setLoading(true);
     try {
-      const { data } = await api.get(`/api/contas-pagar/${conta.id}`);
+      const { data } = await api.get(`/contas-pagar/${conta.id}`);
       setContaSelecionada(data);
       setDetalhesAberto(true);
     } catch (err) {
@@ -127,7 +127,7 @@ export default function ContasPagar() {
     if (!window.confirm("Deseja excluir esta conta?")) return;
     setLoading(true);
     try {
-      await api.delete(`/api/contas-pagar/${id}`);
+      await api.delete(`/contas-pagar/${id}`);
       toast.success("Conta excluída com sucesso!");
       await carregarContas();
     } catch {
@@ -160,7 +160,7 @@ export default function ContasPagar() {
     if (!window.confirm("Deseja estornar esta conta?")) return;
     setLoading(true);
     try {
-      await api.put(`/api/contas-pagar/${id}/estorno`);
+      await api.put(`/contas-pagar/${id}/estorno`);
       toast.success("Conta estornada com sucesso!");
       await carregarContas();
     } catch {

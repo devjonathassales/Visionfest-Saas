@@ -1,158 +1,241 @@
-// src/pages/admin/CadastroEmpresa.jsx
-import React, { useEffect, useState, useCallback } from "react";
+// src/pages/Configuracoes/Empresa.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "/src/contexts/authContext.jsx";
-import EmpresaCard from "../../components/EmpresaCard";
-import EmpresaForm from "../../components/EmpresaForm";
-import ModalVisualizarEmpresa from "../../components/ModalVisualizarEmpresa";
+import apiClienteFallback from "/src/utils/apiCliente.js";
 
-export default function CadastroEmpresa() {
-  const { api, apiCliente } = useAuth();
-  const http = api || apiCliente;
+export default function Empresa() {
+  const auth = useAuth?.() || null;
+  const api = auth?.api || auth?.apiCliente || apiClienteFallback;
 
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState(null);
   const [empresa, setEmpresa] = useState(null);
-  const [mostrarFormulario, setMostrarFormulario] = useState(false);
-  const [empresaVisualizar, setEmpresaVisualizar] = useState(null);
+  const [showView, setShowView] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [importingAdmin, setImportingAdmin] = useState(false);
-  const [importingFin, setImportingFin] = useState(false);
+  // campos de edição
+  const [form, setForm] = useState({
+    nome: "",
+    documento: "",
+    whatsapp: "",
+    telefone: "",
+    email: "",
+    instagram: "",
+  });
+  const [logoFile, setLogoFile] = useState(null);
 
-  const carregar = useCallback(async () => {
-    if (!http) return;
-    setLoading(true);
+  const carregar = async () => {
     try {
-      // ✅ rota correta do tenant (o app.js monta em /api/empresa e a route expõe /empresa)
-      const { data } = await http.get("/empresa");
-      setEmpresa(data || null);
-    } catch (err) {
-      console.error("Erro ao carregar empresa:", err);
-      alert(err?.response?.data?.error || "Erro ao carregar empresa");
+      setLoading(true);
+      setErro(null);
+      const { data } = await api.get("/empresa"); // baseURL já tem /api
+      setEmpresa(data || {});
+      setForm({
+        nome: data?.nome || "",
+        documento: data?.documento || "",
+        whatsapp: data?.whatsapp || "",
+        telefone: data?.telefone || "",
+        email: data?.email || "",
+        instagram: data?.instagram || "",
+      });
+    } catch (e) {
+      setErro(
+        e?.response?.data?.error || e?.message || "Erro ao carregar empresa"
+      );
     } finally {
       setLoading(false);
     }
-  }, [http]);
-
-  useEffect(() => {
-    if (http) carregar();
-  }, [http, carregar]);
-
-  const abrirFormulario = () => setMostrarFormulario(true);
-
-  const fecharFormulario = () => {
-    setMostrarFormulario(false);
-    setEmpresaVisualizar(null);
-    carregar();
   };
 
-  async function handleImportAdmin() {
-    if (!http) return;
-    setImportingAdmin(true);
-    try {
-      await http.post("/empresa/importar-admin");
-      alert("Empresa importada/atualizada a partir do Admin com sucesso!");
-      await carregar();
-    } catch (e) {
-      console.error(e);
-      alert(e?.response?.data?.error || "Erro ao importar do admin");
-    } finally {
-      setImportingAdmin(false);
-    }
-  }
+  useEffect(() => {
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function handleImportFinanceiro() {
-    if (!http) return;
-    setImportingFin(true);
+  const handleImportAdmin = async () => {
     try {
-      const { data } = await http.post("/empresa/importar-financeiro");
-      // Monta um resumo amigável do resultado
-      const cr = data?.contasReceber || {};
-      const ft = data?.faturas || {};
-      const resumo =
-        `Financeiro sincronizado!\n\n` +
-        `Contas a Receber — importados: ${cr.imported ?? 0}, atualizados: ${
-          cr.updated ?? 0
-        }\n` +
-        `Faturas — importadas: ${ft.imported ?? 0}, atualizadas: ${
-          ft.updated ?? 0
-        }, itens recriados: ${ft.items ?? 0}`;
-      alert(resumo);
+      await api.post("/empresa/importar-admin");
       await carregar();
     } catch (e) {
-      console.error(e);
-      alert(e?.response?.data?.error || "Erro ao importar financeiro do admin");
-    } finally {
-      setImportingFin(false);
+      alert(
+        e?.response?.data?.error || e?.message || "Falha ao reimportar do admin"
+      );
     }
-  }
+  };
+
+  const handleSyncFinanceiro = async () => {
+    try {
+      await api.post("/empresa/importar-financeiro");
+      alert("Sincronização solicitada.");
+    } catch (e) {
+      alert(
+        e?.response?.data?.error ||
+          e?.message ||
+          "Erro ao sincronizar financeiro"
+      );
+    }
+  };
+
+  const salvar = async (ev) => {
+    ev.preventDefault();
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => fd.append(k, v ?? ""));
+      if (logoFile) fd.append("logo", logoFile);
+
+      await api.put("/empresa", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      setIsEditing(false);
+      setLogoFile(null);
+      await carregar();
+    } catch (e) {
+      alert(e?.response?.data?.error || e?.message || "Erro ao salvar");
+    }
+  };
+
+  const campo = (name, label, type = "text") => (
+    <div className="mb-4">
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <input
+        type={type}
+        value={form[name] || ""}
+        onChange={(e) => setForm((s) => ({ ...s, [name]: e.target.value }))}
+        className="w-full border rounded px-3 py-2"
+      />
+    </div>
+  );
+
+  if (loading) return <p>Carregando…</p>;
+  if (erro) return <p className="text-red-600">{erro}</p>;
 
   return (
-    <div className="p-6 font-open max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold text-[#7ED957] font-montserrat mb-6">
-        Dados da Empresa
-      </h1>
+    <div className="max-w-4xl mx-auto p-6 bg-white rounded-xl shadow">
+      <h1 className="text-3xl font-bold mb-6">Dados da Empresa</h1>
 
-      {loading && <p>Carregando...</p>}
+      {/* header, ações */}
+      <div className="flex items-center gap-3 mb-4">
+        <button
+          onClick={() => setIsEditing(true)}
+          className="px-4 py-2 bg-lime-500 text-white rounded-lg"
+        >
+          Editar Empresa
+        </button>
+        <button
+          onClick={handleImportAdmin}
+          className="px-4 py-2 bg-gray-100 rounded-lg"
+        >
+          Reimportar do Admin
+        </button>
+        <button
+          onClick={handleSyncFinanceiro}
+          className="px-4 py-2 bg-gray-100 rounded-lg"
+        >
+          Sincronizar Financeiro
+        </button>
+        <button
+          onClick={() => setShowView(true)}
+          className="ml-auto px-4 py-2 bg-gray-200 rounded-lg"
+        >
+          Visualizar
+        </button>
+      </div>
 
-      {!loading && empresa && !mostrarFormulario && (
-        <EmpresaCard
-          empresa={empresa}
-          onEditar={abrirFormulario}
-          onVisualizar={() => setEmpresaVisualizar(empresa)}
-          onExcluir={null /* não aplicável no tenant */}
-        />
-      )}
+      {/* resumo */}
+      <div className="text-sm">
+        <div className="font-semibold">{empresa?.nome || "—"}</div>
+        <div>CNPJ/CPF: {empresa?.documento || "—"}</div>
+        <div>Whatsapp: {empresa?.whatsapp || "—"}</div>
+      </div>
 
-      {!loading && !empresa && !mostrarFormulario && (
-        <div className="text-gray-600 mb-4">
-          Nenhuma empresa registrada no tenant ainda.
+      {/* modal visualizar */}
+      {showView && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[640px]">
+            <h2 className="text-xl font-bold mb-4">Detalhes da Empresa</h2>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <div className="font-semibold">Nome:</div>
+                <div>{empresa?.nome || "—"}</div>
+              </div>
+              <div>
+                <div className="font-semibold">Documento:</div>
+                <div>{empresa?.documento || "—"}</div>
+              </div>
+              <div>
+                <div className="font-semibold">Email:</div>
+                <div>{empresa?.email || "—"}</div>
+              </div>
+              <div>
+                <div className="font-semibold">Telefone:</div>
+                <div>{empresa?.telefone || "—"}</div>
+              </div>
+              <div>
+                <div className="font-semibold">Whatsapp:</div>
+                <div>{empresa?.whatsapp || "—"}</div>
+              </div>
+              <div>
+                <div className="font-semibold">Instagram:</div>
+                <div>{empresa?.instagram || "—"}</div>
+              </div>
+            </div>
+            <div className="mt-6 text-right">
+              <button
+                onClick={() => setShowView(false)}
+                className="px-4 py-2 bg-gray-800 text-white rounded-lg"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {!mostrarFormulario && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={abrirFormulario}
-            disabled={loading || importingAdmin || importingFin}
-            className="bg-[#7ED957] text-white px-6 py-2 rounded mt-2 hover:bg-[#65b344] disabled:opacity-60"
-          >
-            {empresa ? "Editar Empresa" : "Cadastrar Empresa"}
-          </button>
-
-          <button
-            onClick={handleImportAdmin}
-            disabled={!http || loading || importingAdmin || importingFin}
-            className="px-6 py-2 border rounded mt-2 disabled:opacity-60"
-            title="Importa/atualiza os dados da empresa do Admin para este tenant"
-          >
-            {importingAdmin ? "Importando do Admin..." : "Reimportar do Admin"}
-          </button>
-
-          <button
-            onClick={handleImportFinanceiro}
-            disabled={!http || loading || importingFin || importingAdmin}
-            className="px-6 py-2 border rounded mt-2 disabled:opacity-60"
-            title="Espelha Contas a Receber e Faturas do Admin para o tenant"
-          >
-            {importingFin
-              ? "Sincronizando financeiro..."
-              : "Sincronizar Financeiro"}
-          </button>
-        </div>
-      )}
-
-      {mostrarFormulario && (
-        <EmpresaForm
-          empresa={empresa}
-          onCancelar={fecharFormulario}
-          onSalvar={fecharFormulario}
-        />
-      )}
-
-      {empresaVisualizar && (
-        <ModalVisualizarEmpresa
-          empresa={empresaVisualizar}
-          onClose={() => setEmpresaVisualizar(null)}
-        />
+      {/* formulário edição */}
+      {isEditing && (
+        <form onSubmit={salvar} className="mt-6 grid grid-cols-2 gap-4">
+          {campo("nome", "Nome da Empresa")}
+          {campo("documento", "CPF ou CNPJ")}
+          {campo("whatsapp", "Whatsapp")}
+          {campo("telefone", "Telefone")}
+          {campo("email", "E-mail", "email")}
+          {campo("instagram", "Instagram")}
+          <div className="col-span-2">
+            <label className="block text-sm font-medium mb-1">Logomarca</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+            />
+          </div>
+          <div className="col-span-2 mt-2 flex gap-3">
+            <button
+              type="submit"
+              className="px-4 py-2 bg-lime-600 text-white rounded-lg"
+            >
+              Salvar Empresa
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsEditing(false);
+                setLogoFile(null);
+                setForm({
+                  nome: empresa?.nome || "",
+                  documento: empresa?.documento || "",
+                  whatsapp: empresa?.whatsapp || "",
+                  telefone: empresa?.telefone || "",
+                  email: empresa?.email || "",
+                  instagram: empresa?.instagram || "",
+                });
+              }}
+              className="px-4 py-2 bg-gray-200 rounded-lg"
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );

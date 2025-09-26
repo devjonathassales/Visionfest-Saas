@@ -7,9 +7,11 @@ const {
   CentroCusto: CentroCustoAdmin,
   sequelize,
 } = require("../models");
+
 const { gerarParcelasPlanoAnual } = require("../utils/financeiroUtils");
 const { createSchemaAndSyncModels, withTenantDb } = require("../utils/dbUtils");
 const { verificarEAtivarEmpresa } = require("../utils/empresaUtils");
+const { seedTenantFaturasForEmpresa } = require("../utils/faturasSync"); // <<< rota de seed manual
 const bcrypt = require("bcryptjs");
 
 // helpers
@@ -48,17 +50,8 @@ async function processarCriacaoEmpresa(req, res) {
     } = req.body;
 
     // ✅ Validação básica
-    if (
-      !nome ||
-      !cpfCnpj ||
-      !dominio ||
-      !planoId ||
-      !email ||
-      !senhaSuperAdmin
-    ) {
-      return res
-        .status(400)
-        .json({ mensagem: "Preencha todos os campos obrigatórios." });
+    if (!nome || !cpfCnpj || !dominio || !planoId || !email || !senhaSuperAdmin) {
+      return res.status(400).json({ mensagem: "Preencha todos os campos obrigatórios." });
     }
 
     // ✉️ Validação e-mail
@@ -67,10 +60,8 @@ async function processarCriacaoEmpresa(req, res) {
     }
 
     // 🔐 Senha mínima
-    if (senhaSuperAdmin.length < 6) {
-      return res
-        .status(400)
-        .json({ mensagem: "A senha deve ter no mínimo 6 caracteres." });
+    if (String(senhaSuperAdmin).length < 6) {
+      return res.status(400).json({ mensagem: "A senha deve ter no mínimo 6 caracteres." });
     }
 
     // 📦 Verifica plano
@@ -85,25 +76,17 @@ async function processarCriacaoEmpresa(req, res) {
       Empresa.findOne({ where: { dominio } }),
     ]);
     if (empresaExistente) {
-      return res
-        .status(400)
-        .json({ mensagem: "Já existe uma empresa com este CPF/CNPJ." });
+      return res.status(400).json({ mensagem: "Já existe uma empresa com este CPF/CNPJ." });
     }
     if (dominioExistente) {
-      return res
-        .status(400)
-        .json({ mensagem: "Já existe uma empresa com este domínio." });
+      return res.status(400).json({ mensagem: "Já existe uma empresa com este domínio." });
     }
 
     // 🛠 Nome do schema seguro
     const nomeBanco = `cliente_${dominio.replace(/\W/g, "_").toLowerCase()}`;
 
     // 🗄 Criar schema do cliente e sincronizar models do APP DO CLIENTE
-    await createSchemaAndSyncModels(nomeBanco, {
-      nome,
-      email,
-      senhaSuperAdmin,
-    });
+    await createSchemaAndSyncModels(nomeBanco, { nome, email, senhaSuperAdmin });
 
     // 🏢 Criar registro da empresa no painel administrativo (schema public)
     const senhaCriptografada = await bcrypt.hash(senhaSuperAdmin, 10);
@@ -143,16 +126,16 @@ async function processarCriacaoEmpresa(req, res) {
         Empresa: EmpresaT,
         Endereco: EnderecoT,
         ContratoCliente: ContratoClienteT, // contrato do SaaS no tenant
-        ContaPagar: CPT, // vamos criar Pagar no tenant
         CentroCusto: CCT, // centros de custo tenant
         Fornecedor: FNT, // fornecedor padrão (SaaS)
+        FaturaSaaS, // <<< a tabela que a UI usa
       } = models;
 
       // 1) Empresa do tenant
       let empresaTenant = null;
       if (EmpresaT) {
         const payloadEmpresa = {
-          id: novaEmpresa.id, // tenta manter o mesmo id (se permitido)
+          id: novaEmpresa.id,
           nome,
           ...(hasAttr(EmpresaT, "documento") ? { documento: cpfCnpj } : {}),
           ...(hasAttr(EmpresaT, "cpfCnpj") ? { cpfCnpj } : {}),
@@ -167,7 +150,7 @@ async function processarCriacaoEmpresa(req, res) {
           ...(hasAttr(EmpresaT, "bairro") ? { bairro } : {}),
           ...(hasAttr(EmpresaT, "cidade") ? { cidade } : {}),
           ...(hasAttr(EmpresaT, "uf") ? { uf } : {}),
-          ...(hasAttr(EmpresaT, "ativo") ? { ativo: true } : {}),
+          ...(hasAttr(EmpresaT, "ativo") ? { ativo: true } : {}), // <<< só isso
         };
 
         try {
@@ -195,7 +178,7 @@ async function processarCriacaoEmpresa(req, res) {
         await EnderecoT.create(endPayload);
       }
 
-      // 3) Contrato do SaaS (ContratoCliente) – sem conflitar com "Contrato" de eventos
+      // 3) Contrato do SaaS (ContratoCliente)
       let contratoClienteId = null;
       if (ContratoClienteT && empresaTenant) {
         const agora = new Date();
@@ -229,7 +212,7 @@ async function processarCriacaoEmpresa(req, res) {
         contratoClienteId = cc.id;
       }
 
-      // 4) Clonar Centros de Custo do admin (apenas os usados nas parcelas) + garantir "Planos e Assinaturas" (id 1)
+      // 4) Clonar Centros de Custo necessários + garantir "Planos e Assinaturas"
       const publicParcelas = await ContaReceber.findAll({
         where: { empresaId: novaEmpresa.id },
         order: [["vencimento", "ASC"]],
@@ -280,7 +263,7 @@ async function processarCriacaoEmpresa(req, res) {
         }
       }
 
-      // 5) Fornecedor padrão (SaaS) no tenant — para cumprir NOT NULL em ContaPagar.fornecedorId
+      // 5) Fornecedor padrão (útil se ContaPagar exigir FK no futuro)
       const fornecedorNome =
         process.env.SAAS_FORNECEDOR_NOME || "VisionFest (SaaS)";
       const fornecedorDoc =
@@ -301,136 +284,88 @@ async function processarCriacaoEmpresa(req, res) {
         fornecedorTenantId = forn.id;
       }
 
-      // 6) Criar CONTAS A PAGAR no tenant a partir das CONTAS A RECEBER do admin
-      if (CPT && empresaTenant && publicParcelas.length) {
-        const attrValorPagar = pickAttr(CPT, [
-          "valor",
-          "valorTotal",
-          "valor_total",
-          "valorBruto",
-          "valorLiquido",
-          "valor_liquido",
-        ]);
+      // 6) Criar FATURAS DO SAAS no tenant a partir das CONTAS A RECEBER do admin
+      const FaturaSaaSModel =
+        models.FaturaSaaS ||
+        (models.sequelize && models.sequelize.models?.FaturaSaaS);
 
-        // detectar nome do campo FK do fornecedor
-        const fkFornecedorAttr = pickAttr(CPT, [
-          "fornecedorId",
-          "idFornecedor",
-          "fornecedor_id",
-        ]);
+      if (FaturaSaaSModel && empresaTenant && publicParcelas.length) {
+        // garante que a tabela exista no schema do tenant
+        try {
+          await FaturaSaaSModel.sync(); // idempotente
+        } catch (e) {
+          console.warn("[FaturaSaaS tenant] sync falhou:", e.message);
+        }
 
         const linhas = publicParcelas.map((p) => {
-          const r = {};
+          const d = p.vencimento ? new Date(p.vencimento) : new Date();
+          const competencia = `${d.getFullYear()}-${String(
+            d.getMonth() + 1
+          ).padStart(2, "0")}`;
+          const descricao = p.descricao || `Assinatura do plano ${plano.nome}`;
+          const valor =
+            Number(
+              p.valorTotal ?? p.valor ?? plano.valorMensal ?? plano.valor ?? 0
+            ) || 0;
 
-          if (hasAttr(CPT, "empresaId")) r.empresaId = empresaTenant.id;
+          const base = {
+            descricao,
+            competencia,
+            vencimento: d,
+            valor,
+            status: "aberto",
+            formaPagamento: null,
+            dataPagamento: null,
+            valorPago: null,
+            referenciaPublicContaId: p.id || null,
+            observacoes: null,
+          };
 
-          // Centro de custo
-          const adminCC = p.centroCustoId ?? 1;
-          const tenantCC = centroMap[adminCC] || defaultTenantCentroId || null;
-          if (tenantCC && hasAttr(CPT, "centroCustoId"))
-            r.centroCustoId = tenantCC;
-
-          // Fornecedor obrigatório
-          if (fkFornecedorAttr && fornecedorTenantId) {
-            r[fkFornecedorAttr] = fornecedorTenantId;
+          if (hasAttr(FaturaSaaSModel, "empresaId"))
+            base.empresaId = empresaTenant.id;
+          if (
+            contratoClienteId &&
+            hasAttr(FaturaSaaSModel, "contratoClienteId")
+          ) {
+            base.contratoClienteId = contratoClienteId;
           }
 
-          // descrição, datas, numeração
-          const desc = p.descricao || `Assinatura do plano ${plano.nome}`;
-          if (hasAttr(CPT, "descricao")) r.descricao = desc;
-          if (hasAttr(CPT, "vencimento"))
-            r.vencimento = p.vencimento || new Date();
-
-          const v = numberOr(
-            p.valorTotal,
-            p.valor,
-            plano.valorMensal,
-            plano.valor,
-            0
-          );
-          if (attrValorPagar) r[attrValorPagar] = v;
-
-          if (hasAttr(CPT, "status")) r.status = "aberto";
-
-          // vínculo com contrato do SaaS (se a FK existir)
-          if (contratoClienteId) {
-            if (hasAttr(CPT, "contratoClienteId"))
-              r.contratoClienteId = contratoClienteId;
-            else if (hasAttr(CPT, "contratoId"))
-              r.contratoId = contratoClienteId;
-          }
-
-          // completar NOT NULLs não-FK
-          for (const [name, a] of Object.entries(CPT.rawAttributes || {})) {
-            if (
-              name === "id" ||
-              r[name] !== undefined ||
-              a.allowNull !== false ||
-              a.defaultValue !== undefined ||
-              a.references
-            ) {
-              continue;
-            }
-            const typeStr = String(a.type || "").toLowerCase();
-            if (typeStr.includes("boolean")) r[name] = false;
-            else if (
-              typeStr.includes("integer") ||
-              typeStr.includes("bigint") ||
-              typeStr.includes("decimal") ||
-              typeStr.includes("float") ||
-              typeStr.includes("double") ||
-              typeStr.includes("real") ||
-              typeStr.includes("numeric")
-            ) {
-              r[name] = 0;
-            } else if (typeStr.includes("date")) {
-              r[name] = new Date();
-            } else if (a.values?.length) {
-              r[name] = a.values[0];
-            } else {
-              r[name] = "";
-            }
-          }
-
-          return r;
+          return base;
         });
 
-        if (linhas.length) {
-          try {
-            await CPT.bulkCreate(linhas, { validate: true });
-          } catch (e) {
-            console.warn(
-              "[ContaPagar tenant] bulkCreate falhou. Inserindo item a item…"
-            );
-            for (let i = 0; i < linhas.length; i++) {
-              try {
-                await CPT.create(linhas[i]);
-              } catch (e1) {
-                console.warn(
-                  `  • Falha na parcela #${i + 1}:`,
-                  e1?.errors?.map((x) => x.message).join(" | ") || e1.message
-                );
-              }
+        try {
+          await FaturaSaaSModel.bulkCreate(linhas, { validate: true });
+        } catch (e) {
+          console.warn(
+            "[FaturaSaaS tenant] bulkCreate falhou. Inserindo item a item…"
+          );
+          for (let i = 0; i < linhas.length; i++) {
+            try {
+              await FaturaSaaSModel.create(linhas[i]);
+            } catch (e1) {
+              console.warn(
+                `  • Falha na fatura #${i + 1}:`,
+                e1?.errors?.map((x) => x.message).join(" | ") || e1.message
+              );
             }
           }
         }
+      } else {
+        console.warn(
+          "[FaturaSaaS tenant] Model indisponível ou sem parcelas para criar."
+        );
       }
     });
     /* ===================== /CLONE ===================== */
 
     await t.commit();
-    // mantém retorno compatível com o modal de recebimento do front
     return res.status(201).json({
-      mensagem:
-        "Empresa criada com sucesso. É necessário efetuar o pagamento para ativar.",
+      mensagem: "Empresa criada com sucesso. É necessário efetuar o pagamento para ativar.",
       empresa: novaEmpresa,
       empresaId: novaEmpresa.id,
     });
   } catch (error) {
-    console.error("❌ Erro ao criar empresa:", {
-      mensagem: error.message,
-      stack: error.stack,
-    });
+    console.error("❌ Erro ao criar empresa:", { mensagem: error.message, stack: error.stack });
     await t.rollback();
     return res.status(500).json({ mensagem: "Erro ao criar empresa." });
   }
@@ -448,20 +383,15 @@ exports.ativarEmpresa = async (req, res) => {
     const { id } = req.params;
     await verificarEAtivarEmpresa(id);
     const empresaAtualizada = await Empresa.findByPk(id);
-    if (!empresaAtualizada)
-      return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    if (!empresaAtualizada) return res.status(404).json({ mensagem: "Empresa não encontrada." });
 
     if (empresaAtualizada.status !== "ativo") {
       return res.status(400).json({
-        mensagem:
-          "Empresa não pode ser ativada. Verifique pagamentos e atrasos.",
+        mensagem: "Empresa não pode ser ativada. Verifique pagamentos e atrasos.",
       });
     }
 
-    return res.json({
-      mensagem: "Empresa ativada com sucesso.",
-      empresa: empresaAtualizada,
-    });
+    return res.json({ mensagem: "Empresa ativada com sucesso.", empresa: empresaAtualizada });
   } catch (error) {
     console.error("❌ Erro ao ativar empresa:", error);
     return res.status(500).json({ mensagem: "Erro ao ativar empresa." });
@@ -471,9 +401,7 @@ exports.ativarEmpresa = async (req, res) => {
 // 📋 Listar empresas
 exports.listarEmpresas = async (_req, res) => {
   try {
-    const empresas = await Empresa.findAll({
-      attributes: { exclude: ["senhaSuperAdmin"] },
-    });
+    const empresas = await Empresa.findAll({ attributes: { exclude: ["senhaSuperAdmin"] } });
     const empresasComBadge = empresas.map((e) => ({
       ...e.toJSON(),
       statusBadge:
@@ -495,8 +423,7 @@ exports.editarEmpresa = async (req, res) => {
   try {
     const { id } = req.params;
     const empresa = await Empresa.findByPk(id);
-    if (!empresa)
-      return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
 
     await empresa.update(req.body);
     return res.json({ mensagem: "Empresa atualizada com sucesso.", empresa });
@@ -511,23 +438,19 @@ exports.excluirEmpresa = async (req, res) => {
   try {
     const { id } = req.params;
     const empresa = await Empresa.schema("public").findByPk(id);
-    if (!empresa)
-      return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
 
     const contasPagas = await ContaReceber.schema("public").findAll({
       where: { empresaId: id, status: "pago" },
     });
     if (contasPagas.length > 0) {
       return res.status(400).json({
-        mensagem:
-          "Não é possível excluir a empresa, pois já existem pagamentos realizados.",
+        mensagem: "Não é possível excluir a empresa, pois já existem pagamentos realizados.",
       });
     }
 
     const schema = empresa.bancoDados;
-    await sequelize.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`, {
-      raw: true,
-    });
+    await sequelize.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`, { raw: true });
     await ContaReceber.schema("public").destroy({ where: { empresaId: id } });
     await empresa.destroy();
 
@@ -558,14 +481,9 @@ exports.upgradePlanoEmpresa = async (req, res) => {
       return res.status(400).json({ mensagem: "Novo plano não encontrado." });
     }
 
-    if (
-      (novoPlano.valorMensal ?? novoPlano.valor ?? 0) <
-      (planoAtual.valorMensal ?? planoAtual.valor ?? 0)
-    ) {
+    if ((novoPlano.valorMensal ?? novoPlano.valor ?? 0) < (planoAtual.valorMensal ?? planoAtual.valor ?? 0)) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ mensagem: "Não é permitido fazer downgrade de plano." });
+      return res.status(400).json({ mensagem: "Não é permitido fazer downgrade de plano." });
     }
 
     await ContaReceber.destroy({
@@ -574,20 +492,14 @@ exports.upgradePlanoEmpresa = async (req, res) => {
     });
 
     empresa.planoId = novoPlanoId;
-    await gerarParcelasPlanoAnual({
-      empresa,
-      plano: novoPlano,
-      transaction: t,
-    });
+    await gerarParcelasPlanoAnual({ empresa, plano: novoPlano, transaction: t });
 
     await t.commit();
     return res.json({ mensagem: "Upgrade realizado com sucesso.", empresa });
   } catch (error) {
     await t.rollback();
     console.error("❌ Erro no upgrade de plano:", error);
-    return res
-      .status(500)
-      .json({ mensagem: "Erro ao realizar upgrade de plano." });
+    return res.status(500).json({ mensagem: "Erro ao realizar upgrade de plano." });
   }
 };
 
@@ -596,22 +508,29 @@ exports.bloquearDesbloquear = async (req, res) => {
   try {
     const { id } = req.params;
     const empresa = await Empresa.findByPk(id);
-    if (!empresa)
-      return res.status(404).json({ mensagem: "Empresa não encontrada." });
+    if (!empresa) return res.status(404).json({ mensagem: "Empresa não encontrada." });
 
     empresa.status = empresa.status === "bloqueado" ? "ativo" : "bloqueado";
     await empresa.save();
 
     return res.json({
-      mensagem: `Empresa ${
-        empresa.status === "ativo" ? "desbloqueada" : "bloqueada"
-      } com sucesso.`,
+      mensagem: `Empresa ${empresa.status === "ativo" ? "desbloqueada" : "bloqueada"} com sucesso.`,
       status: empresa.status,
     });
   } catch (error) {
     console.error("❌ Erro ao bloquear/desbloquear empresa:", error);
-    return res
-      .status(500)
-      .json({ mensagem: "Erro ao atualizar status da empresa." });
+    return res.status(500).json({ mensagem: "Erro ao atualizar status da empresa." });
+  }
+};
+
+// 🧰 Seed manual das faturas do SaaS (espelha todas as parcelas do admin)
+exports.seedFaturas = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const r = await seedTenantFaturasForEmpresa(id);
+    return res.json(r);
+  } catch (e) {
+    console.error("❌ Erro no seed de faturas:", e);
+    return res.status(500).json({ mensagem: "Erro ao fazer seed de faturas." });
   }
 };

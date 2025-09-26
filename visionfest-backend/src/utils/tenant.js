@@ -1,60 +1,78 @@
-// src/utils/tenant.js
 require("dotenv").config();
 const { Sequelize } = require("sequelize");
 const { sequelize: adminSequelize, Empresa } = require("../lib/adminDb");
 const initModels = require("../models");
 
+/** Remove prefixos tipo "cliente_" ou "cliente-" */
+function normalizeDominio(v) {
+  return String(v || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^cliente[_-]/, "");
+}
+
+/** Extrai subdomínio, ex.: visionware.lvh.me -> visionware */
 function pickSubdomain(host) {
   if (!host) return null;
-  // ignora host puro de dev
   if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/i.test(host)) return null;
-  const parts = host.split(".");
-  // subdomínio existe quando há 3+ partes (ex.: visionware.lvh.me)
+  const parts = String(host).split(".");
   return parts.length > 2 ? parts[0].toLowerCase() : null;
 }
 
-function resolveDominioFromReq(req) {
-  // 1) headers explícitos
-  const h = (req.headers["x-tenant"] || req.headers["x-dominio"] || "")
-    .toString()
-    .trim()
-    .toLowerCase();
+/**
+ * Resolve o domínio (tenant) a partir de várias fontes.
+ * Aceita:
+ *  - string (domínio direto)
+ *  - req (padrão Express)
+ *  - objeto “parecido com req” (com headers/query/body)
+ */
+function resolveDominioFromReq(input) {
+  // 0) Se já veio uma string (domínio), normalize e retorne
+  if (typeof input === "string") {
+    const dom = normalizeDominio(input);
+    return dom || null;
+  }
+
+  // 1) Tenta ler de headers/query/body de forma segura
+  const req = input || {};
+  const headers = req?.headers || {};
+  const query = req?.query || {};
+  const body = req?.body || {};
+
+  const h = normalizeDominio(headers["x-tenant"] || headers["x-dominio"]);
   if (h) return h;
 
-  // 2) query/body
-  const q = (req.query?.dominio || req.query?.tenant || "")
-    .toString()
-    .trim()
-    .toLowerCase();
+  const q = normalizeDominio(query.dominio || query.tenant);
   if (q) return q;
-  const b = (req.body?.dominio || req.body?.tenant || "")
-    .toString()
-    .trim()
-    .toLowerCase();
+
+  const b = normalizeDominio(body.dominio || body.tenant);
   if (b) return b;
 
-  // 3) ORIGIN / REFERER (ex.: http://visionware.lvh.me:5173)
+  // 2) ORIGIN / REFERER (ex.: http://visionware.lvh.me:5173)
   try {
-    const originUrl = new URL(req.headers.origin || req.headers.referer || "");
-    const sub = pickSubdomain(originUrl.hostname);
+    const originUrl = new URL(headers.origin || headers.referer || "");
+    const sub = normalizeDominio(pickSubdomain(originUrl.hostname));
     if (sub) return sub;
   } catch {}
 
-  // 4) host da própria request (caso API esteja sob subdomínio do tenant)
-  const subFromHost = pickSubdomain((req.hostname || "").split(":")[0]);
-  if (subFromHost) return subFromHost;
+  // 3) host da própria request (se a API estiver sob subdomínio)
+  try {
+    const hostHeader = String(headers.host || "").split(":")[0];
+    const fromHost = normalizeDominio(pickSubdomain(hostHeader));
+    if (fromHost) return fromHost;
+  } catch {}
 
-  // 5) fallback dev
-  if (process.env.DEFAULT_TENANT)
-    return String(process.env.DEFAULT_TENANT).trim().toLowerCase();
-
-  return null;
+  // 4) fallback DEV
+  const def = normalizeDominio(process.env.DEFAULT_TENANT);
+  return def || null;
 }
 
-async function resolveEmpresaFromReq(req) {
-  const dominio = resolveDominioFromReq(req);
+/** Busca a empresa (schema public/admin) a partir do domínio resolvido */
+async function resolveEmpresaFromReq(input) {
+  const dominio = resolveDominioFromReq(input); // já normalizado
   if (!dominio) {
     const e = new Error("dominio_ausente");
+    e.meta = { where: "resolveEmpresaFromReq" };
     throw e;
   }
 
@@ -67,7 +85,7 @@ async function resolveEmpresaFromReq(req) {
   }
   if (empresa.status && empresa.status !== "ativo") {
     const e = new Error("empresa_inativa");
-    e.meta = { dominio };
+    e.meta = { dominio, status: empresa.status };
     throw e;
   }
   if (!empresa.bancoDados) {
@@ -79,7 +97,10 @@ async function resolveEmpresaFromReq(req) {
   return empresa;
 }
 
+/** Cache de conexões (por schema) para o tenant */
 const tenantCache = new Map();
+
+/** Abre (ou reutiliza) o DB do tenant e carrega os models do CLIENTE */
 async function getTenantDb(schema) {
   const schemaName = String(schema || "").trim();
   if (!schemaName) throw new Error("schema_invalido");
@@ -92,6 +113,7 @@ async function getTenantDb(schema) {
     define: { schema: schemaName },
   });
 
+  // initModels cria o schema (se preciso), seta search_path e registra models
   const db = await initModels(tenantSequelize, schemaName);
   await tenantSequelize.authenticate();
   db.sequelize = tenantSequelize;
@@ -100,4 +122,35 @@ async function getTenantDb(schema) {
   return db;
 }
 
-module.exports = { resolveDominioFromReq, resolveEmpresaFromReq, getTenantDb };
+/**
+ * ✅ getDbCliente: aceita:
+ *  - req (Express)
+ *  - string (domínio)
+ * Retorna { sequelize, models:{...} } do tenant e pendura no req (se houver).
+ */
+async function getDbCliente(input) {
+  // Se já veio um db pendurado no req (middleware), reutiliza
+  if (input && typeof input === "object" && input.tenantDb)
+    return input.tenantDb;
+
+  // Resolve empresa a partir do req OU do domínio string
+  const empresa = await resolveEmpresaFromReq(input);
+
+  // Abre o DB do tenant
+  const db = await getTenantDb(empresa.bancoDados);
+
+  // Se houver req, deixa empresaId e tenantDb disponíveis no pipeline
+  if (input && typeof input === "object") {
+    input.tenantDb = db;
+    input.empresaId = empresa.id;
+  }
+
+  return db;
+}
+
+module.exports = {
+  resolveDominioFromReq,
+  resolveEmpresaFromReq,
+  getTenantDb,
+  getDbCliente,
+};

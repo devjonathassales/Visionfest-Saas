@@ -1,4 +1,3 @@
-// src/utils/apiCliente.js
 import axios from "axios";
 
 export const API_BASE =
@@ -6,20 +5,27 @@ export const API_BASE =
 
 // ---------- Descoberta do tenant ----------
 function resolveTenant() {
+  const normalize = (s) =>
+    (s || "")
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/^cliente[_-]/, "");
+
   const qs = new URLSearchParams(window.location.search);
-  const byQS = qs.get("dominio") || qs.get("tenant");
+  const byQS = normalize(qs.get("dominio") || qs.get("tenant"));
 
   let bySub = null;
   try {
-    const host = window.location.hostname; // cliente_xxx.lvh.me
+    const host = window.location.hostname; // ex.: cliente_visionware.lvh.me
     const parts = host.split(".");
-    if (parts.length > 2) bySub = parts[0];
+    if (parts.length > 2) bySub = normalize(parts[0]);
   } catch {}
 
-  const byLS = localStorage.getItem("tenant");
-  const byEnv = import.meta.env.VITE_TENANT;
+  const byLS = normalize(localStorage.getItem("tenant"));
+  const byEnv = normalize(import.meta.env.VITE_TENANT);
 
-  return (byQS || bySub || byLS || byEnv || "").trim().toLowerCase();
+  return normalize(byQS || bySub || byLS || byEnv);
 }
 
 // ---------- Instância base (/api já incluso) ----------

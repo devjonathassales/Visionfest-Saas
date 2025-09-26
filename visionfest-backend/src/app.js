@@ -10,7 +10,7 @@ const authCliente = require("./middlewares/authCliente");
 // 🔐 rotas de auth do CLIENTE (tenant)
 const authClienteRoutes = require("./routes/authClienteRoutes");
 
-// Demais rotas protegidas (NOMES sem colisão com “clientes” do negócio)
+// Demais rotas protegidas
 const clienteRoutes = require("./routes/clienteRoutes");
 const fornecedorRoutes = require("./routes/fornecedorRoutes");
 const funcionarioRoutes = require("./routes/funcionarioRoutes");
@@ -30,6 +30,9 @@ const contratoClienteRoutes = require("./routes/contratoClienteRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const faturasRoutes = require("./routes/faturasRoutes");
 const perfilRoutes = require("./routes/perfilRoutes");
+
+// <<< NOVO: rota de diagnóstico (cliente)
+const diagRoutes = require("./routes/diag");
 
 const app = express();
 
@@ -52,7 +55,7 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 // Health
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Debug do tenant
+// 🔧 Debug do tenant (adminDb)
 app.get("/debug/tenant", async (req, res) => {
   try {
     const { Empresa } = require("./lib/adminDb");
@@ -88,7 +91,6 @@ app.get("/debug/tenant", async (req, res) => {
 });
 
 // 🔑 Fallback de tenant SÓ para /api/cliente (login/refresh/me/logout)
-// — garante que sempre exista X-Tenant vindo de ?dominio=, subdomínio ou DEFAULT_TENANT
 function tenantHeaderFallback(req, _res, next) {
   if ((req.headers["x-tenant"] ?? "").toString().trim()) return next();
 
@@ -119,13 +121,17 @@ function tenantHeaderFallback(req, _res, next) {
   next();
 }
 
-// 🔓 Rotas públicas de autenticação do CLIENTE (mas já resolvem tenant)
+// 🔓 Rotas públicas de autenticação do CLIENTE (já resolvem tenant)
 app.use(
   "/api/cliente",
   tenantHeaderFallback,
   multiTenantMiddleware,
   authClienteRoutes
 );
+
+// <<< NOVO: rota de diagnóstico NO APP DO CLIENTE (sem auth, mas exigindo tenant)
+// se preferir, pode por authCliente aqui também
+app.use("/api/diag", multiTenantMiddleware, diagRoutes);
 
 // 🔐 Tudo abaixo exige tenant + token
 if (typeof multiTenantMiddleware !== "function") {
@@ -136,7 +142,7 @@ if (typeof multiTenantMiddleware !== "function") {
 app.use(multiTenantMiddleware, authCliente);
 
 // Rotas protegidas
-app.use("/api/clientes", clienteRoutes); // (evita colisão de nome “clientes”)
+app.use("/api/clientes", clienteRoutes);
 app.use("/api/fornecedores", fornecedorRoutes);
 app.use("/api/funcionarios", funcionarioRoutes);
 app.use("/api/produtos", produtosRoutes);

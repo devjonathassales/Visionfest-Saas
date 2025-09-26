@@ -1,3 +1,4 @@
+// src/contexts/authContext.jsx
 import React, {
   createContext,
   useContext,
@@ -54,7 +55,7 @@ export function AuthProvider({ children }) {
 
   const isAuthenticated = !!accessToken;
 
-  // Configura X-Tenant no axios compartilhado
+  // Define/atualiza X-Tenant nos defaults do axios compartilhado
   useEffect(() => {
     const t = resolveTenant();
     if (t) {
@@ -65,10 +66,11 @@ export function AuthProvider({ children }) {
       delete apiCliente.defaults.headers.common["X-Tenant"];
       localStorage.removeItem("tenant");
     }
+    // reexecuta se a URL mudar (ex.: troca de dominio via query)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Injeta Authorization em TODAS as requests do apiCliente.
-  // (o apiCliente já tem o interceptor de refresh automático)
+  // Injeta Authorization e X-Tenant em TODAS as requests do apiCliente
   useEffect(() => {
     const id = apiCliente.interceptors.request.use((config) => {
       if (tenant) config.headers["X-Tenant"] = tenant;
@@ -90,7 +92,7 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Login direto na rota pública do backend
+      // Login na rota pública do backend
       const url = `${API_BASE}/api/cliente/login?dominio=${encodeURIComponent(
         t
       )}`;
@@ -118,7 +120,7 @@ export function AuthProvider({ children }) {
       );
       localStorage.setItem("tenant", t);
 
-      // Prepara defaults para as próximas requests
+      // Defaults p/ próximas requests
       apiCliente.defaults.headers.common["X-Tenant"] = t;
 
       return { ok: true };
@@ -144,12 +146,13 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("vf_client_refresh");
     localStorage.removeItem("vf_client_user");
     localStorage.removeItem("vf_client_empresa");
-    // mantém o tenant no LS para continuar no mesmo subdomínio
+    // mantém tenant no LS
   }
 
   const value = useMemo(
     () => ({
-      api: apiCliente,
+      apiCliente, // <<< expõe como apiCliente (padrão da sua página)
+      api: apiCliente, // alias opcional
       isAuthenticated,
       accessToken,
       usuario,
@@ -158,6 +161,7 @@ export function AuthProvider({ children }) {
       logout,
       loading,
       tenant,
+      setTenant, // útil se quiser trocar o tenant em runtime
     }),
     [isAuthenticated, accessToken, usuario, empresa, loading, tenant]
   );

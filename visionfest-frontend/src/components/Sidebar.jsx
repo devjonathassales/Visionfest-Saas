@@ -1,9 +1,17 @@
-import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import {
-  FiHome, FiUser, FiBox, FiFileText, FiCalendar, FiBarChart2, FiDollarSign,
-  FiSettings, FiChevronDown, FiChevronRight
-} from 'react-icons/fi';
+  FiHome,
+  FiUser,
+  FiBox,
+  FiFileText,
+  FiCalendar,
+  FiBarChart2,
+  FiDollarSign,
+  FiSettings,
+  FiChevronDown,
+  FiChevronRight,
+} from "react-icons/fi";
 
 const menuStructure = [
   { label: "Dashboard", icon: <FiHome />, path: "/" },
@@ -59,75 +67,109 @@ const menuStructure = [
   },
 ];
 
-export default function Sidebar({ isOpen, onClose }) {
+function MenuContent({ onClose }) {
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState({});
 
   const toggleMenu = (label) => {
-    setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }));
+    setOpenMenus((prev) => ({ ...prev, [label]: !prev[label] }));
   };
 
+  return (
+    <nav className="flex flex-col gap-2 font-opensans p-3">
+      {menuStructure.map((item, idx) => {
+        const isActive = location.pathname === item.path;
+        const hasChildren = item.children?.length;
+
+        return (
+          <div key={idx}>
+            {item.path ? (
+              <Link
+                to={item.path}
+                className={`flex items-center justify-between px-3 py-2 rounded transition ${
+                  isActive
+                    ? "bg-primary text-white font-semibold"
+                    : "hover:bg-primary hover:text-white"
+                }`}
+                onClick={onClose}
+              >
+                <div className="flex items-center gap-2">
+                  {item.icon} {item.label}
+                </div>
+              </Link>
+            ) : (
+              <div>
+                <button
+                  onClick={() => toggleMenu(item.label)}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-primary hover:text-white transition"
+                >
+                  <div className="flex items-center gap-2">
+                    {item.icon} {item.label}
+                  </div>
+                  {openMenus[item.label] ? (
+                    <FiChevronDown />
+                  ) : (
+                    <FiChevronRight />
+                  )}
+                </button>
+                {openMenus[item.label] && hasChildren && (
+                  <div className="pl-6 mt-1 flex flex-col gap-1">
+                    {item.children.map((sub, subIdx) => (
+                      <Link
+                        key={subIdx}
+                        to={sub.path}
+                        onClick={onClose}
+                        className={`text-sm px-3 py-1 rounded hover:bg-primary hover:text-white transition ${
+                          location.pathname === sub.path
+                            ? "bg-primary text-white"
+                            : ""
+                        }`}
+                      >
+                        {sub.label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}
+
+export default function Sidebar({ isOpen, onClose }) {
   return (
     <>
       {/* Overlay Mobile */}
       <div
-        className={`fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden ${isOpen ? 'block' : 'hidden'}`}
+        className={`fixed inset-0 bg-black/50 z-40 md:hidden ${
+          isOpen ? "block" : "hidden"
+        }`}
         onClick={onClose}
       />
 
-      {/* Sidebar */}
+      {/* Desktop: reserva espaço + sticky sob a navbar */}
+      <div className="hidden md:block w-64 shrink-0">
+        <aside className="sticky top-16 h-[calc(100vh-4rem)] bg-silver text-black shadow-md">
+          <div className="h-full overflow-y-auto">
+            <MenuContent />
+          </div>
+        </aside>
+      </div>
+
+      {/* Mobile: drawer sob a navbar, com scroll próprio */}
       <aside
         className={`
-          fixed md:static top-16 md:top-0 left-0 z-50 h-full w-64 bg-silver text-black p-4 shadow-md
+          md:hidden fixed top-16 left-0 bottom-0 z-50 w-64 bg-silver text-black shadow-md
           transform transition-transform duration-300
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:translate-x-0
+          ${isOpen ? "translate-x-0" : "-translate-x-full"}
         `}
       >
-        <nav className="flex flex-col gap-2 font-opensans">
-          {menuStructure.map((item, idx) => {
-            const isActive = location.pathname === item.path;
-            const hasChildren = item.children?.length;
-
-            return (
-              <div key={idx}>
-                {item.path ? (
-                  <Link
-                    to={item.path}
-                    className={`flex items-center justify-between px-3 py-2 rounded transition ${isActive ? 'bg-primary text-white font-semibold' : 'hover:bg-primary hover:text-white'}`}
-                    onClick={onClose}
-                  >
-                    <div className="flex items-center gap-2">{item.icon} {item.label}</div>
-                  </Link>
-                ) : (
-                  <div>
-                    <button
-                      onClick={() => toggleMenu(item.label)}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-primary hover:text-white transition"
-                    >
-                      <div className="flex items-center gap-2">{item.icon} {item.label}</div>
-                      {openMenus[item.label] ? <FiChevronDown /> : <FiChevronRight />}
-                    </button>
-                    {openMenus[item.label] && hasChildren && (
-                      <div className="pl-6 mt-1 flex flex-col gap-1">
-                        {item.children.map((sub, subIdx) => (
-                          <Link
-                            key={subIdx}
-                            to={sub.path}
-                            onClick={onClose}
-                            className={`text-sm px-3 py-1 rounded hover:bg-primary hover:text-white transition ${location.pathname === sub.path ? 'bg-primary text-white' : ''}`}
-                          >
-                            {sub.label}
-                          </Link>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
+        <div className="h-full overflow-y-auto">
+          <MenuContent onClose={onClose} />
+        </div>
       </aside>
     </>
   );

@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { getDbAdmin, getDbCliente } = require("../utils/tenant");
+const { getDbAdmin } = require("../utils/tenant");
 
 // Helpers ---------------------------------------------------------------------
 const HOJE0 = () =>
@@ -43,29 +43,64 @@ function mesesEntre(inicio, fim) {
   return Math.max(0, m);
 }
 
+// Evita 500 quando a associação não existe no model
+const hasAssoc = (Model, alias) =>
+  !!(Model && Model.associations && Model.associations[alias]);
+
+async function carregarAssinaturaAtual(dbA, empresaId) {
+  const Assinatura = dbA.models?.Assinatura;
+  const Plano = dbA.models?.Plano;
+
+  if (!Assinatura) return null;
+
+  // tenta com include se a associação existir
+  if (Plano && hasAssoc(Assinatura, "plano")) {
+    try {
+      const a = await Assinatura.findOne({
+        where: {
+          empresaId,
+          status: { [Op.in]: ["ativa", "trial", "cancelamento_pendente"] },
+        },
+        order: [["dataInicio", "DESC"]],
+        include: [{ model: Plano, as: "plano" }],
+      });
+      return a;
+    } catch {
+      // cai no fallback sem include
+    }
+  }
+
+  // fallback sem include
+  const a = await Assinatura.findOne({
+    where: {
+      empresaId,
+      status: { [Op.in]: ["ativa", "trial", "cancelamento_pendente"] },
+    },
+    order: [["dataInicio", "DESC"]],
+  });
+
+  if (!a) return null;
+
+  // carrega plano manualmente, se houver
+  if (Plano && a.planoId) {
+    try {
+      const p = await Plano.findByPk(a.planoId);
+      if (p) a.setDataValue("plano", p); // simula include
+    } catch {}
+  }
+  return a;
+}
+
 // Controller -------------------------------------------------------------------
 module.exports = {
-  // Retorna o contrato/plano atual (do Admin) com fallback
+  // GET /api/contrato — contrato/plano atual (tolerante)
   async obterAtual(req, res) {
     try {
       const empresaId = req.empresaId;
       const dbA = await getDbAdmin();
-      const Assinatura = dbA.models?.Assinatura;
-      const Plano = dbA.models?.Plano;
       const Empresa = dbA.models?.Empresa;
 
-      let atual = null;
-
-      if (Assinatura && Plano) {
-        atual = await Assinatura.findOne({
-          where: {
-            empresaId,
-            status: { [Op.in]: ["ativa", "trial", "cancelamento_pendente"] },
-          },
-          order: [["dataInicio", "DESC"]],
-          include: [{ model: Plano, as: "plano" }],
-        });
-      }
+      let atual = await carregarAssinaturaAtual(dbA, empresaId);
 
       // Fallback: usa Empresa
       if (!atual && Empresa) {
@@ -87,7 +122,7 @@ module.exports = {
             dataInicio: emp.dataAtivacao || emp.createdAt || new Date(),
             dataFim: emp.dataValidade || addMonths(new Date(), 12),
             renovacaoAutomatica: !!emp.renovacaoAutomatica,
-            metodoPagamento: emp.metodoPagamento || "pix", // "cartao" | "pix" | "boleto"
+            metodoPagamento: emp.metodoPagamento || "pix",
             status: "ativa",
           };
         }
@@ -95,12 +130,13 @@ module.exports = {
 
       if (!atual) return res.json(null);
 
+      const plano = atual.plano || {};
       const payload = {
         id: atual.id,
-        planoId: atual.plano?.id || null,
-        plano: atual.plano?.nome || "Plano",
-        valor: toBRL(atual.plano?.valorMensal),
-        funcionalidades: parseFunc(atual.plano?.funcionalidades),
+        planoId: plano.id || null,
+        plano: plano.nome || "Plano",
+        valor: toBRL(plano.valorMensal),
+        funcionalidades: parseFunc(plano.funcionalidades),
         dataInicio: atual.dataInicio,
         dataValidade: atual.dataFim,
         renovacaoAutomatica: !!atual.renovacaoAutomatica,
@@ -111,11 +147,12 @@ module.exports = {
       return res.json(payload);
     } catch (err) {
       console.error("[contratoCliente] obterAtual:", err);
-      return res.status(500).json({ error: "Erro ao carregar contrato." });
+      // Em vez de 500, devolvemos um payload neutro pra não quebrar a UI
+      return res.json(null);
     }
   },
 
-  // Lista histórico (todas assinaturas passadas)
+  // GET /api/contrato/historico — tolerante
   async historico(req, res) {
     try {
       const empresaId = req.empresaId;
@@ -126,20 +163,56 @@ module.exports = {
 
       let hist = [];
 
-      if (Assinatura && Plano) {
-        const list = await Assinatura.findAll({
-          where: { empresaId },
-          order: [["dataInicio", "DESC"]],
-          include: [{ model: Plano, as: "plano" }],
-        });
-        hist = list.map((a) => ({
-          id: a.id,
-          plano: a.plano?.nome || "Plano",
-          valor: toBRL(a.plano?.valorMensal),
-          dataInicio: a.dataInicio,
-          dataFim: a.dataFim,
-          status: a.status,
-        }));
+      if (Assinatura) {
+        if (Plano && hasAssoc(Assinatura, "plano")) {
+          try {
+            const list = await Assinatura.findAll({
+              where: { empresaId },
+              order: [["dataInicio", "DESC"]],
+              include: [{ model: Plano, as: "plano" }],
+            });
+            hist = list.map((a) => ({
+              id: a.id,
+              plano: a.plano?.nome || "Plano",
+              valor: toBRL(a.plano?.valorMensal),
+              dataInicio: a.dataInicio,
+              dataFim: a.dataFim,
+              status: a.status,
+            }));
+          } catch {
+            // cai abaixo sem include
+          }
+        }
+
+        if (!hist.length) {
+          const list = await Assinatura.findAll({
+            where: { empresaId },
+            order: [["dataInicio", "DESC"]],
+          });
+
+          let planosMap = {};
+          if (Plano) {
+            const ids = [
+              ...new Set(list.map((a) => a.planoId).filter(Boolean)),
+            ];
+            const rows = await Plano.findAll({
+              where: { id: { [Op.in]: ids } },
+            });
+            rows.forEach((p) => (planosMap[p.id] = p));
+          }
+
+          hist = list.map((a) => {
+            const p = planosMap[a.planoId] || {};
+            return {
+              id: a.id,
+              plano: p.nome || "Plano",
+              valor: toBRL(p.valorMensal),
+              dataInicio: a.dataInicio,
+              dataFim: a.dataFim,
+              status: a.status,
+            };
+          });
+        }
       } else if (Empresa) {
         const emp = await Empresa.findByPk(empresaId);
         if (emp) {
@@ -161,29 +234,37 @@ module.exports = {
       return res.json(hist);
     } catch (err) {
       console.error("[contratoCliente] historico:", err);
-      return res.status(500).json({ error: "Erro ao carregar histórico." });
+      return res.json([]); // evita 500
     }
   },
 
-  // Lista planos disponíveis para upgrade
-  async planosDisponiveis(req, res) {
+  // GET /api/contrato/planos — tolerante
+  async planosDisponiveis(_req, res) {
     try {
       const dbA = await getDbAdmin();
       const Plano = dbA.models?.Plano;
 
       if (Plano) {
-        const planos = await Plano.findAll({
-          attributes: ["id", "nome", "valorMensal", "funcionalidades"],
-          order: [["valorMensal", "ASC"]],
-        });
-        return res.json(
-          planos.map((p) => ({
-            id: p.id,
-            nome: p.nome,
-            valor: toBRL(p.valorMensal),
-            funcionalidades: parseFunc(p.funcionalidades),
-          }))
-        );
+        try {
+          const planos = await Plano.findAll({
+            attributes: ["id", "nome", "valorMensal", "funcionalidades"],
+            order: [["valorMensal", "ASC"]],
+          });
+          return res.json(
+            planos.map((p) => ({
+              id: p.id,
+              nome: p.nome,
+              valor: toBRL(p.valorMensal),
+              funcionalidades: parseFunc(p.funcionalidades),
+            }))
+          );
+        } catch (e) {
+          // segue para fallback estático
+          console.warn(
+            "[contratoCliente] planosDisponiveis (fallback):",
+            e.message
+          );
+        }
       }
 
       // fallback estático
@@ -214,11 +295,11 @@ module.exports = {
       return res.json(fallback);
     } catch (err) {
       console.error("[contratoCliente] planosDisponiveis:", err);
-      return res.status(500).json({ error: "Erro ao carregar planos." });
+      return res.json([]); // evita 500
     }
   },
 
-  // Liga/desliga renovação automática
+  // PATCH /api/contrato/renovacao — liga/desliga
   async atualizarRenovacao(req, res) {
     try {
       const empresaId = req.empresaId;
@@ -267,7 +348,7 @@ module.exports = {
     }
   },
 
-  // Renovar agora (placeholder): estende +12 meses
+  // POST /api/contrato/renovar — estende +12 meses
   async renovarAgora(req, res) {
     try {
       const empresaId = req.empresaId;
@@ -282,7 +363,8 @@ module.exports = {
         });
         if (!atual)
           return res.status(404).json({ error: "Assinatura não encontrada." });
-        atual.dataFim = addMonths(new Date(atual.dataFim || new Date()), 12);
+        const base = atual.dataFim ? new Date(atual.dataFim) : new Date();
+        atual.dataFim = addMonths(base, 12);
         atual.renovacaoAutomatica = true;
         await atual.save();
         return res.json({
@@ -296,10 +378,8 @@ module.exports = {
         const emp = await Empresa.findByPk(empresaId);
         if (!emp)
           return res.status(404).json({ error: "Empresa não encontrada." });
-        emp.dataValidade = addMonths(
-          new Date(emp.dataValidade || new Date()),
-          12
-        );
+        const base = emp.dataValidade ? new Date(emp.dataValidade) : new Date();
+        emp.dataValidade = addMonths(base, 12);
         emp.renovacaoAutomatica = true;
         await emp.save();
         return res.json({
@@ -318,7 +398,7 @@ module.exports = {
     }
   },
 
-  // Upgrade — valida "sem downgrade" e cria uma solicitação
+  // POST /api/contrato/upgrade — registra solicitação
   async solicitarUpgrade(req, res) {
     try {
       const empresaId = req.empresaId;
@@ -377,7 +457,7 @@ module.exports = {
     }
   },
 
-  // Cancelamento — aplica regras e calcula multa
+  // POST /api/contrato/cancelar — aplica regra de aviso e multa
   async solicitarCancelamento(req, res) {
     try {
       const empresaId = req.empresaId;
@@ -389,17 +469,10 @@ module.exports = {
       const Empresa = dbA.models?.Empresa;
       const SolicCancel = dbA.models?.SolicitacaoCancelamento;
 
-      // carrega assinatura/empresa atual
+      // carrega assinatura/empresa atual (tolerante ao include)
       let dados = null;
-      if (Assinatura && Plano) {
-        dados = await Assinatura.findOne({
-          where: {
-            empresaId,
-            status: { [Op.in]: ["ativa", "trial", "cancelamento_pendente"] },
-          },
-          order: [["dataInicio", "DESC"]],
-          include: [{ model: Plano, as: "plano" }],
-        });
+      if (Assinatura) {
+        dados = await carregarAssinaturaAtual(dbA, empresaId);
       }
       if (!dados && Empresa) {
         const emp = await Empresa.findByPk(empresaId);

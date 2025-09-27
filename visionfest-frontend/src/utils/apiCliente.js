@@ -31,14 +31,20 @@ function resolveTenant() {
 // ---------- Instância base (/api já incluso) ----------
 const apiCliente = axios.create({
   baseURL: `${API_BASE}/api`,
+  withCredentials: false, // <<< IMPORTANTE: não enviar cookies/credenciais
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
+
+// redundância defensiva (caso alguém altere em runtime)
+apiCliente.defaults.withCredentials = false;
 
 // ---------- Request: injeta headers ----------
 apiCliente.interceptors.request.use((config) => {
   const tenant = resolveTenant();
   if (tenant) {
     config.headers["X-Tenant"] = tenant;
-    // persiste pra próximas páginas sem querystring
     localStorage.setItem("tenant", tenant);
   }
 
@@ -71,20 +77,16 @@ apiCliente.interceptors.response.use(
   async (error) => {
     const original = error?.config;
 
-    // se não for 401 ou já tentamos, só rejeita
     if (!error?.response || error.response.status !== 401 || original?._retry) {
       return Promise.reject(error);
     }
 
-    // evita tentar refresh em rotas do próprio refresh/login
     if (/\/api\/cliente\/(login|refresh|logout)/.test(original?.url || "")) {
       return Promise.reject(error);
     }
 
-    // marca pra não cair em loop
     original._retry = true;
 
-    // se já tem refresh em andamento, coloca na fila
     if (isRefreshing) {
       try {
         const result = await enqueueRequest((newToken) => {
@@ -98,7 +100,6 @@ apiCliente.interceptors.response.use(
       }
     }
 
-    // inicia refresh
     isRefreshing = true;
     try {
       const tenant = resolveTenant();
@@ -112,43 +113,34 @@ apiCliente.interceptors.response.use(
         { refreshToken },
         {
           headers: tenant ? { "X-Tenant": tenant } : {},
+          withCredentials: false, // reforço
         }
       );
 
       const newAccess = data?.accessToken;
       const newRefresh = data?.refreshToken || refreshToken;
-
       if (!newAccess) throw new Error("Refresh não retornou accessToken");
 
-      // salva e aplica
       localStorage.setItem("vf_client_access", newAccess);
       localStorage.setItem("vf_client_refresh", newRefresh);
 
-      // aplica no request original
       original.headers = original.headers || {};
       original.headers.Authorization = `Bearer ${newAccess}`;
 
-      // libera a fila
       flushQueue(null, newAccess);
-
-      // re-tenta o original
       return apiCliente.request(original);
     } catch (e) {
-      // falhou o refresh -> limpa sessão e manda pro login
       localStorage.removeItem("vf_client_access");
       localStorage.removeItem("vf_client_refresh");
-
       flushQueue(e, null);
-      // opcional: redirecionar
+
       if (window.location.pathname !== "/login") {
         try {
-          // preserva tenant na url, se havia
           const t = resolveTenant();
           const qs = t ? `?dominio=${encodeURIComponent(t)}` : "";
           window.location.replace(`/login${qs}`);
         } catch {}
       }
-
       return Promise.reject(e);
     } finally {
       isRefreshing = false;

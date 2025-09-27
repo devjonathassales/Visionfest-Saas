@@ -1,3 +1,4 @@
+// src/components/Navbar.jsx
 import React from "react";
 import { FiMenu, FiLogOut } from "react-icons/fi";
 import { useAuth } from "/src/contexts/authContext.jsx";
@@ -5,11 +6,12 @@ import { useAuth } from "/src/contexts/authContext.jsx";
 export default function Navbar({ username = "Usuário", onToggleSidebar }) {
   const { user, logout } = useAuth?.() ?? {};
 
-  // Mostra nome > email > fallback da prop
-  const displayName = user?.nome || user?.name || user?.email || username;
+  const displayName =
+    user?.name || user?.nome || user?.email?.split("@")[0] || username;
 
-  const initials = (user?.nome || user?.name || user?.email || "U")
-    .split(" ")
+  const initials = (displayName || "U")
+    .split(/[.\s_-]+/)
+    .filter(Boolean)
     .map((p) => p[0])
     .join("")
     .slice(0, 2)
@@ -17,17 +19,14 @@ export default function Navbar({ username = "Usuário", onToggleSidebar }) {
 
   const handleLogout = async () => {
     try {
-      if (typeof logout === "function") {
-        await logout();
-      } else {
-        // Fallback caso o contexto ainda não tenha logout()
+      if (typeof logout === "function") await logout();
+      else {
         localStorage.removeItem("cliente_token");
         localStorage.removeItem("token");
         sessionStorage.clear();
         window.location.href = "/login";
       }
-    } catch (e) {
-      console.error("Falha ao sair:", e);
+    } catch {
       window.location.href = "/login";
     }
   };

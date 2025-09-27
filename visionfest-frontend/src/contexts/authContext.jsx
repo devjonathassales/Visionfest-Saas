@@ -43,6 +43,8 @@ export function AuthProvider({ children }) {
   const [refreshToken, setRefreshToken] = useState(
     () => localStorage.getItem("vf_client_refresh") || ""
   );
+
+  // --- legacy (mantido p/ compatibilidade com telas atuais) ---
   const [usuario, setUsuario] = useState(() => {
     const raw = localStorage.getItem("vf_client_user");
     return raw ? JSON.parse(raw) : null;
@@ -51,8 +53,14 @@ export function AuthProvider({ children }) {
     const raw = localStorage.getItem("vf_client_empresa");
     return raw ? JSON.parse(raw) : null;
   });
-  const [loading, setLoading] = useState(false);
 
+  // --- NOVO: usuário normalizado via /api/me ---
+  const [user, setUser] = useState(() => {
+    const raw = localStorage.getItem("vf_client_user_norm");
+    return raw ? JSON.parse(raw) : null; // { id, name, email, type }
+  });
+
+  const [loading, setLoading] = useState(false);
   const isAuthenticated = !!accessToken;
 
   // Define/atualiza X-Tenant nos defaults do axios compartilhado
@@ -66,7 +74,6 @@ export function AuthProvider({ children }) {
       delete apiCliente.defaults.headers.common["X-Tenant"];
       localStorage.removeItem("tenant");
     }
-    // reexecuta se a URL mudar (ex.: troca de dominio via query)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -80,6 +87,51 @@ export function AuthProvider({ children }) {
     return () => apiCliente.interceptors.request.eject(id);
   }, [accessToken, tenant]);
 
+  // -------- /api/me: carrega usuário normalizado --------
+  async function loadMe() {
+    try {
+      const r = await apiCliente.get("/me", {
+        headers: { "X-Tenant": tenant || resolveTenant() },
+      });
+      const { usuario: u, empresa: e } = r?.data || {};
+
+      const norm = {
+        id: u?.id ?? null,
+        name: u?.nome || u?.name || u?.email?.split("@")[0] || "Usuário",
+        email: u?.email ?? null,
+        type: u?.tipo || (u?.isAdmin ? "admin" : "usuario"), // admin | usuario
+        empresaId: u?.empresaId ?? e?.id ?? null,
+        roles: Array.isArray(u?.roles) ? u.roles : [],
+        empresa: e
+          ? { id: e.id, nome: e.nome, dominio: e.dominio, status: e.status }
+          : null,
+      };
+
+      setUser(norm);
+      localStorage.setItem("vf_client_user_norm", JSON.stringify(norm));
+      return norm;
+    } catch (e) {
+      console.warn("Falha ao carregar /me:", e?.response?.data || e);
+      const guest = { id: null, name: "Usuário", email: null, type: "guest" };
+      setUser(guest);
+      localStorage.setItem("vf_client_user_norm", JSON.stringify(guest));
+      return guest;
+    }
+  }
+
+  // Recarrega /api/me quando token/tenant mudam (após login, refresh, troca de tenant)
+  useEffect(() => {
+    if (accessToken) {
+      loadMe();
+    } else {
+      // se deslogar, limpa user norm
+      setUser(null);
+      localStorage.removeItem("vf_client_user_norm");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken, tenant]);
+
+  // -------- LOGIN --------
   async function login({ email, senha }) {
     setLoading(true);
     try {
@@ -92,7 +144,7 @@ export function AuthProvider({ children }) {
         };
       }
 
-      // Login na rota pública do backend
+      // Login na rota pública do backend (mantida)
       const url = `${API_BASE}/api/cliente/login?dominio=${encodeURIComponent(
         t
       )}`;
@@ -102,7 +154,7 @@ export function AuthProvider({ children }) {
         { headers: { "Content-Type": "application/json", "X-Tenant": t } }
       );
 
-      // Persiste
+      // Persiste tokens e dados legados (compatibilidade)
       setAccessToken(data.accessToken);
       setRefreshToken(data.refreshToken);
       setUsuario(data.usuario || null);
@@ -123,6 +175,9 @@ export function AuthProvider({ children }) {
       // Defaults p/ próximas requests
       apiCliente.defaults.headers.common["X-Tenant"] = t;
 
+      // NOVO: carrega o usuário normalizado
+      await loadMe();
+
       return { ok: true };
     } catch (e) {
       return {
@@ -137,33 +192,49 @@ export function AuthProvider({ children }) {
     }
   }
 
-  function logout() {
+  // -------- LOGOUT --------
+  async function logout() {
+    try {
+      // se existir uma rota de logout no backend, chame aqui:
+      // await apiCliente.post("/api/logout", {}, { withCredentials: true });
+    } catch {}
     setAccessToken("");
     setRefreshToken("");
     setUsuario(null);
     setEmpresa(null);
+    setUser(null);
+
     localStorage.removeItem("vf_client_access");
     localStorage.removeItem("vf_client_refresh");
     localStorage.removeItem("vf_client_user");
     localStorage.removeItem("vf_client_empresa");
+    localStorage.removeItem("vf_client_user_norm");
     // mantém tenant no LS
   }
 
   const value = useMemo(
     () => ({
-      apiCliente, // <<< expõe como apiCliente (padrão da sua página)
-      api: apiCliente, // alias opcional
+      apiCliente,
+      api: apiCliente, // alias
       isAuthenticated,
       accessToken,
+      // NOVO: usuário normalizado para Navbar etc.
+      user,
+      // legado (mantido p/ telas antigas)
       usuario,
       empresa,
+
       login,
       logout,
       loading,
+
       tenant,
-      setTenant, // útil se quiser trocar o tenant em runtime
+      setTenant,
+
+      // util opcional (se precisar revalidar manualmente)
+      reloadMe: loadMe,
     }),
-    [isAuthenticated, accessToken, usuario, empresa, loading, tenant]
+    [isAuthenticated, accessToken, user, usuario, empresa, loading, tenant]
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

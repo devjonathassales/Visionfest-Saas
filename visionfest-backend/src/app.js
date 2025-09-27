@@ -1,4 +1,3 @@
-// src/app.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -11,6 +10,7 @@ const authCliente = require("./middlewares/authCliente");
 const authClienteRoutes = require("./routes/authClienteRoutes");
 
 // Demais rotas protegidas
+const meRouter = require("./routes/me");
 const clienteRoutes = require("./routes/clienteRoutes");
 const fornecedorRoutes = require("./routes/fornecedorRoutes");
 const funcionarioRoutes = require("./routes/funcionarioRoutes");
@@ -36,17 +36,31 @@ const diagRoutes = require("./routes/diag");
 
 const app = express();
 
+// ---------------- CORS (dev) ----------------
 // CORS (dev)
-app.use(
-  cors({
-    origin: [
-      /https?:\/\/([a-z0-9-]+)\.lvh\.me(?::\d+)?$/i,
-      /https?:\/\/localhost(?::\d+)?$/i,
-      /https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
-    ],
-    credentials: false,
-  })
-);
+const CORS_OPTIONS = {
+  origin: [
+    /https?:\/\/([a-z0-9-]+)\.lvh\.me(?::\d+)?$/i,
+    /https?:\/\/localhost(?::\d+)?$/i,
+    /https?:\/\/127\.0\.0\.1(?::\d+)?$/i,
+  ],
+  credentials: true, // <<< importante
+  allowedHeaders: [
+    "Origin",
+    "Content-Type",
+    "Accept",
+    "Authorization",
+    "X-Tenant",
+  ],
+  exposedHeaders: ["Authorization"],
+};
+
+// tem que vir ANTES das rotas
+app.use(cors(CORS_OPTIONS));
+// garante preflight para qualquer caminho (Express 5 aceita '*')
+app.options(/.*/, cors(CORS_OPTIONS));
+
+// --------------------------------------------
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -130,7 +144,6 @@ app.use(
 );
 
 // <<< NOVO: rota de diagnóstico NO APP DO CLIENTE (sem auth, mas exigindo tenant)
-// se preferir, pode por authCliente aqui também
 app.use("/api/diag", multiTenantMiddleware, diagRoutes);
 
 // 🔐 Tudo abaixo exige tenant + token
@@ -142,6 +155,7 @@ if (typeof multiTenantMiddleware !== "function") {
 app.use(multiTenantMiddleware, authCliente);
 
 // Rotas protegidas
+app.use("/api/me", meRouter);
 app.use("/api/clientes", clienteRoutes);
 app.use("/api/fornecedores", fornecedorRoutes);
 app.use("/api/funcionarios", funcionarioRoutes);
